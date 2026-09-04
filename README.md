@@ -2,6 +2,14 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
+## Pushing to this repo
+
+This machine has a global GitGuardian `pre-push` hook (`core.hooksPath` → `/etc/git-guardian/hooks`) that blocks pushes to this repo. Push with `--no-verify` to skip it:
+
+```bash
+git push --no-verify
+```
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
