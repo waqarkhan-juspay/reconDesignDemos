@@ -1,5 +1,7 @@
 import { ThemeProvider } from '@juspay/blend-design-system'
 import '@juspay/blend-design-system/style.css'
+import { DialRoot } from 'dialkit'
+import 'dialkit/styles.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
@@ -9,6 +11,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <App />
+      <DialRoot />
     </ThemeProvider>
   </StrictMode>,
 )

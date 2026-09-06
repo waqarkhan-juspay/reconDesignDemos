@@ -12,6 +12,8 @@
   "dependencies": {
     "@juspay/blend-design-system": "^0.0.37",
     "@tailwindcss/vite": "^4.3.3",
+    "dialkit": "^2.0.0",
+    "motion": "^13.2.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "styled-components": "^6.5.3",
