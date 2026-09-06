@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router'
 import App from './App.tsx'
 import About from './pages/About.tsx'
+import Blend from './pages/Blend.tsx'
 import Home from './pages/Home.tsx'
 import NotFound from './pages/NotFound.tsx'
 
@@ -12,6 +13,7 @@ export const router = createBrowserRouter([
     children: [
       { index: true, element: <Home /> },
       { path: 'about', element: <About /> },
+      { path: 'blend', element: <Blend /> },
     ],
   },
 ])
