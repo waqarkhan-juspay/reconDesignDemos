@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Per-session Claude Code dev-server config (machine-local)
+.claude/launch.json
+.mcp.json
