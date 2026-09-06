@@ -1,3 +1,5 @@
+import './suppress-blend-noise'
+
 import { ThemeProvider } from '@juspay/blend-design-system'
 import '@juspay/blend-design-system/style.css'
 import { StrictMode } from 'react'

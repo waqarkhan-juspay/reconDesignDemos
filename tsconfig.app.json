@@ -16,6 +16,10 @@
     "noEmit": true,
     "jsx": "react-jsx",
 
+    "paths": {
+      "blend-primitives/*": ["./node_modules/@juspay/blend-design-system/lib/components/Primitives/*"]
+    },
+
     /* Linting */
     "noUnusedLocals": true,
     "noUnusedParameters": true,

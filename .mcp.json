@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "blend-design-system": {
+      "command": "npx",
+      "args": ["-y", "blend-ui-mcp"]
+    }
+  }
+}
