@@ -1,1 +1,324 @@
 @import "tailwindcss";
+
+/*
+ * blend-gap: three places where Blend 0.0.37's shipped DataTable disagrees with the Blend
+ * Figma library the Reports Config screen is drawn against. Each is unreachable from props
+ * or `ThemeProvider` componentTokens, so they are corrected here.
+ *
+ * Scoped to `.reports-config-table`, which only src/pages/Configurator.tsx opts into — no
+ * other table in the app is affected. Anchored on Blend's own `data-table` hook and on
+ * table semantics rather than styled-components' generated class names, which are unstable.
+ *
+ * Delete any rule whose upstream cause is fixed in a later Blend.
+ */
+
+/*
+ * 1. The footer always prints a "6-14 of 20" range beside the rows-per-page select
+ *    (DataTablePagination.tsx:277-279, rendered unconditionally with no prop to disable).
+ *    The design has no such label.
+ */
+.reports-config-table [data-element='pagesize'] > span:last-child {
+  display: none;
+}
+
+/*
+ * 2. Body rows measure 52px, not the 56px the design specifies. The row token *is* 56
+ *    (dataTable.tokens.ts body.row.height), but TableCell/index.tsx:601 hardcodes
+ *    `minHeight: FOUNDATION_THEME.unit[52]` on the cell's inner wrapper, reading the
+ *    foundation directly so it outranks both the token and any theme override. It lands
+ *    as an inline style, hence `!important`.
+ */
+.reports-config-table tbody td > div {
+  min-height: 56px !important;
+}
+
+/*
+ * 3. The table's outer radius is 8px; the design specifies 12px, which is also what
+ *    DESIGN.md §7 asks of a card-like surface. `dataTable.borderRadius` resolves to
+ *    radius[8] and is written as an inline style, so `!important` is what it takes to
+ *    override it — not a source-order problem, an inline-style one.
+ */
+.reports-config-table [data-table='table'] > div {
+  border-radius: 12px !important;
+}
+
+/*
+ * 4. Column sizing: every column hugs its content, Configuration Name takes the slack.
+ *
+ *    Not a Blend bug — just something its API cannot express. `getColumnStyles`
+ *    (utils.ts:873) hardcodes `width: 'auto'` on every cell and never reads
+ *    ColumnDefinition.width, so the only way to nominate one flexible column is CSS. The
+ *    inline `width: auto` is why these need `!important`.
+ *
+ *    `width: 1%` is the standard auto-table-layout idiom for "shrink to content": it is
+ *    below every column's min-content width, so the browser clamps each one up to exactly
+ *    its content. The first column asking for 100% then receives all remaining space.
+ *    The column floors are removed in Configurator.tsx (see HUG) — leaving those in place
+ *    would stop the hug before it started.
+ */
+.reports-config-table th,
+.reports-config-table td {
+  width: 1% !important;
+}
+
+.reports-config-table th:first-child,
+.reports-config-table td:first-child {
+  width: 100% !important;
+}
+
+/*
+ * Section tabs: 24px between triggers, per the design at node 4410:25190 (its tab blocks
+ * sit at x=0/111/214/331/... against widths 87/79/93/125/..., a consistent 24px gap).
+ *
+ * Blend's TabsV2 ships 8px, and `tabList.gap` is a single token shared by every variant —
+ * there is no per-variant slot — so overriding it through ThemeProvider componentTokens
+ * would also widen the All / Reconciliation / File Summary tabs, which the design keeps
+ * tight. Hence a scoped rule on the one tab set instead.
+ *
+ * No !important needed: Blend sets this from a styled-components class (0,1,0) and
+ * class + attribute here is (0,2,0), so this wins on specificity despite Blend's
+ * stylesheet being injected after ours.
+ */
+.configurator-section-tabs [role='tablist'] {
+  gap: 24px;
+}
+
+/*
+ * 5. The per-column filter trigger is drawn persistently (TableHeader/index.tsx:1271) with
+ *    no prop to gate it, so it sits in every heading whether or not anyone is aiming at it.
+ *    Revealed on hover or keyboard focus of the heading instead.
+ *
+ *    Opacity rather than `display`, so the heading does not reflow as the pointer crosses
+ *    it; `pointer-events` is what stops the invisible button still being clickable. An open
+ *    filter popover holds its trigger visible, so moving the pointer off the heading and
+ *    into the popover does not blank the control that opened it.
+ *
+ *    Timing comes in as a custom property from Configurator.tsx, so src/motion.ts stays the
+ *    only place a duration is written (rule 14).
+ */
+.reports-config-table th button[aria-label^='Filter '] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--table-feedback) var(--table-feedback-ease);
+}
+
+.reports-config-table th:hover button[aria-label^='Filter '],
+.reports-config-table th:focus-within button[aria-label^='Filter '],
+.reports-config-table th button[aria-label^='Filter '][aria-expanded='true'] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reports-config-table th button[aria-label^='Filter '] {
+    transition: none;
+  }
+}
+
+/*
+ * Create-report-config flow (src/pages/CreateReportConfig.tsx).
+ *
+ * Durations and curves arrive as custom properties set on the flow root from src/motion.ts,
+ * so rule 14's single source of truth still holds and the stylesheet keeps no second copy.
+ *
+ * A keyframe, not a transition between two states set a frame apart: a group is revealed by
+ * mounting it, and a freshly mounted element starts at `from` whenever the frame lands.
+ */
+@keyframes flow-question-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.flow-question {
+  animation: flow-question-enter var(--flow-reveal) var(--flow-reveal-ease) both;
+}
+
+/*
+ * Once a group has an answer its other options recede, so the eye lands on the question
+ * still open. Hover returns a dimmed option to full — changing an earlier answer should not
+ * become a hunt for something that faded.
+ */
+.flow-card {
+  transition:
+    opacity var(--flow-feedback) var(--flow-feedback-ease),
+    border-color var(--flow-feedback) var(--flow-feedback-ease);
+}
+
+.flow-card[data-dimmed='true'] {
+  opacity: 0.5;
+}
+
+.flow-card[data-dimmed='true']:hover {
+  opacity: 1;
+}
+
+/* Reveal-only, so plain `none` is safe here — nothing waits on an animationend to unmount. */
+@media (prefers-reduced-motion: reduce) {
+  .flow-question {
+    animation: none;
+  }
+
+  .flow-card {
+    transition: none;
+  }
+}
+
+/*
+ * Fields step — the column table is capped at 1100px (FieldsStep.tsx) and scrolls past it.
+ *
+ * The bar is styled rather than left to the platform: macOS overlay scrollbars fade out when
+ * idle, which hides the very thing the user needs to know — that there are columns off the
+ * right edge. Giving it an explicit size and colour makes Blink render a classic bar that
+ * holds its own space and stays visible. `auto` keeps it absent until the content actually
+ * overflows, which is exactly "visible once you have added that many columns".
+ *
+ * Colours arrive as custom properties from the component, so they stay on the palette.
+ */
+/*
+ * Registered so the two fade widths can be transitioned. An unregistered custom property is
+ * a plain token to the engine and animates by snapping; typed as a <length> it interpolates,
+ * so the edge fades in as you scroll into it rather than appearing all at once.
+ */
+@property --fade-left {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --fade-right {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+/*
+ * The clipped edges fade out, so a table wider than its container reads as cut off rather
+ * than as simply ending. Without it the last column meets the page background at a hard
+ * edge and looks deliberate.
+ *
+ * A mask, not an overlaid gradient: the fade has to reach whatever is behind it, and the
+ * table sits on the page's own white rather than on a panel, so a painted gradient would
+ * need to know that colour and would stop being right the moment the surface changed.
+ *
+ * Each side's width is driven from FieldsStep, which sets it to 0px when that edge has
+ * nothing past it — at 0 the gradient's stops coincide and the mask is a no-op.
+ */
+.fields-table {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  /* Sits between the table's bottom border and the scrollbar: on a scroll container the bar
+     is laid out at the inner edge of the border box, so bottom padding is the gap. */
+  padding-bottom: 4px;
+  --fade-left: 0px;
+  --fade-right: 0px;
+  -webkit-mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-left),
+    black calc(100% - var(--fade-right)),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to right,
+    transparent 0,
+    black var(--fade-left),
+    black calc(100% - var(--fade-right)),
+    transparent 100%
+  );
+  transition:
+    --fade-left var(--flow-feedback) var(--flow-feedback-ease),
+    --fade-right var(--flow-feedback) var(--flow-feedback-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fields-table {
+    transition: none;
+  }
+}
+
+/*
+ * `scrollbar-width` / `scrollbar-color` are deliberately NOT set here. Chrome honours the
+ * standard properties in preference to ::-webkit-scrollbar and, with the OS in overlay mode,
+ * that yields a bar that fades out — measured: offsetHeight - clientHeight was 0. Styling
+ * the pseudo-element alone forces a classic bar that reserves its own space and stays.
+ * The standard properties are kept below for engines with no pseudo-element to fall back on.
+ */
+
+.fields-table::-webkit-scrollbar {
+  height: 5px;
+}
+
+.fields-table::-webkit-scrollbar-track {
+  background: var(--table-scroll-track);
+  border-radius: 8px;
+}
+
+.fields-table::-webkit-scrollbar-thumb {
+  background: var(--table-scroll-thumb);
+  border-radius: 8px;
+}
+
+.fields-table::-webkit-scrollbar-thumb:hover {
+  background: var(--table-scroll-thumb-hover);
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .fields-table {
+    scrollbar-width: thin;
+    scrollbar-color: var(--table-scroll-thumb) var(--table-scroll-track);
+  }
+}
+
+/*
+ * The delete icon belongs to the column you are pointing at, not to all of them at once —
+ * five trash cans on screen read as five things about to be thrown away.
+ *
+ * Opacity rather than `display`, so the title beside it does not reflow as the pointer
+ * crosses the header; `pointer-events` is what stops the invisible button being clickable.
+ * `:focus-within` keeps it reachable by keyboard, where there is no hover to trigger.
+ * Timings inherit from the flow root, so src/motion.ts stays the only source (rule 14).
+ */
+.fields-table [data-column] button[aria-label^='Delete '] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--flow-feedback) var(--flow-feedback-ease);
+}
+
+.fields-table [data-column]:hover button[aria-label^='Delete '],
+.fields-table [data-column]:focus-within button[aria-label^='Delete '] {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fields-table [data-column] button[aria-label^='Delete '] {
+    transition: none;
+  }
+}
+
+/*
+ * Showcase carousel (src/pages/create-report-config/Showcase.tsx).
+ *
+ * A keyframe on a slide that is keyed by id, so each one is a fresh mount and starts at
+ * `from` whenever the frame lands — rule 14's reason for never transitioning between two
+ * states set a frame apart. Duration and curve inherit from the flow root.
+ */
+@keyframes showcase-slide-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+
+.showcase-slide {
+  animation: showcase-slide-enter var(--flow-reveal) var(--flow-reveal-ease) both;
+}
+
+/* Reveal-only — nothing waits on an animationend to unmount, so plain `none` is safe. */
+@media (prefers-reduced-motion: reduce) {
+  .showcase-slide {
+    animation: none;
+  }
+}
