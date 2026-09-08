@@ -20,7 +20,7 @@ import tenantLogo from '../assets/icons/tenant-logo.svg'
 import MaskIcon from '../components/MaskIcon'
 import { font } from '../primitives'
 import { CHROME_HOVER } from './chrome'
-import { CONFIGURATOR_PATH, buildNavigationData } from './navigation'
+import { CONFIGURATOR_PATH, HOME_PATH, buildNavigationData } from './navigation'
 import { TopbarStatusIcons } from './topbar'
 
 const { colors } = FOUNDATION_THEME
@@ -184,10 +184,11 @@ function AppShell({ children }: { children?: ReactNode }) {
     [],
   )
 
+  const isHomeActive = pathname === HOME_PATH
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
   const navigationData = useMemo(
-    () => buildNavigationData({ isConfiguratorActive, navigate }),
-    [isConfiguratorActive, navigate],
+    () => buildNavigationData({ isHomeActive, isConfiguratorActive, navigate }),
+    [isHomeActive, isConfiguratorActive, navigate],
   )
 
   return (
