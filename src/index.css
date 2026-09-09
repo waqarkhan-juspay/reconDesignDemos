@@ -1,118 +1,41 @@
 @import "tailwindcss";
 
 /*
- * blend-gap: three places where Blend 0.0.37's shipped DataTable disagrees with the Blend
- * Figma library the Reports Config screen is drawn against. Each is unreachable from props
- * or `ThemeProvider` componentTokens, so they are corrected here.
+ * The typeface Blend's foundation declares — `font.family.body` is 'InterDisplay'
+ * (font.tokens.ts:140).
  *
- * Scoped to `.reports-config-table`, which only src/pages/Configurator.tsx opts into — no
- * other table in the app is affected. Anchored on Blend's own `data-table` hook and on
- * table semantics rather than styled-components' generated class names, which are unstable.
+ * It has to be set here because Blend never applies it: across the whole library there are
+ * two references to `font.family`, both inside Charts' Highcharts config. Every other
+ * component inherits the family from the document, and Tailwind's Preflight was setting
+ * that to its own system stack — so the design system's typeface was being declared and
+ * then ignored.
  *
- * Delete any rule whose upstream cause is fixed in a later Blend.
+ * ⚠️ This resolves to the fallback today. The published package ships no font binaries at
+ * all (no woff/woff2/ttf/otf anywhere in it, and the single @font-face in its stylesheet is
+ * monaco's `codicon`), so there is nothing for 'InterDisplay' to match yet and the app
+ * still renders in the system stack. Drop the real files in with an @font-face named
+ * exactly 'InterDisplay' and every surface picks them up with no further change.
+ *
+ * The fallbacks are Preflight's own stack, so nothing moves until that happens.
  */
-
-/*
- * 1. The footer always prints a "6-14 of 20" range beside the rows-per-page select
- *    (DataTablePagination.tsx:277-279, rendered unconditionally with no prop to disable).
- *    The design has no such label.
- */
-.reports-config-table [data-element='pagesize'] > span:last-child {
-  display: none;
+:root {
+  --font-body:
+    'InterDisplay', -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue',
+    'Noto Sans', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
 }
 
-/*
- * 2. Body rows measure 52px, not the 56px the design specifies. The row token *is* 56
- *    (dataTable.tokens.ts body.row.height), but TableCell/index.tsx:601 hardcodes
- *    `minHeight: FOUNDATION_THEME.unit[52]` on the cell's inner wrapper, reading the
- *    foundation directly so it outranks both the token and any theme override. It lands
- *    as an inline style, hence `!important`.
- */
-.reports-config-table tbody td > div {
-  min-height: 56px !important;
+html {
+  font-family: var(--font-body);
 }
 
 /*
- * 3. The table's outer radius is 8px; the design specifies 12px, which is also what
- *    DESIGN.md §7 asks of a card-like surface. `dataTable.borderRadius` resolves to
- *    radius[8] and is written as an inline style, so `!important` is what it takes to
- *    override it — not a source-order problem, an inline-style one.
+ * Grayscale antialiasing, which is what the rest of the chrome is drawn against. macOS
+ * defaults to subpixel rendering, which thickens stems enough that a 500 reads as a 600 —
+ * the reason the UI looked heavier than its weights said it was.
  */
-.reports-config-table [data-table='table'] > div {
-  border-radius: 12px !important;
-}
-
-/*
- * 4. Column sizing: every column hugs its content, Configuration Name takes the slack.
- *
- *    Not a Blend bug — just something its API cannot express. `getColumnStyles`
- *    (utils.ts:873) hardcodes `width: 'auto'` on every cell and never reads
- *    ColumnDefinition.width, so the only way to nominate one flexible column is CSS. The
- *    inline `width: auto` is why these need `!important`.
- *
- *    `width: 1%` is the standard auto-table-layout idiom for "shrink to content": it is
- *    below every column's min-content width, so the browser clamps each one up to exactly
- *    its content. The first column asking for 100% then receives all remaining space.
- *    The column floors are removed in Configurator.tsx (see HUG) — leaving those in place
- *    would stop the hug before it started.
- */
-.reports-config-table th,
-.reports-config-table td {
-  width: 1% !important;
-}
-
-.reports-config-table th:first-child,
-.reports-config-table td:first-child {
-  width: 100% !important;
-}
-
-/*
- * Section tabs: 24px between triggers, per the design at node 4410:25190 (its tab blocks
- * sit at x=0/111/214/331/... against widths 87/79/93/125/..., a consistent 24px gap).
- *
- * Blend's TabsV2 ships 8px, and `tabList.gap` is a single token shared by every variant —
- * there is no per-variant slot — so overriding it through ThemeProvider componentTokens
- * would also widen the All / Reconciliation / File Summary tabs, which the design keeps
- * tight. Hence a scoped rule on the one tab set instead.
- *
- * No !important needed: Blend sets this from a styled-components class (0,1,0) and
- * class + attribute here is (0,2,0), so this wins on specificity despite Blend's
- * stylesheet being injected after ours.
- */
-.configurator-section-tabs [role='tablist'] {
-  gap: 24px;
-}
-
-/*
- * 5. The per-column filter trigger is drawn persistently (TableHeader/index.tsx:1271) with
- *    no prop to gate it, so it sits in every heading whether or not anyone is aiming at it.
- *    Revealed on hover or keyboard focus of the heading instead.
- *
- *    Opacity rather than `display`, so the heading does not reflow as the pointer crosses
- *    it; `pointer-events` is what stops the invisible button still being clickable. An open
- *    filter popover holds its trigger visible, so moving the pointer off the heading and
- *    into the popover does not blank the control that opened it.
- *
- *    Timing comes in as a custom property from Configurator.tsx, so src/motion.ts stays the
- *    only place a duration is written (rule 14).
- */
-.reports-config-table th button[aria-label^='Filter '] {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--table-feedback) var(--table-feedback-ease);
-}
-
-.reports-config-table th:hover button[aria-label^='Filter '],
-.reports-config-table th:focus-within button[aria-label^='Filter '],
-.reports-config-table th button[aria-label^='Filter '][aria-expanded='true'] {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .reports-config-table th button[aria-label^='Filter '] {
-    transition: none;
-  }
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /*
@@ -272,33 +195,6 @@
 }
 
 /*
- * The delete icon belongs to the column you are pointing at, not to all of them at once —
- * five trash cans on screen read as five things about to be thrown away.
- *
- * Opacity rather than `display`, so the title beside it does not reflow as the pointer
- * crosses the header; `pointer-events` is what stops the invisible button being clickable.
- * `:focus-within` keeps it reachable by keyboard, where there is no hover to trigger.
- * Timings inherit from the flow root, so src/motion.ts stays the only source (rule 14).
- */
-.fields-table [data-column] button[aria-label^='Delete '] {
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity var(--flow-feedback) var(--flow-feedback-ease);
-}
-
-.fields-table [data-column]:hover button[aria-label^='Delete '],
-.fields-table [data-column]:focus-within button[aria-label^='Delete '] {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fields-table [data-column] button[aria-label^='Delete '] {
-    transition: none;
-  }
-}
-
-/*
  * Showcase carousel (src/pages/create-report-config/Showcase.tsx).
  *
  * A keyframe on a slide that is keyed by id, so each one is a fresh mount and starts at
@@ -320,5 +216,213 @@
 @media (prefers-reduced-motion: reduce) {
   .showcase-slide {
     animation: none;
+  }
+}
+
+/*
+ * Reconciliation explainer (src/pages/create-report-config/ReconciliationAnimation.tsx).
+ *
+ * Ported from `reconciliation-animation-2x.html`, with one change to every keyframe: the
+ * source looped, so each track ended by fading itself back out between 92% and 100% ready
+ * for the next pass. Playing once, that tail would end the animation on an empty stage —
+ * so every track now holds its arrived state at 100% instead.
+ *
+ * That is also why nothing here describes the settled state. The elements are *authored*
+ * settled — full opacity, no offset, no dash — and the animations only exist under
+ * `.recon-anim--play`. So the drawing is correct with no CSS at all, and adding the class
+ * is what rewinds it and plays it forward. Rule 14: a keyframe on a mount, never a
+ * transition between two states set a frame apart.
+ */
+.recon-anim {
+  --recon-duration: 4s;
+}
+
+@keyframes recon-sheet-a {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  7% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes recon-sheet-b {
+  0%,
+  9% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  16% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes recon-hl-1 {
+  0%,
+  22% {
+    opacity: 0;
+  }
+  27% {
+    opacity: 1;
+  }
+}
+
+@keyframes recon-hl-2 {
+  0%,
+  36% {
+    opacity: 0;
+  }
+  41% {
+    opacity: 1;
+  }
+}
+
+@keyframes recon-hl-3 {
+  0%,
+  50% {
+    opacity: 0;
+  }
+  56% {
+    opacity: 1;
+  }
+}
+
+@keyframes recon-badge-1 {
+  0%,
+  22% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  27% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes recon-badge-2 {
+  0%,
+  36% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  41% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* The one that overshoots — it is the mismatch, and it should land harder than the ticks. */
+@keyframes recon-badge-3 {
+  0%,
+  50% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  56% {
+    opacity: 1;
+    transform: scale(1.12);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes recon-draw-1 {
+  0%,
+  21% {
+    stroke-dashoffset: 60;
+  }
+  27% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes recon-draw-2 {
+  0%,
+  35% {
+    stroke-dashoffset: 60;
+  }
+  41% {
+    stroke-dashoffset: 0;
+  }
+}
+
+/* Held invisible until its moment, so the red line does not sit there waiting to be drawn. */
+@keyframes recon-draw-3 {
+  0%,
+  49% {
+    stroke-dashoffset: 60;
+    opacity: 0;
+  }
+  50% {
+    stroke-dashoffset: 60;
+    opacity: 1;
+  }
+  56% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+@keyframes recon-flag {
+  0%,
+  64% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.recon-anim--play .recon-sheet-a {
+  animation: recon-sheet-a var(--recon-duration) ease-out both;
+}
+.recon-anim--play .recon-sheet-b {
+  animation: recon-sheet-b var(--recon-duration) ease-out both;
+}
+.recon-anim--play .recon-hl-1 {
+  animation: recon-hl-1 var(--recon-duration) linear both;
+}
+.recon-anim--play .recon-hl-2 {
+  animation: recon-hl-2 var(--recon-duration) linear both;
+}
+.recon-anim--play .recon-hl-3 {
+  animation: recon-hl-3 var(--recon-duration) linear both;
+}
+.recon-anim--play .recon-badge-1 {
+  animation: recon-badge-1 var(--recon-duration) cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.recon-anim--play .recon-badge-2 {
+  animation: recon-badge-2 var(--recon-duration) cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.recon-anim--play .recon-badge-3 {
+  animation: recon-badge-3 var(--recon-duration) cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+.recon-anim--play .recon-draw-1 {
+  animation: recon-draw-1 var(--recon-duration) ease-out both;
+}
+.recon-anim--play .recon-draw-2 {
+  animation: recon-draw-2 var(--recon-duration) ease-out both;
+}
+.recon-anim--play .recon-draw-3 {
+  animation: recon-draw-3 var(--recon-duration) ease-out both;
+}
+.recon-anim--play .recon-flag {
+  animation: recon-flag var(--recon-duration) ease-out both;
+}
+
+/*
+ * Reduced motion gets the finished drawing, not a frozen empty stage: `none` drops the
+ * animation entirely, and the settled state is what the markup already is.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .recon-anim--play * {
+    animation: none !important;
   }
 }

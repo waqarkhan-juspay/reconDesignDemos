@@ -19,18 +19,19 @@ import {
   TagV2Color,
   TagV2Size,
   TagV2Type,
+  ThemeProvider,
   type ColumnDefinition,
   type ColumnFilter,
   type FilterOption,
   type SortConfig,
 } from '@juspay/blend-design-system'
 import { useDialKit } from 'dialkit'
-import { Plus } from 'lucide-react'
 import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
 import { REPORT_CATEGORY_IDS, type Categorised, type ReportCategory } from '../report-config'
+import { sectionTabsTokens } from '../theme'
 
 const { colors } = FOUNDATION_THEME
 
@@ -569,11 +570,18 @@ function Configurator() {
   )
 
   return (
-    <div className="flex flex-col px-6" style={{ paddingTop: spacing.aboveTitle }}>
+    // Capped and centred: 1440 is the design's frame, and past it the table would keep
+    // stretching while the eye has to travel further to read a row. `max-w` is border-box
+    // under Preflight, so the 24px gutters are inside the 1440 rather than added to it.
+    <div
+      className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
+      style={{ paddingTop: spacing.aboveTitle }}
+    >
       <PrimitiveText
         as="h1"
-        // heading.lg (24/32) per the updated design at node 4410:25156 — it was xl (32/38).
-        {...font(FOUNDATION_THEME.font.size.heading.lg)}
+        // heading.md — 20/28. The token rather than the numbers, so the page heading keeps
+        // moving with the scale rather than pinning itself to today's value of it.
+        {...font(FOUNDATION_THEME.font.size.heading.md)}
         color={colors.gray[700]}
         fontWeight={FOUNDATION_THEME.font.weight[600]}
       >
@@ -582,29 +590,35 @@ function Configurator() {
 
       {/* The class carries the 24px inter-tab gap the design specifies — see index.css.
           TabsV2List takes no className, so it has to be reached through this wrapper. */}
-      <div className="configurator-section-tabs" style={{ marginTop: spacing.titleToTabs }}>
-        <TabsV2
-          variant={TabsV2Variant.UNDERLINE}
-          size={TabsV2Size.MD}
-          value={section}
-          onValueChange={setSection}
-        >
-          <TabsV2List>
-            {SECTION_TABS.map((label) => (
-              <TabsV2Trigger key={label} value={toValue(label)}>
-                {label}
-              </TabsV2Trigger>
-            ))}
-          </TabsV2List>
-        </TabsV2>
+      {/* Its own ThemeProvider, so the 24px trigger gap reaches these tabs and not the
+          boxed filter tabs below — `tabList.gap` is a single token, not keyed by variant.
+          See sectionTabsTokens in src/theme.ts. */}
+      <div style={{ marginTop: spacing.titleToTabs }}>
+        <ThemeProvider componentTokens={sectionTabsTokens}>
+          <TabsV2
+            variant={TabsV2Variant.UNDERLINE}
+            size={TabsV2Size.MD}
+            value={section}
+            onValueChange={setSection}
+          >
+            <TabsV2List>
+              {SECTION_TABS.map((label) => (
+                <TabsV2Trigger key={label} value={toValue(label)}>
+                  {label}
+                </TabsV2Trigger>
+              ))}
+            </TabsV2List>
+          </TabsV2>
+        </ThemeProvider>
       </div>
 
-      {/* px-6 insets the whole tab panel — toolbar and table together — 24px on each side,
-          so the panel reads as content nested under the active Report Config tab and its
-          two rows stay flush with each other. Only padding-left/right come from Tailwind
-          here; the vertical padding below is the dial's, so the two never collide. */}
+      {/* No horizontal padding of its own. The panel used to carry `px-6` so it read as
+          content nested under the active Report Config tab, but that put the toolbar and
+          table 24px right of the heading and the section tabs — two keylines on one page.
+          The gutter now belongs to the page container alone, so every row starts at the
+          same x. Vertical padding is still the dial's. */}
       <div
-        className="flex flex-col px-6"
+        className="flex flex-col"
         style={{
           paddingTop: spacing.tabsToToolbar,
           paddingBottom: spacing.belowTable,
@@ -612,29 +626,37 @@ function Configurator() {
         }}
       >
         <div className="flex items-center justify-between">
-          <TabsV2
-            variant={TabsV2Variant.FLOATING}
-            size={TabsV2Size.LG}
-            value={filter}
-            onValueChange={handleFilterTabChange}
-          >
-            <TabsV2List>
-              {FILTER_TABS.map((label) => (
-                <TabsV2Trigger key={label} value={label}>
-                  {label}
-                </TabsV2Trigger>
-              ))}
-            </TabsV2List>
-          </TabsV2>
+          {/* The track has to hug its three tabs. BOXED paints a background on the tablist,
+              and TabsV2's root takes the full width of its flex parent — which left 588px
+              of empty grey running from "File Summary" to the button. TabsV2 takes no
+              className (rule 2), so the width is capped on a wrapper we own. */}
+          <div className="w-fit shrink-0">
+            <TabsV2
+              // BOXED, not FLOATING: the filter sits on the same ground as the table it
+              // filters, so it needs a track of its own to read as a control rather than
+              // three loose words. FLOATING gives the active tab a fill and nothing else.
+              variant={TabsV2Variant.BOXED}
+              size={TabsV2Size.LG}
+              value={filter}
+              onValueChange={handleFilterTabChange}
+            >
+              <TabsV2List>
+                {FILTER_TABS.map((label) => (
+                  <TabsV2Trigger key={label} value={label}>
+                    {label}
+                  </TabsV2Trigger>
+                ))}
+              </TabsV2List>
+            </TabsV2>
+          </div>
 
           {/* ButtonV2 sizes to its text; without this it is a flex item that can shrink
               and wrap "Create report config" onto a second line. */}
           <div className="shrink-0">
             <ButtonV2
               buttonType={ButtonV2Type.PRIMARY}
-              size={ButtonV2Size.SMALL}
+              size={ButtonV2Size.LARGE}
               text="Create report config"
-              leftSlot={{ slot: <Plus size={16} /> }}
               onClick={() => navigate('/configurator/create')}
             />
           </div>

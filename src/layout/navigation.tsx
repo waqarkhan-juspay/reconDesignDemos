@@ -1,10 +1,31 @@
-import type { DirectoryData } from '@juspay/blend-design-system'
-import { Faders, House } from '@phosphor-icons/react'
+import {
+  TagV2,
+  TagV2Color,
+  TagV2Size,
+  TagV2SubType,
+  TagV2Type,
+  type DirectoryData,
+} from '@juspay/blend-design-system'
+import { BookOpen, House, MessageSquareCheck, User, Wrench } from 'lucide-react'
+import announcementIcon from '../assets/icons/announcement-01.svg'
+import globeIcon from '../assets/icons/globe-01.svg'
+import MaskIcon from '../components/MaskIcon'
 
 const ICON_SIZE = 12
 
 export const HOME_PATH = '/'
 export const CONFIGURATOR_PATH = '/configurator'
+
+/**
+ * The collapsed sections below Reconciliation — node 4405:10766 draws each as a label and a
+ * chevron with nothing under it, which is a section whose items have not been designed yet
+ * rather than an empty one. `items: []` is what Directory renders for that: the label, the
+ * chevron, and no rows.
+ *
+ * Labels are given in sentence case because Directory uppercases them itself; writing them
+ * shouty here would only make them harder to read in this file.
+ */
+const PLACEHOLDER_SECTIONS = ['Offers', 'Mandates', 'Smart Convert', 'Monitoring']
 
 export type NavigationOptions = {
   /**
@@ -24,6 +45,10 @@ export type NavigationOptions = {
  * `NavItem.tsx:352` calls `preventDefault()` on every plain left click and does not route,
  * so `href` alone goes nowhere and an `onClick` is required. `href` still earns its place —
  * cmd/ctrl-click bails out before that handler and opens the real URL in a new tab.
+ *
+ * Only Home and Configurator have routes. The rest are the design's labels, drawn so the
+ * rail reads as the product's nav rather than the two pages that exist — they are
+ * deliberately inert rather than pointing at a 404.
  */
 export function buildNavigationData({
   isHomeActive,
@@ -41,6 +66,47 @@ export function buildNavigationData({
           isSelected: isHomeActive,
           showOnMobile: true,
         },
+        {
+          label: 'Marketplace',
+          leftSlot: <MaskIcon src={globeIcon} size={ICON_SIZE} />,
+          showOnMobile: true,
+        },
+        {
+          label: 'What’s New',
+          leftSlot: <MaskIcon src={announcementIcon} size={ICON_SIZE} />,
+          showOnMobile: true,
+        },
+        {
+          label: 'Users',
+          leftSlot: <User size={ICON_SIZE} />,
+          showOnMobile: true,
+        },
+        {
+          label: 'Orders',
+          leftSlot: <BookOpen size={ICON_SIZE} />,
+          showOnMobile: true,
+        },
+        {
+          label: 'Action Center',
+          leftSlot: <MessageSquareCheck size={ICON_SIZE} />,
+          // `rightSlot` lands the badge beside the label rather than against the far edge
+          // of the row, which is what the design draws: NavItem does give the label
+          // `flexGrow: 1` (NavItem.tsx:434), but the block holding it is content-sized, so
+          // there is no free space for the label to claim and the tag follows it directly.
+          //
+          // The one thing lost is the announcement — NavItem wraps the slot in
+          // `aria-hidden` (NavItem.tsx:449), so "Beta" is decoration to a screen reader.
+          rightSlot: (
+            <TagV2
+              text="Beta"
+              type={TagV2Type.SUBTLE}
+              size={TagV2Size.XS}
+              subType={TagV2SubType.SQUARICAL}
+              color={TagV2Color.NEUTRAL}
+            />
+          ),
+          showOnMobile: true,
+        },
       ],
     },
     {
@@ -50,7 +116,9 @@ export function buildNavigationData({
       items: [
         {
           label: 'Configurator',
-          leftSlot: <Faders size={ICON_SIZE} />,
+          // The design names this one outright — "lucide/wrench" — where its siblings are
+          // Untitled UI glyphs.
+          leftSlot: <Wrench size={ICON_SIZE} />,
           href: CONFIGURATOR_PATH,
           onClick: () => navigate(CONFIGURATOR_PATH),
           // `isSelected` is what actually drives the highlight — it wins unconditionally
@@ -62,5 +130,11 @@ export function buildNavigationData({
         },
       ],
     },
+    ...PLACEHOLDER_SECTIONS.map((label) => ({
+      label,
+      isCollapsible: true,
+      defaultOpen: false,
+      items: [],
+    })),
   ]
 }

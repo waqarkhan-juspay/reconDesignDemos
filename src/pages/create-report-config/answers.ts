@@ -118,6 +118,54 @@ export const EMPTY_FIELDS: FieldsAnswers = {
   ].map((title) => newFieldColumn(title)),
 }
 
+/**
+ * The field vocabulary offered under the table — node 4457:15485, in the design's own order.
+ *
+ * Transcribed verbatim, spelling included: "Merchant Id" and "Payment Entity Txn Id" differ
+ * in case from the default column titles above, which is why selection is matched
+ * case-insensitively rather than by string equality (see `isFieldSelected`).
+ */
+export const FIELD_TAGS = [
+  'Credit',
+  'Debit',
+  'Fee',
+  'Gateway',
+  'ID',
+  'Label',
+  'Merchant Id',
+  'Payment Entity Txn Id',
+  'Recon Id',
+  'Recon Secondary Status',
+  'Recon Secondary Sub Status',
+  'Recon Status',
+  'Recon Sub Status',
+  'Reconciled At',
+  'Settlement Amount',
+  'Settlement Currency',
+  'Settlement Date',
+  'Tax',
+  'Txn Amount',
+  'Txn Currency',
+  'Txn Date',
+  'Txn Type',
+]
+
+/**
+ * A tag is lit when a column carries its name — derived, never stored.
+ *
+ * Two states that could disagree is the whole failure mode here: a tag remembering it was
+ * clicked after its column was deleted from the table, or renamed out from under it. There
+ * is one source of truth, `columns`, and the tags are a view of it.
+ *
+ * Case- and space-insensitive because column titles are free text the user can edit: having
+ * renamed a column to "merchant id", they mean the Merchant Id field, and a tag that stays
+ * dark is just wrong.
+ */
+const normalise = (value: string) => value.trim().toLowerCase()
+
+export const isFieldSelected = (columns: FieldColumn[], tag: string) =>
+  columns.some(({ title }) => normalise(title) === normalise(tag))
+
 /** A column with a blank name would produce a nameless header in the report. */
 export const isFieldsComplete = ({ columns }: FieldsAnswers) =>
   columns.length > 0 && columns.every(({ title }) => title.trim() !== '')
