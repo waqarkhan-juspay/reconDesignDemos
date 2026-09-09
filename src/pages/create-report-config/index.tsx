@@ -44,10 +44,25 @@ const { colors } = FOUNDATION_THEME
  * The design draws the bar at 288px of 1440 on Setup, 576px on Delivery and 864px on
  * Fields: one, two and three fifths of these five.
  */
-const STEPS = [
+const STEPS: {
+  label: string
+  title: string
+  /** Optional standfirst under the title. Only Fields has one in the design. */
+  description?: string
+  wide?: boolean
+}[] = [
   { label: 'Setup', title: 'Setup your report file' },
   { label: 'Delivery', title: 'Delivery and scheduling' },
-  { label: 'Fields', title: 'Customize your column fields', wide: true },
+  {
+    label: 'Fields',
+    title: 'Customise your fields',
+    // Transcribed from node 4457:15485, "Re arrange" included — it reads as a typo for
+    // "Rearrange", but this is the designer's copy and not mine to quietly correct.
+    description:
+      'Select data from existing columns or add a custom column of your choice. ' +
+      'Re arrange, edit, delete as per your wish!',
+    wide: true,
+  },
   { label: 'Filters', title: 'Filters' },
   { label: 'Submit', title: 'Submit' },
 ]
@@ -72,6 +87,17 @@ const COLUMN = 'mx-auto w-full max-w-[632px] px-6'
 const WIDE_COLUMN = 'mx-auto w-full max-w-[1158px] px-6'
 
 /**
+ * Measure for a step's description.
+ *
+ * 400 reproduces the design's own two-line break (node 4457:15485) — "…add a custom column /
+ * of your choice…". The window is narrow: at this size the first line measures 386px and
+ * pulling "of" up needs 403, so anything from 386 to 402 breaks in the same place. Measured
+ * against the app's system stack, not the design's Inter Display, so re-check it if the
+ * body font ever changes.
+ */
+const DESCRIPTION_WIDTH = 400
+
+/**
  * Timings handed to the stylesheet as custom properties, so the keyframes and transitions
  * in index.css still read their numbers from src/motion.ts (rule 14) rather than keeping a
  * second copy. Set once on the flow root; custom properties inherit.
@@ -83,32 +109,63 @@ const MOTION = {
   '--flow-feedback-ease': FEEDBACK_EASING,
 } as CSSProperties
 
-/** Steps already passed stay dark alongside the current one; only what is ahead is grey. */
-function StepBreadcrumb({ step }: { step: number }) {
+type StepNavigation = {
+  step: number
+  /** Whether a step can be opened — see `canGoTo` in the flow below. */
+  canGoTo: (target: number) => boolean
+  onNavigate: (target: number) => void
+}
+
+/**
+ * The breadcrumb is the flow's other way of moving between steps, so dark now means
+ * *reachable* rather than *visited*.
+ *
+ * The two readings agree everywhere they used to: standing on a step means every step
+ * before it is answered, so everything up to the current one is reachable and stays dark.
+ * What is new is the step ahead going dark the moment the current one is complete — the
+ * same instant Continue enables, which is the honest affordance for something clickable.
+ *
+ * The button is always rendered rather than swapped in for reachable steps: a label that
+ * changes element type as you answer a question moves focus out from under the keyboard.
+ */
+function StepBreadcrumb({ step, canGoTo, onNavigate }: StepNavigation) {
   return (
     <div className="flex items-center gap-2">
-      {STEPS.map(({ label }, index) => (
-        <Fragment key={label}>
-          {index > 0 && <CaretRight size={16} color={colors.gray[400]} />}
-          <PrimitiveText
-            {...font(FOUNDATION_THEME.font.size.body.lg)}
-            color={index <= step ? colors.gray[700] : colors.gray[400]}
-          >
-            {label}
-          </PrimitiveText>
-        </Fragment>
-      ))}
+      {STEPS.map(({ label }, index) => {
+        const reachable = canGoTo(index)
+        return (
+          <Fragment key={label}>
+            {index > 0 && <CaretRight size={16} color={colors.gray[400]} />}
+            <button
+              type="button"
+              disabled={!reachable}
+              aria-current={index === step ? 'step' : undefined}
+              onClick={() => onNavigate(index)}
+              className={`border-none bg-transparent p-0 ${
+                reachable && index !== step ? 'cursor-pointer' : 'cursor-default'
+              }`}
+            >
+              <PrimitiveText
+                {...font(FOUNDATION_THEME.font.size.body.lg)}
+                color={reachable ? colors.gray[700] : colors.gray[400]}
+              >
+                {label}
+              </PrimitiveText>
+            </button>
+          </Fragment>
+        )
+      })}
     </div>
   )
 }
 
-function TopbarContent({ step }: { step: number }) {
+function TopbarContent(navigation: StepNavigation) {
   return (
     <div className="flex w-full items-center justify-between">
       <div className="flex size-8 items-center justify-center overflow-clip rounded-[6.4px]">
         <img src={tenantLogo} alt="" className="block size-[18px]" />
       </div>
-      <StepBreadcrumb step={step} />
+      <StepBreadcrumb {...navigation} />
       <TopbarStatusIcons />
     </div>
   )
@@ -133,18 +190,39 @@ function CreateReportConfig() {
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
 
-  const { title, wide } = STEPS[step]
+  const { title, description, wide } = STEPS[step]
   const isLastStep = step === STEPS.length - 1
 
-  // Steps past the built ones have nothing to answer, so they never hold the flow up.
-  const complete =
-    step === 0
+  /**
+   * Each step's answers, checked. Read as a list rather than for the current step alone
+   * because the breadcrumb has to know about steps nobody is standing on.
+   *
+   * Steps past the built ones have nothing to answer, so they are complete by definition
+   * and never hold the flow up.
+   */
+  const stepComplete = STEPS.map((_, index) =>
+    index === 0
       ? isSetupComplete(setup)
-      : step === 1
+      : index === 1
         ? isDeliveryComplete(delivery)
-        : step === 2
+        : index === 2
           ? isFieldsComplete(fields)
-          : true
+          : true,
+  )
+
+  const complete = stepComplete[step]
+
+  /**
+   * A step opens once every step before it is answered — the same bar Continue clears, so
+   * the breadcrumb can never reach somewhere Continue could not.
+   *
+   * Backwards is always allowed, and that is the `target <= step` clause rather than a
+   * consequence of the rest: go back to Setup, clear the format, and Delivery is no longer
+   * answerable-from-scratch — but you are standing past it, and refusing to let someone
+   * retrace their own steps to fix what they just broke is the worse failure.
+   */
+  const canGoTo = (target: number) =>
+    target <= step || stepComplete.slice(0, target).every(Boolean)
 
   return (
     <div
@@ -152,7 +230,7 @@ function CreateReportConfig() {
       style={{ ...MOTION, backgroundColor: colors.gray[0] }}
     >
       <div className="shrink-0">
-        <TopbarV2 topbar={<TopbarContent step={step} />} />
+        <TopbarV2 topbar={<TopbarContent step={step} canGoTo={canGoTo} onNavigate={setStep} />} />
         {/* Progress across the five steps. The design draws it as a rule sitting on the
             topbar's bottom edge.
 
@@ -187,18 +265,33 @@ function CreateReportConfig() {
               key={step}
               className={`${wide ? WIDE_COLUMN : COLUMN} flow-question flex flex-col gap-8 pt-24 pb-12`}
             >
-              {/* Fields centres its heading over the table; the column-width steps left-align.
-                  Passed as a prop, not a wrapper class: PrimitiveText defaults textAlign to
-                  'left' and writes it into its own styles (PrimitiveText.tsx:102,116), so an
-                  inherited text-align never reaches it. */}
-              <PrimitiveText
-                as="h1"
-                {...font(FOUNDATION_THEME.font.size.heading.lg)}
-                color={colors.gray[700]}
-                textAlign={wide ? 'center' : 'left'}
-              >
-                {title}
-              </PrimitiveText>
+              {/* Every step left-aligns its heading, Fields included — it used to centre
+                  over the table, and the redraw at node 4457:15485 sets it flush with the
+                  table's left edge, which is where WIDE_COLUMN already puts it. */}
+              <div className="flex flex-col gap-2">
+                <PrimitiveText
+                  as="h1"
+                  {...font(FOUNDATION_THEME.font.size.heading.lg)}
+                  color={colors.gray[700]}
+                >
+                  {title}
+                </PrimitiveText>
+                {description && (
+                  // Measured, not full-bleed: the design breaks this into two lines against
+                  // a 1110px table, and a single 1110px line of 14px copy is a worse read.
+                  // The width goes on a wrapper — PrimitiveText builds its own style object
+                  // from named props and never forwards a `style` (PrimitiveText.tsx:110).
+                  <div style={{ maxWidth: DESCRIPTION_WIDTH }}>
+                    <PrimitiveText
+                      as="p"
+                      {...font(FOUNDATION_THEME.font.size.body.md)}
+                      color={colors.gray[500]}
+                    >
+                      {description}
+                    </PrimitiveText>
+                  </div>
+                )}
+              </div>
 
               {step === 0 && <SetupStep answers={setup} onChange={setSetup} />}
               {step === 1 && <DeliveryStep answers={delivery} onChange={setDelivery} />}
@@ -256,7 +349,7 @@ function CreateReportConfig() {
           </div>
         </div>
 
-        {!wide && <Showcase />}
+        {!wide && <Showcase step={step} category={setup.category} />}
       </div>
     </div>
   )

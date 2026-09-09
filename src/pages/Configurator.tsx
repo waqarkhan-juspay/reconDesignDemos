@@ -5,8 +5,10 @@ import {
   ColumnType,
   DataTable,
   FOUNDATION_THEME,
+  FilterType,
   ModalV2,
   SelectorV2Size,
+  SortDirection,
   SwitchV2,
   TabsV2,
   TabsV2List,
@@ -17,15 +19,19 @@ import {
   TagV2Color,
   TagV2Size,
   TagV2Type,
+  ThemeProvider,
   type ColumnDefinition,
+  type ColumnFilter,
+  type FilterOption,
+  type SortConfig,
 } from '@juspay/blend-design-system'
 import { useDialKit } from 'dialkit'
-import { Plus } from 'lucide-react'
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
 import { REPORT_CATEGORY_IDS, type Categorised, type ReportCategory } from '../report-config'
+import { sectionTabsTokens } from '../theme'
 
 const { colors } = FOUNDATION_THEME
 
@@ -88,6 +94,18 @@ const COLUMNS = [
   { field: 'createdDate', header: 'Created Date' },
   { field: 'actions', header: 'Actions' },
 ] as const
+
+/**
+ * The columns whose values are a closed set, and so are worth picking from a list.
+ *
+ * This is a *type* decision, not a flag: `getColumnTypeConfig` (columnTypes.ts) reads
+ * `supportsFiltering` off the ColumnType alone, and TEXT is false — so a TEXT column offers
+ * sorting only, however it is configured. SELECT is the type that opens the filter list.
+ *
+ * Configuration Name, Frequency and Created Date are deliberately not here: a list of ten
+ * distinct sentences is not a filter, it is the table again. They stay TEXT, and sortable.
+ */
+const SELECT_FILTER_FIELDS = ['categorySource', 'sourceType', 'paymentEntity', 'channel']
 
 /** Let content decide the width — see the note above. */
 const HUG = { minWidth: '0px', maxWidth: 'none' } as const
@@ -205,6 +223,103 @@ const rows: ReportConfigRow[] = [
 ]
 
 /**
+ * Filter options, derived from the rows rather than written out.
+ *
+ * Blend derives them from the `data` prop when a column supplies none — but `data` is the
+ * page slice, so the offered values would shrink to whatever page you happen to be on.
+ * Taking them from the full set instead means the list is the vocabulary, not the viewport.
+ */
+const filterOptionsFor = (field: keyof ReportConfigRow): FilterOption[] =>
+  [...new Set(rows.map((row) => String(row[field])))]
+    .sort((a, b) => a.localeCompare(b))
+    .map((value) => ({ id: `${String(field)}-${value}`, label: value, value }))
+
+/** Status is not on `rows` — it is derived — so its two values are named here. */
+const STATUS_FILTER_OPTIONS: FilterOption[] = [
+  { id: 'status-active', label: 'Active', value: 'Active' },
+  { id: 'status-disabled', label: 'Disabled', value: 'Disabled' },
+]
+
+/**
+ * Frequency sorts by cadence, not by spelling. Alphabetically "Daily" precedes "Real-time"
+ * precedes "Weekly", which tells you nothing; ascending here means most frequent first.
+ */
+const FREQUENCY_ORDER = ['Real-time', 'Daily', 'Weekly', 'Monthly', 'Quarterly']
+const frequencyRank = (value: string) => {
+  const index = FREQUENCY_ORDER.findIndex((word) => value.startsWith(word))
+  // Anything unrecognised sorts after every known cadence rather than silently landing first.
+  return index === -1 ? FREQUENCY_ORDER.length : index
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/**
+ * "19th Aug 2026" → a sortable number. Sorting these as strings puts 1st Jan next to 15th
+ * Feb because it compares the leading digit, so the column has to be parsed to be ordered.
+ * An unparseable date sorts last, for the same reason as above.
+ */
+const createdDateRank = (value: string) => {
+  const match = /^(\d{1,2})\w{2}\s+([A-Za-z]{3})\s+(\d{4})$/.exec(value.trim())
+  if (!match) return Number.POSITIVE_INFINITY
+  const month = MONTHS.indexOf(match[2])
+  if (month === -1) return Number.POSITIVE_INFINITY
+  return Number(match[3]) * 10000 + month * 100 + Number(match[1])
+}
+
+/** A TAG cell's value is TagData — `{ text }` — so its sort and filter key is that text. */
+const cellText = (value: unknown) =>
+  typeof value === 'object' && value !== null && 'text' in value
+    ? String((value as { text: unknown }).text)
+    : String(value ?? '')
+
+/** Ascending order for one field. `compare` is negated for descending — nothing else changes. */
+const compareBy = (field: string, a: TableRow, b: TableRow) => {
+  if (field === 'frequency') {
+    const rank = frequencyRank(String(a.frequency)) - frequencyRank(String(b.frequency))
+    // Two Daily rows still need a stable order, so fall through to the text.
+    if (rank !== 0) return rank
+  }
+  if (field === 'createdDate') {
+    return createdDateRank(String(a.createdDate)) - createdDateRank(String(b.createdDate))
+  }
+  return cellText(a[field]).localeCompare(cellText(b[field]), undefined, {
+    numeric: true,
+    sensitivity: 'base',
+  })
+}
+
+/**
+ * One column filter against one row.
+ *
+ * The shapes come from Blend: a single-select sends a string with `equals`, a multi-select
+ * sends an array. The `{ min, max }` case cannot arise — no column here is numeric or a
+ * slider — so it is let through rather than half-implemented.
+ */
+const matchesFilter = (row: TableRow, filter: ColumnFilter) => {
+  const value = cellText(row[String(filter.field)])
+
+  if (Array.isArray(filter.value)) {
+    return filter.value.length === 0 || filter.value.includes(value)
+  }
+
+  if (typeof filter.value === 'string') {
+    if (filter.value === '') return true
+    return filter.operator === 'equals'
+      ? value === filter.value
+      : value.toLowerCase().includes(filter.value.toLowerCase())
+  }
+
+  return true
+}
+
+/** A row as the table sees it: the source row plus the two derived cells. */
+type TableRow = ReportConfigRow & {
+  enabled: boolean
+  status: { text: string }
+  [key: string]: unknown
+}
+
+/**
  * The page's vertical rhythm, tunable live from the DialKit panel.
  *
  * One dial per gap between the page's top-level blocks — title, section tabs, the
@@ -244,6 +359,48 @@ function Configurator() {
   const [filter, setFilter] = useState<string>(ALL)
   const activeCategory = filter === ALL ? null : filter
 
+  /**
+   * Sorting, column filters and pagination all live here rather than inside DataTable.
+   *
+   * Not a preference — `serverSidePagination` makes DataTable return `data` untouched
+   * (DataTable.tsx:535-538, before the search/filter/sort block), which is what lets the
+   * footer describe a set the parent has already sliced. The same early return is why its
+   * own sort and filter menus would otherwise do nothing: they update its internal state,
+   * fire the callbacks, and then no code path applies them. So the parent applies them.
+   */
+  const [sort, setSort] = useState<SortConfig | null>(null)
+  const [columnFilters, setColumnFilters] = useState<ColumnFilter[]>([])
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+
+  /**
+   * Anything that changes which rows exist sends you back to page one — page 3 of a set
+   * that now has four rows is an empty table, and an empty table reads as a bug.
+   */
+  const handleFilterTabChange = (next: string) => {
+    setFilter(next)
+    setPage(1)
+  }
+
+  const handleFilterChange = useCallback((filters: ColumnFilter[]) => {
+    setColumnFilters(filters)
+    setPage(1)
+  }, [])
+
+  /**
+   * DataTable reports SortDirection.NONE for the third click of a header, which is the
+   * cycle's way of saying "unsorted" — held as null so the pipeline can skip sorting
+   * entirely and fall back to the authored row order.
+   */
+  const handleSortChange = useCallback((next: SortConfig) => {
+    setSort(next.direction === SortDirection.NONE ? null : next)
+  }, [])
+
+  const handlePageSizeChange = useCallback((next: number) => {
+    setPageSize(next)
+    setPage(1)
+  }, [])
+
   const spacing = useDialKit('Configurator spacing', SPACING_DIALS)
 
   /** Row id → enabled. Every row starts enabled, so every row starts "Active". */
@@ -274,21 +431,47 @@ function Configurator() {
    * cannot disagree. `enabled` rides along on the row because the Actions cell has to read
    * it from here — see the note on `columns` below.
    */
+  const matchingRows = useMemo(() => {
+    const projected: TableRow[] = rows.map((row) => {
+      const isEnabled = enabled[row.id] ?? true
+      return {
+        ...row,
+        enabled: isEnabled,
+        // A TAG column's value must be TagData — an object carrying `text`. That text
+        // is what the Status filter matches on; the chip comes from renderCell.
+        status: { text: isEnabled ? 'Active' : 'Disabled' },
+      }
+    })
+
+    // Order matters, and it is the order a reader would expect: the tab narrows the set,
+    // the column filters narrow it further, and only then is what survives sorted. Sorting
+    // first would be the same answer at more cost, but filtering after paging would not —
+    // it would filter one page and call it the result.
+    const filtered = projected
+      .filter((row) => activeCategory === null || row.categorySource === activeCategory)
+      .filter((row) => columnFilters.every((filter) => matchesFilter(row, filter)))
+
+    if (!sort) return filtered
+
+    const direction = sort.direction === SortDirection.DESCENDING ? -1 : 1
+    // Sorting a copy: `filtered` is already a new array, but `toSorted` is not in this
+    // TS lib target and an in-place sort on a value derived from state is a habit worth
+    // not having.
+    return [...filtered].sort((a, b) => direction * compareBy(sort.field, a, b))
+  }, [enabled, activeCategory, columnFilters, sort])
+
+  /**
+   * The page is clamped rather than corrected in state: a filter that shrinks the set
+   * below the current page is resolved on the way to render, in one pass, instead of
+   * rendering an empty table and then re-rendering the right one from an effect.
+   */
+  const totalRows = matchingRows.length
+  const pageCount = Math.max(1, Math.ceil(totalRows / pageSize))
+  const currentPage = Math.min(page, pageCount)
+
   const data = useMemo(
-    () =>
-      rows
-        .filter((row) => activeCategory === null || row.categorySource === activeCategory)
-        .map((row) => {
-          const isEnabled = enabled[row.id] ?? true
-          return {
-            ...row,
-            enabled: isEnabled,
-            // A TAG column's value must be TagData — an object carrying `text`. That text
-            // is what DataTable sorts and searches on; the chip comes from renderCell.
-            status: { text: isEnabled ? 'Active' : 'Disabled' },
-          }
-        }),
-    [enabled, activeCategory],
+    () => matchingRows.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    [matchingRows, currentPage, pageSize],
   )
 
   /**
@@ -318,6 +501,11 @@ function Configurator() {
             // Colour is read off `row.enabled`, the same single source of truth the toggle
             // writes to, rather than parsed back out of the label text.
             type: ColumnType.TAG,
+            // TAG's type config is `filterComponent: 'select'`, so the header offers a
+            // one-of list. The two values are named rather than scraped from the page,
+            // so "Disabled" is offerable on a page where every row is Active.
+            filterType: FilterType.SELECT,
+            filterOptions: STATUS_FILTER_OPTIONS,
             renderCell: (_value, row) => {
               const isEnabled = row.enabled !== false
               return (
@@ -364,17 +552,36 @@ function Configurator() {
           }
         }
 
+        if (SELECT_FILTER_FIELDS.includes(field)) {
+          // SELECT renders exactly like TEXT — TableCell has no SELECT branch, so the value
+          // falls through to the same truncated text — but its type config carries
+          // `supportsFiltering: true`, which is what puts the value list in the header menu.
+          return {
+            ...base,
+            type: ColumnType.SELECT,
+            filterType: FilterType.SELECT,
+            filterOptions: filterOptionsFor(field as keyof ReportConfigRow),
+          }
+        }
+
         return { ...base, type: ColumnType.TEXT }
       }),
     [],
   )
 
   return (
-    <div className="flex flex-col px-6" style={{ paddingTop: spacing.aboveTitle }}>
+    // Capped and centred: 1440 is the design's frame, and past it the table would keep
+    // stretching while the eye has to travel further to read a row. `max-w` is border-box
+    // under Preflight, so the 24px gutters are inside the 1440 rather than added to it.
+    <div
+      className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
+      style={{ paddingTop: spacing.aboveTitle }}
+    >
       <PrimitiveText
         as="h1"
-        // heading.lg (24/32) per the updated design at node 4410:25156 — it was xl (32/38).
-        {...font(FOUNDATION_THEME.font.size.heading.lg)}
+        // heading.md — 20/28. The token rather than the numbers, so the page heading keeps
+        // moving with the scale rather than pinning itself to today's value of it.
+        {...font(FOUNDATION_THEME.font.size.heading.md)}
         color={colors.gray[700]}
         fontWeight={FOUNDATION_THEME.font.weight[600]}
       >
@@ -383,29 +590,35 @@ function Configurator() {
 
       {/* The class carries the 24px inter-tab gap the design specifies — see index.css.
           TabsV2List takes no className, so it has to be reached through this wrapper. */}
-      <div className="configurator-section-tabs" style={{ marginTop: spacing.titleToTabs }}>
-        <TabsV2
-          variant={TabsV2Variant.UNDERLINE}
-          size={TabsV2Size.MD}
-          value={section}
-          onValueChange={setSection}
-        >
-          <TabsV2List>
-            {SECTION_TABS.map((label) => (
-              <TabsV2Trigger key={label} value={toValue(label)}>
-                {label}
-              </TabsV2Trigger>
-            ))}
-          </TabsV2List>
-        </TabsV2>
+      {/* Its own ThemeProvider, so the 24px trigger gap reaches these tabs and not the
+          boxed filter tabs below — `tabList.gap` is a single token, not keyed by variant.
+          See sectionTabsTokens in src/theme.ts. */}
+      <div style={{ marginTop: spacing.titleToTabs }}>
+        <ThemeProvider componentTokens={sectionTabsTokens}>
+          <TabsV2
+            variant={TabsV2Variant.UNDERLINE}
+            size={TabsV2Size.MD}
+            value={section}
+            onValueChange={setSection}
+          >
+            <TabsV2List>
+              {SECTION_TABS.map((label) => (
+                <TabsV2Trigger key={label} value={toValue(label)}>
+                  {label}
+                </TabsV2Trigger>
+              ))}
+            </TabsV2List>
+          </TabsV2>
+        </ThemeProvider>
       </div>
 
-      {/* px-6 insets the whole tab panel — toolbar and table together — 24px on each side,
-          so the panel reads as content nested under the active Report Config tab and its
-          two rows stay flush with each other. Only padding-left/right come from Tailwind
-          here; the vertical padding below is the dial's, so the two never collide. */}
+      {/* No horizontal padding of its own. The panel used to carry `px-6` so it read as
+          content nested under the active Report Config tab, but that put the toolbar and
+          table 24px right of the heading and the section tabs — two keylines on one page.
+          The gutter now belongs to the page container alone, so every row starts at the
+          same x. Vertical padding is still the dial's. */}
       <div
-        className="flex flex-col px-6"
+        className="flex flex-col"
         style={{
           paddingTop: spacing.tabsToToolbar,
           paddingBottom: spacing.belowTable,
@@ -413,29 +626,37 @@ function Configurator() {
         }}
       >
         <div className="flex items-center justify-between">
-          <TabsV2
-            variant={TabsV2Variant.FLOATING}
-            size={TabsV2Size.LG}
-            value={filter}
-            onValueChange={setFilter}
-          >
-            <TabsV2List>
-              {FILTER_TABS.map((label) => (
-                <TabsV2Trigger key={label} value={label}>
-                  {label}
-                </TabsV2Trigger>
-              ))}
-            </TabsV2List>
-          </TabsV2>
+          {/* The track has to hug its three tabs. BOXED paints a background on the tablist,
+              and TabsV2's root takes the full width of its flex parent — which left 588px
+              of empty grey running from "File Summary" to the button. TabsV2 takes no
+              className (rule 2), so the width is capped on a wrapper we own. */}
+          <div className="w-fit shrink-0">
+            <TabsV2
+              // BOXED, not FLOATING: the filter sits on the same ground as the table it
+              // filters, so it needs a track of its own to read as a control rather than
+              // three loose words. FLOATING gives the active tab a fill and nothing else.
+              variant={TabsV2Variant.BOXED}
+              size={TabsV2Size.LG}
+              value={filter}
+              onValueChange={handleFilterTabChange}
+            >
+              <TabsV2List>
+                {FILTER_TABS.map((label) => (
+                  <TabsV2Trigger key={label} value={label}>
+                    {label}
+                  </TabsV2Trigger>
+                ))}
+              </TabsV2List>
+            </TabsV2>
+          </div>
 
           {/* ButtonV2 sizes to its text; without this it is a flex item that can shrink
               and wrap "Create report config" onto a second line. */}
           <div className="shrink-0">
             <ButtonV2
               buttonType={ButtonV2Type.PRIMARY}
-              size={ButtonV2Size.SMALL}
+              size={ButtonV2Size.LARGE}
               text="Create report config"
-              leftSlot={{ slot: <Plus size={16} /> }}
               onClick={() => navigate('/configurator/create')}
             />
           </div>
@@ -457,19 +678,27 @@ function Configurator() {
             // Defaults to true, which adds a "+" column-manager button past the last
             // header cell. The design ends at column six.
             enableColumnManager={false}
-            // Now that the tabs really filter, a hardcoded "20 rows / page 2" would be
-            // describing data that is not there — so the footer counts what is actually
-            // rendered, and resets to page 1 as the filter changes the result set.
+            // The header's sort and filter menus are inert on their own here — see the
+            // note on the state above — so both callbacks are the wiring, not extras.
+            // `enableFiltering` and `serverSideFiltering` say the same thing to DataTable:
+            // filtering happens, and it happens outside.
+            enableFiltering
+            serverSideFiltering
+            onFilterChange={handleFilterChange}
+            onSortChange={handleSortChange}
+            // The footer describes the set the parent sliced, not `data.length`, which is
+            // only ever the current page — otherwise ten of forty rows would read as "10".
             pagination={{
-              currentPage: 1,
-              pageSize: 10,
-              totalRows: data.length,
+              currentPage,
+              pageSize,
+              totalRows,
               pageSizeOptions: [10, 20, 30, 40, 50],
             }}
+            onPageChange={setPage}
+            onPageSizeChange={handlePageSizeChange}
             // Server-side pagination is what lets the footer describe a page the parent has
             // already sliced, so DataTable renders `data` as given rather than cutting it to
-            // `pageSize`. That is what keeps a filtered view — five rows, say — showing all
-            // five under a page size of ten instead of an empty second page.
+            // `pageSize` a second time.
             serverSidePagination
           />
         </div>

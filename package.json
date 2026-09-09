@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tokens:gen": "node scripts/gen-tokens.mjs",
+    "tokens:check": "node scripts/check-tokens.mjs"
   },
   "dependencies": {
     "@juspay/blend-design-system": "^0.0.37",
