@@ -166,6 +166,92 @@ const normalise = (value: string) => value.trim().toLowerCase()
 export const isFieldSelected = (columns: FieldColumn[], tag: string) =>
   columns.some(({ title }) => normalise(title) === normalise(tag))
 
+/**
+ * Step 4 — the rows the report keeps (nodes 4521:12504 / 4520:12023).
+ *
+ * A rule is a column, a condition and a value. All three are nullable because a row is
+ * added empty and filled left to right — the condition and value stay disabled until the
+ * column is chosen, so a half-filled rule is the normal state rather than an error.
+ */
+export type FilterRule = {
+  /** Stable identity, not the index: deleting row 2 must not renumber row 3's React key. */
+  id: string
+  column: string | null
+  condition: string | null
+  value: string | null
+}
+
+let nextRuleId = 0
+export const newFilterRule = (): FilterRule => ({
+  id: `rule-${(nextRuleId += 1)}`,
+  column: null,
+  condition: null,
+  value: null,
+})
+
+export type FiltersAnswers = { rules: FilterRule[] }
+
+export const EMPTY_FILTERS: FiltersAnswers = { rules: [] }
+
+/**
+ * Not an `isComplete`, unlike its three siblings — filters are optional, so this step is
+ * never incomplete and never holds the flow up. What this decides is what the primary
+ * action *says*: with nothing chosen, the honest label for it is a skip.
+ *
+ * A row that exists counts, even part-filled. Adding one is a deliberate act, and once the
+ * empty state is gone "Skip filters" is no longer what the button does.
+ */
+export const hasAnyFilter = ({ rules }: FiltersAnswers) => rules.length > 0
+
+/**
+ * The conditions, in the design's own order (node 4520:12023 lays out all six).
+ *
+ * `icon` is the name of the glyph in the design's icon library, and it is carried here
+ * rather than looked up from the label. The two moved independently once already — `is in`
+ * became `contains` while keeping `brackets-check` — and a glyph keyed on copy is a glyph
+ * that disappears the next time someone rewords a condition.
+ */
+export const FILTER_CONDITIONS = [
+  { id: 'equal to', icon: 'equal', takesValue: true },
+  { id: 'not equal to', icon: 'equal-not', takesValue: true },
+  { id: 'is null', icon: 'brackets', takesValue: false },
+  { id: 'is not null', icon: 'brackets-ellipses', takesValue: false },
+  { id: 'contains', icon: 'brackets-check', takesValue: true },
+  { id: 'does not contain', icon: 'brackets-x', takesValue: true },
+] as const
+
+/**
+ * Whether a condition has a value to go with it. The two null tests ask about the absence
+ * of any value at all, so pairing one with a value is not a filter anyone can mean.
+ *
+ * An unanswered condition counts as taking one: the field is locked at that point anyway
+ * (there is no column yet), and answering "no" here would make an empty rule look finished
+ * the control is disabled at that point anyway, there being no column yet.
+ */
+export const conditionTakesValue = (condition: string | null) =>
+  condition === null ||
+  (FILTER_CONDITIONS.find(({ id }) => id === condition)?.takesValue ?? true)
+
+/**
+ * Values offered for a column, where the column has an obvious closed set. Everything else
+ * gets an empty list and relies on the select's own custom-value entry — which is the honest
+ * shape here: no dataset stands behind these answers, so the only values that can be offered
+ * are the ones the vocabulary already names.
+ */
+const VALUE_SUGGESTIONS: Record<string, string[]> = {
+  Gateway: ['Razorpay', 'PayU', 'Cashfree', 'Stripe'],
+  'Txn Type': ['Capture', 'Refund', 'Chargeback', 'Void'],
+  'Recon Status': ['Reconciled', 'Unreconciled', 'Partially reconciled'],
+  'Recon Sub Status': ['Amount mismatch', 'Missing in bank', 'Missing in ledger'],
+  'Txn Currency': ['INR', 'USD', 'EUR', 'GBP'],
+  'Settlement Currency': ['INR', 'USD', 'EUR', 'GBP'],
+  Credit: ['Yes', 'No'],
+  Debit: ['Yes', 'No'],
+}
+
+export const valuesFor = (column: string | null) =>
+  column === null ? [] : (VALUE_SUGGESTIONS[column] ?? [])
+
 /** A column with a blank name would produce a nameless header in the report. */
 export const isFieldsComplete = ({ columns }: FieldsAnswers) =>
   columns.length > 0 && columns.every(({ title }) => title.trim() !== '')

@@ -4,6 +4,11 @@ import {
   ButtonV2SubType,
   ButtonV2Type,
   FOUNDATION_THEME,
+  TagV2,
+  TagV2Color,
+  TagV2Size,
+  TagV2SubType,
+  TagV2Type,
   TopbarV2,
 } from '@juspay/blend-design-system'
 import { CaretRight } from '@phosphor-icons/react'
@@ -15,32 +20,53 @@ import { FEEDBACK_EASING, FEEDBACK_MS, PAGE_EASING, PAGE_MS } from '../../motion
 import { PrimitiveText, font } from '../../primitives'
 import { DeliveryStep } from './DeliveryStep'
 import { FieldsStep } from './FieldsStep'
+import { FiltersStep } from './FiltersStep'
 import { SetupStep } from './SetupStep'
-import { Showcase } from './Showcase'
 import {
   EMPTY_DELIVERY,
   EMPTY_FIELDS,
+  EMPTY_FILTERS,
   EMPTY_SETUP,
+  hasAnyFilter,
   isDeliveryComplete,
   isFieldsComplete,
   isSetupComplete,
   type DeliveryAnswers,
   type FieldsAnswers,
+  type FiltersAnswers,
   type SetupAnswers,
 } from './answers'
 
 const { colors } = FOUNDATION_THEME
 
 /**
+ * The flow's own content column — the design centres a 632px column under the bar.
+ *
+ * A max-width rather than a fixed one: below roughly a 700px viewport a fixed width would
+ * simply overflow. The two wider measures below follow the same rule, and each adds the
+ * 24px gutters on top of the width the design draws.
+ */
+const COLUMN = 'mx-auto w-full max-w-[632px] px-6'
+
+/**
+ * Fields is wider: a centred table that scrolls rather than growing. 1158 less the gutters
+ * is 1110, which is FieldsStep's TABLE_MAX_WIDTH — so the column gives the table exactly
+ * the width it asks for, and the heading centres over exactly that.
+ */
+const WIDE_COLUMN = 'mx-auto w-full max-w-[1158px] px-6'
+
+/** Filters sits between the two: 800px of card in the design (node 4518:10090). */
+const FILTERS_COLUMN = 'mx-auto w-full max-w-[848px] px-6'
+
+/**
  * The five steps of the create flow, with the heading each one carries.
  *
- * `wide` marks a step whose content is not the flow's 632px column: Fields draws a 1100px
- * table, so it takes the whole screen — heading centred over the table, and no showcase
- * panel beside it, because 60% of the viewport cannot hold the table without scrolling most
- * of it out of sight.
+ * `column` is the measure a step's content takes when the flow's default 632px is not it:
+ * Fields draws a 1100px table and Filters an 800px card. It is only a measure — every step
+ * takes the full width beneath the bar and centres its column inside that.
  *
- * Filters and Submit have no design yet — they are named here so the breadcrumb and the
- * progress bar read correctly, and they render a placeholder rather than blocking the flow.
+ * Submit has no design yet — it is named here so the breadcrumb and the progress bar read
+ * correctly, and it renders a placeholder rather than blocking the flow.
  * The design draws the bar at 288px of 1440 on Setup, 576px on Delivery and 864px on
  * Fields: one, two and three fifths of these five.
  */
@@ -49,7 +75,17 @@ const STEPS: {
   title: string
   /** Optional standfirst under the title. Only Fields has one in the design. */
   description?: string
-  wide?: boolean
+  /** The step's content measure. Omitted means the flow's default 632px column. */
+  column?: string
+  /** A chip above the title. Only Filters carries one, saying it can be skipped. */
+  tag?: string
+  /**
+   * Present on a step the flow does not require an answer to. It carries the label the
+   * primary action takes while that step is still untouched, and its presence is also what
+   * says the step can never block — the two always travel together, so a step cannot end up
+   * optional in one sense and required in the other.
+   */
+  skipLabel?: string
 }[] = [
   { label: 'Setup', title: 'Setup your report file' },
   { label: 'Delivery', title: 'Delivery and scheduling' },
@@ -61,30 +97,22 @@ const STEPS: {
     description:
       'Select data from existing columns or add a custom column of your choice. ' +
       'Re arrange, edit, delete as per your wish!',
-    wide: true,
+    column: WIDE_COLUMN,
   },
-  { label: 'Filters', title: 'Filters' },
+  {
+    label: 'Filters',
+    title: 'Choose which rows to filter out',
+    description: 'Only the rows matching your conditions are written to the report',
+    tag: 'Optional',
+    column: FILTERS_COLUMN,
+    skipLabel: 'Skip filters',
+  },
   { label: 'Submit', title: 'Submit' },
 ]
 
 /** Index of the last step that has a design. */
-const LAST_BUILT_STEP = 2
+const LAST_BUILT_STEP = 3
 
-/**
- * The flow's own content column — the design centres a 632px column under the bar.
- *
- * A max-width rather than a fixed one, because the column now lives inside the 60% pane
- * rather than the whole screen: below roughly a 1050px viewport that pane is narrower than
- * 632 and a fixed width would simply overflow it.
- */
-const COLUMN = 'mx-auto w-full max-w-[632px] px-6'
-
-/**
- * Fields is wider: a centred table that scrolls rather than growing. 1158 less the 24px
- * gutters is 1110, which is FieldsStep's TABLE_MAX_WIDTH — so the column gives the table
- * exactly the width it asks for, and the heading centres over exactly that.
- */
-const WIDE_COLUMN = 'mx-auto w-full max-w-[1158px] px-6'
 
 /**
  * Measure for a step's description.
@@ -111,43 +139,42 @@ const MOTION = {
 
 type StepNavigation = {
   step: number
-  /** Whether a step can be opened — see `canGoTo` in the flow below. */
-  canGoTo: (target: number) => boolean
   onNavigate: (target: number) => void
 }
 
 /**
- * The breadcrumb is the flow's other way of moving between steps, so dark now means
- * *reachable* rather than *visited*.
+ * TEMPORARY — every step is reachable, on request. Nothing gates the breadcrumb: no step is
+ * disabled, and any label jumps straight to its step whether or not the ones before it have
+ * been answered. To put the gate back, restore `canGoTo` (see the git history for this file)
+ * and take `reachable` back into `disabled`, the cursor and the colour below.
  *
- * The two readings agree everywhere they used to: standing on a step means every step
- * before it is answered, so everything up to the current one is reachable and stays dark.
- * What is new is the step ahead going dark the moment the current one is complete — the
- * same instant Continue enables, which is the honest affordance for something clickable.
+ * Dark therefore has to mean something else now. It used to mean *reachable*, which with
+ * everything reachable would light the whole bar and say nothing; it now marks the step you
+ * are standing on, which is the one thing left worth reading off it — and the same thing
+ * `aria-current` already told a screen reader.
  *
- * The button is always rendered rather than swapped in for reachable steps: a label that
- * changes element type as you answer a question moves focus out from under the keyboard.
+ * The button is always rendered rather than swapped in: a label that changes element type
+ * moves focus out from under the keyboard.
  */
-function StepBreadcrumb({ step, canGoTo, onNavigate }: StepNavigation) {
+function StepBreadcrumb({ step, onNavigate }: StepNavigation) {
   return (
     <div className="flex items-center gap-2">
       {STEPS.map(({ label }, index) => {
-        const reachable = canGoTo(index)
+        const current = index === step
         return (
           <Fragment key={label}>
             {index > 0 && <CaretRight size={16} color={colors.gray[400]} />}
             <button
               type="button"
-              disabled={!reachable}
-              aria-current={index === step ? 'step' : undefined}
+              aria-current={current ? 'step' : undefined}
               onClick={() => onNavigate(index)}
               className={`border-none bg-transparent p-0 ${
-                reachable && index !== step ? 'cursor-pointer' : 'cursor-default'
+                current ? 'cursor-default' : 'cursor-pointer'
               }`}
             >
               <PrimitiveText
                 {...font(FOUNDATION_THEME.font.size.body.lg)}
-                color={reachable ? colors.gray[700] : colors.gray[400]}
+                color={current ? colors.gray[700] : colors.gray[400]}
               >
                 {label}
               </PrimitiveText>
@@ -189,13 +216,28 @@ function CreateReportConfig() {
   const [setup, setSetup] = useState<SetupAnswers>(EMPTY_SETUP)
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
+  const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
 
-  const { title, description, wide } = STEPS[step]
+  const { title, description, column, tag, skipLabel } = STEPS[step]
   const isLastStep = step === STEPS.length - 1
 
   /**
-   * Each step's answers, checked. Read as a list rather than for the current step alone
-   * because the breadcrumb has to know about steps nobody is standing on.
+   * Filters is the one step nothing has to be answered on, so its primary action is not
+   * quite the button the other steps get: it never disables, and while the step is still
+   * untouched it says what clicking it will actually do.
+   *
+   * "Continue" over an optional step nobody has touched claims something was configured.
+   * "Skip filters" is a promise about the click, and it stops being true the moment there
+   * is a filter to carry forward — which is why the label flips back rather than staying a
+   * skip for the rest of the step.
+   */
+  const optional = skipLabel !== undefined
+  const skipping = optional && !hasAnyFilter(filters)
+
+  /**
+   * Each step's answers, checked. Only the current step is read today — the breadcrumb used
+   * to need the whole list and no longer does (see StepBreadcrumb) — but it stays a list
+   * because that is what putting the gate back needs, and five booleans cost nothing.
    *
    * Steps past the built ones have nothing to answer, so they are complete by definition
    * and never hold the flow up.
@@ -212,25 +254,13 @@ function CreateReportConfig() {
 
   const complete = stepComplete[step]
 
-  /**
-   * A step opens once every step before it is answered — the same bar Continue clears, so
-   * the breadcrumb can never reach somewhere Continue could not.
-   *
-   * Backwards is always allowed, and that is the `target <= step` clause rather than a
-   * consequence of the rest: go back to Setup, clear the format, and Delivery is no longer
-   * answerable-from-scratch — but you are standing past it, and refusing to let someone
-   * retrace their own steps to fix what they just broke is the worse failure.
-   */
-  const canGoTo = (target: number) =>
-    target <= step || stepComplete.slice(0, target).every(Boolean)
-
   return (
     <div
       className="flex h-screen flex-col"
       style={{ ...MOTION, backgroundColor: colors.gray[0] }}
     >
       <div className="shrink-0">
-        <TopbarV2 topbar={<TopbarContent step={step} canGoTo={canGoTo} onNavigate={setStep} />} />
+        <TopbarV2 topbar={<TopbarContent step={step} onNavigate={setStep} />} />
         {/* Progress across the five steps. The design draws it as a rule sitting on the
             topbar's bottom edge.
 
@@ -249,26 +279,40 @@ function CreateReportConfig() {
         </div>
       </div>
 
-      {/* 60 / 40 beneath the bar: the flow on the left with its own actions under it, the
-          showcase panel full-bleed to the bottom of the screen on the right. A wide step
-          takes the whole width and drops the panel entirely. min-h-0 is what lets the left
-          column's scroller actually scroll — without it a flex child floors at its content
-          height and the overflow escapes to the page. */}
+      {/* The flow takes the full width beneath the bar, with its own actions under it.
+          `column` does not change this pane — it only picks how wide the centred content
+          column inside it is. min-h-0 is what lets that pane's scroller actually scroll:
+          without it a flex child floors at its content height and the overflow escapes to
+          the page. */}
       <div className="flex min-h-0 flex-1">
         <div
-          className={`flex min-w-0 shrink-0 flex-col ${wide ? 'w-full' : 'w-[60%]'}`}
+          className="flex min-w-0 w-full shrink-0 flex-col"
         >
           <div className="flex-1 overflow-auto" data-flow-content>
             {/* Keyed on the step so moving between them replays the arrival rather than
                 cross-fading one set of questions into another. */}
             <div
               key={step}
-              className={`${wide ? WIDE_COLUMN : COLUMN} flow-question flex flex-col gap-8 pt-24 pb-12`}
+              className={`${column ?? COLUMN} flow-question flex flex-col gap-8 pt-24 pb-12`}
             >
               {/* Every step left-aligns its heading, Fields included — it used to centre
                   over the table, and the redraw at node 4457:15485 sets it flush with the
                   table's left edge, which is where WIDE_COLUMN already puts it. */}
               <div className="flex flex-col gap-2">
+                {/* Above the title, not beside it: it qualifies the whole step rather than
+                    the heading, and it is the first thing worth knowing on a step you are
+                    allowed to walk straight past. */}
+                {tag && (
+                  <div className="flex">
+                    <TagV2
+                      text={tag}
+                      type={TagV2Type.SUBTLE}
+                      subType={TagV2SubType.SQUARICAL}
+                      color={TagV2Color.NEUTRAL}
+                      size={TagV2Size.XS}
+                    />
+                  </div>
+                )}
                 <PrimitiveText
                   as="h1"
                   {...font(FOUNDATION_THEME.font.size.heading.lg)}
@@ -296,6 +340,7 @@ function CreateReportConfig() {
               {step === 0 && <SetupStep answers={setup} onChange={setSetup} />}
               {step === 1 && <DeliveryStep answers={delivery} onChange={setDelivery} />}
               {step === 2 && <FieldsStep answers={fields} onChange={setFields} />}
+              {step === 3 && <FiltersStep answers={filters} onChange={setFilters} />}
               {step > LAST_BUILT_STEP && (
                 // Scaffold, not design: this step is named in the breadcrumb but has no Figma
                 // yet. Drawn plainly so it cannot be mistaken for the real thing, and so the
@@ -335,13 +380,18 @@ function CreateReportConfig() {
                     onClick={() => setStep(step - 1)}
                   />
                 )}
-                {/* Held only until the step is answered. On the final step there is nowhere
-                    further to go, so it closes the flow instead. */}
+                {/* Held only until the step is answered — except on an optional one, where
+                    there is nothing to hold it for. On the final step there is nowhere
+                    further to go, so it closes the flow instead.
+
+                    `complete` is already true for an optional step today, so the guard is
+                    belt-and-braces on purpose: it is what keeps this button enabled if
+                    Filters ever grows an `isFiltersComplete` alongside its three siblings. */}
                 <ButtonV2
                   buttonType={ButtonV2Type.PRIMARY}
                   size={ButtonV2Size.LARGE}
-                  text={isLastStep ? 'Submit' : 'Continue'}
-                  disabled={!complete}
+                  text={isLastStep ? 'Submit' : skipping ? skipLabel : 'Continue'}
+                  disabled={!optional && !complete}
                   onClick={() => (isLastStep ? navigate('/configurator') : setStep(step + 1))}
                 />
               </div>
@@ -349,7 +399,6 @@ function CreateReportConfig() {
           </div>
         </div>
 
-        {!wide && <Showcase step={step} category={setup.category} />}
       </div>
     </div>
   )

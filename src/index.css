@@ -1,29 +1,83 @@
 @import "tailwindcss";
 
 /*
- * The typeface Blend's foundation declares — `font.family.body` is 'InterDisplay'
- * (font.tokens.ts:140).
+ * InterDisplay — the typeface Blend's foundation declares (`font.family.body`,
+ * font.tokens.ts:140) — and the binaries that make that declaration true.
  *
- * It has to be set here because Blend never applies it: across the whole library there are
- * two references to `font.family`, both inside Charts' Highcharts config. Every other
- * component inherits the family from the document, and Tailwind's Preflight was setting
- * that to its own system stack — so the design system's typeface was being declared and
- * then ignored.
+ * Blend names the family and ships no fonts: there is not one woff/woff2/ttf/otf anywhere
+ * in the published package, and its single @font-face is monaco's `codicon`. So the token
+ * was being declared and then silently resolved to the system stack.
  *
- * ⚠️ This resolves to the fallback today. The published package ships no font binaries at
- * all (no woff/woff2/ttf/otf anywhere in it, and the single @font-face in its stylesheet is
- * monaco's `codicon`), so there is nothing for 'InterDisplay' to match yet and the app
- * still renders in the system stack. Drop the real files in with an @font-face named
- * exactly 'InterDisplay' and every surface picks them up with no further change.
+ * `inter-ui` is rsms's own npm distribution of Inter (OFL-1.1, license at
+ * node_modules/inter-ui/LICENSE.txt). Its `inter-display-latin.css` declares the family as
+ * exactly "InterDisplay" — the same string Blend's token holds — so nothing here renames
+ * anything and no hand-written @font-face is needed. Two consequences worth knowing:
  *
- * The fallbacks are Preflight's own stack, so nothing moves until that happens.
+ * - It is imported *by name*, not copied into the repo, so `npm update` moves the fonts and
+ *   the OFL notice travels with the package rather than needing to be vendored beside it.
+ * - It settles charts before they are written. `font.family` has exactly two readers in the
+ *   whole library, both inside Charts' Highcharts config, and Highcharts asks for the family
+ *   by name rather than inheriting it. No page renders a chart today, so nothing changes
+ *   yet — but the first one will draw in InterDisplay rather than being the single surface
+ *   left in the system font, which is a mismatch that would have been easy to miss.
+ *
+ * The *display* cut specifically, not `inter.css`. Inter v4 carries an optical-size axis and
+ * InterDisplay is its high-opsz end: tighter spacing and smaller apertures, drawn for UI
+ * chrome rather than body copy. That is the cut Blend named, and picking the static Display
+ * files sidesteps the variable font's trap — pinning `opsz` through
+ * `font-variation-settings` also resets `wght` to the font's default, which would flatten
+ * every weight in the app to 400 and take rule 10's 500/600 with it.
+ *
+ * The *latin* subset (~27 KB a weight, against ~107 KB for the full charset). The app only
+ * ever asks for three weights — 400, 500 and 600 — so a visitor downloads ~81 KB and no
+ * more: the other six weights and every italic are declared, but a face nothing matches is
+ * never fetched. Verified rather than assumed — `document.fonts` reports exactly
+ * 400/500/600 normal as `loaded` and the remaining fifteen as `unloaded`. They are still
+ * emitted into `dist/` (~530 KB of assets that never leave it), which is the price of
+ * importing the stock CSS instead of hand-maintaining an @font-face list that would then
+ * have to be revisited every time a weight is used.
+ * Three symbols in the UI fall outside the subset and keep falling back to the system font:
+ * ⌘ (AppShell's search hint) and ✓ / ✕ (ReconciliationAnimation). They are geometric marks
+ * rather than text, and on macOS the system ⌘ is the better glyph anyway. Add a letterform
+ * outside Latin-1 and this is the line to revisit — `inter-ui/inter-display.css` is the
+ * same faces at full coverage.
  */
+@import "inter-ui/inter-display-latin.css";
+
+/*
+ * JetBrains Mono — the design's `font/family/number` (node 4520:12023), which is what the
+ * Filters step's row markers are set in: "1", then AND down the left gutter.
+ *
+ * Not Blend's `font.family.mono`, which is 'SF Mono' — a face that only exists on Apple
+ * hardware, and the design names a different one anyway. This is the same override
+ * `--font-body` above already makes for InterDisplay: Blend names a family and ships no
+ * binaries, so the token alone renders whatever the system happens to have.
+ *
+ * `latin-400` alone, and that is the whole of it: one weight, one script, ~21 KB. The
+ * markers are the only thing in the app set in it, they are all digits and one uppercase
+ * word, and nothing here is ever italic or bold. Importing the family's own stylesheet
+ * would declare 16 faces to fetch one.
+ */
+@import "@fontsource/jetbrains-mono/latin-400.css";
+
 :root {
   --font-body:
     'InterDisplay', -apple-system, system-ui, 'Segoe UI', Roboto, 'Helvetica Neue',
     'Noto Sans', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+
+  /* Falls back through the same stack Blend's token names, then the generic, so a marker
+     stays monospaced even in the swap window. */
+  --font-mono: 'JetBrains Mono', 'SF Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+/*
+ * The family has to be set here because Blend never applies it: outside those two Highcharts
+ * references every component inherits the family from the document, and Tailwind's Preflight
+ * was setting that to its own system stack.
+ *
+ * The fallbacks stay, and stay in this order, for the swap window and for the glyphs the
+ * Latin subset does not cover.
+ */
 html {
   font-family: var(--font-body);
 }
@@ -32,6 +86,22 @@ html {
  * Grayscale antialiasing, which is what the rest of the chrome is drawn against. macOS
  * defaults to subpixel rendering, which thickens stems enough that a 500 reads as a 600 —
  * the reason the UI looked heavier than its weights said it was.
+ *
+ * This matters more now than it did against the system stack. Inter's stems are more even
+ * than SF Pro's, so subpixel fringing lands on more of the letterform, and rule 10 leans on
+ * a single step of weight (500 body against 600 headings) to carry hierarchy — a step that
+ * disappears the moment rendering adds a fraction of a weight of its own.
+ *
+ * `html` is the whole of it: both properties inherit, so every element in the document picks
+ * them up, portalled overlays included — Blend mounts modals, tooltips, dropdowns and
+ * snackbars onto `document.body`, which is still inside this. Form controls inherit too;
+ * Tailwind's Preflight `font: inherit` is about the font shorthand and never touched these.
+ * There is no second selector worth writing, and a `*` rule here would be dead weight.
+ *
+ * Deliberately NOT `text-rendering: optimizeLegibility`, which is the usual third line in
+ * snippets like this. It forces the complex-shaping path for kerning and ligatures across
+ * the whole document, and buys nothing here: Inter's kerning is already applied by default,
+ * and the setting's real effects are on scripts this app does not render.
  */
 html {
   -webkit-font-smoothing: antialiased;
@@ -191,238 +261,5 @@ html {
   .fields-table {
     scrollbar-width: thin;
     scrollbar-color: var(--table-scroll-thumb) var(--table-scroll-track);
-  }
-}
-
-/*
- * Showcase carousel (src/pages/create-report-config/Showcase.tsx).
- *
- * A keyframe on a slide that is keyed by id, so each one is a fresh mount and starts at
- * `from` whenever the frame lands — rule 14's reason for never transitioning between two
- * states set a frame apart. Duration and curve inherit from the flow root.
- */
-@keyframes showcase-slide-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px);
-  }
-}
-
-.showcase-slide {
-  animation: showcase-slide-enter var(--flow-reveal) var(--flow-reveal-ease) both;
-}
-
-/* Reveal-only — nothing waits on an animationend to unmount, so plain `none` is safe. */
-@media (prefers-reduced-motion: reduce) {
-  .showcase-slide {
-    animation: none;
-  }
-}
-
-/*
- * Reconciliation explainer (src/pages/create-report-config/ReconciliationAnimation.tsx).
- *
- * Ported from `reconciliation-animation-2x.html`, with one change to every keyframe: the
- * source looped, so each track ended by fading itself back out between 92% and 100% ready
- * for the next pass. Playing once, that tail would end the animation on an empty stage —
- * so every track now holds its arrived state at 100% instead.
- *
- * That is also why nothing here describes the settled state. The elements are *authored*
- * settled — full opacity, no offset, no dash — and the animations only exist under
- * `.recon-anim--play`. So the drawing is correct with no CSS at all, and adding the class
- * is what rewinds it and plays it forward. Rule 14: a keyframe on a mount, never a
- * transition between two states set a frame apart.
- */
-.recon-anim {
-  --recon-duration: 4s;
-}
-
-@keyframes recon-sheet-a {
-  0% {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  7% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes recon-sheet-b {
-  0%,
-  9% {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  16% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes recon-hl-1 {
-  0%,
-  22% {
-    opacity: 0;
-  }
-  27% {
-    opacity: 1;
-  }
-}
-
-@keyframes recon-hl-2 {
-  0%,
-  36% {
-    opacity: 0;
-  }
-  41% {
-    opacity: 1;
-  }
-}
-
-@keyframes recon-hl-3 {
-  0%,
-  50% {
-    opacity: 0;
-  }
-  56% {
-    opacity: 1;
-  }
-}
-
-@keyframes recon-badge-1 {
-  0%,
-  22% {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  27% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes recon-badge-2 {
-  0%,
-  36% {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  41% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* The one that overshoots — it is the mismatch, and it should land harder than the ticks. */
-@keyframes recon-badge-3 {
-  0%,
-  50% {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  56% {
-    opacity: 1;
-    transform: scale(1.12);
-  }
-  60% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes recon-draw-1 {
-  0%,
-  21% {
-    stroke-dashoffset: 60;
-  }
-  27% {
-    stroke-dashoffset: 0;
-  }
-}
-
-@keyframes recon-draw-2 {
-  0%,
-  35% {
-    stroke-dashoffset: 60;
-  }
-  41% {
-    stroke-dashoffset: 0;
-  }
-}
-
-/* Held invisible until its moment, so the red line does not sit there waiting to be drawn. */
-@keyframes recon-draw-3 {
-  0%,
-  49% {
-    stroke-dashoffset: 60;
-    opacity: 0;
-  }
-  50% {
-    stroke-dashoffset: 60;
-    opacity: 1;
-  }
-  56% {
-    stroke-dashoffset: 0;
-    opacity: 1;
-  }
-}
-
-@keyframes recon-flag {
-  0%,
-  64% {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  70% {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.recon-anim--play .recon-sheet-a {
-  animation: recon-sheet-a var(--recon-duration) ease-out both;
-}
-.recon-anim--play .recon-sheet-b {
-  animation: recon-sheet-b var(--recon-duration) ease-out both;
-}
-.recon-anim--play .recon-hl-1 {
-  animation: recon-hl-1 var(--recon-duration) linear both;
-}
-.recon-anim--play .recon-hl-2 {
-  animation: recon-hl-2 var(--recon-duration) linear both;
-}
-.recon-anim--play .recon-hl-3 {
-  animation: recon-hl-3 var(--recon-duration) linear both;
-}
-.recon-anim--play .recon-badge-1 {
-  animation: recon-badge-1 var(--recon-duration) cubic-bezier(0.2, 0.8, 0.3, 1) both;
-}
-.recon-anim--play .recon-badge-2 {
-  animation: recon-badge-2 var(--recon-duration) cubic-bezier(0.2, 0.8, 0.3, 1) both;
-}
-.recon-anim--play .recon-badge-3 {
-  animation: recon-badge-3 var(--recon-duration) cubic-bezier(0.2, 0.8, 0.3, 1) both;
-}
-.recon-anim--play .recon-draw-1 {
-  animation: recon-draw-1 var(--recon-duration) ease-out both;
-}
-.recon-anim--play .recon-draw-2 {
-  animation: recon-draw-2 var(--recon-duration) ease-out both;
-}
-.recon-anim--play .recon-draw-3 {
-  animation: recon-draw-3 var(--recon-duration) ease-out both;
-}
-.recon-anim--play .recon-flag {
-  animation: recon-flag var(--recon-duration) ease-out both;
-}
-
-/*
- * Reduced motion gets the finished drawing, not a frozen empty stage: `none` drops the
- * animation entirely, and the settled state is what the markup already is.
- */
-@media (prefers-reduced-motion: reduce) {
-  .recon-anim--play * {
-    animation: none !important;
   }
 }
