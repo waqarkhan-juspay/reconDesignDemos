@@ -25,11 +25,15 @@ export const REPORT_CATEGORIES = [
     description:
       'Summarise or export raw data from transaction, settlement, or chargeback files without cross-referencing.',
     sourceTypes: [
-      // The design only draws the Reconciliation branch of this question, so these two
+      // The design only draws the Reconciliation branch of this question, so these
       // descriptions are written here rather than transcribed. Replace them when the
       // File Summary frames land.
       { id: 'Settlement', description: 'Settlement files as received from the gateway or bank' },
       { id: 'Transaction', description: 'Transaction-level records as captured by the payment stack' },
+      // The third file the category description already names. Adding it here rather than
+      // as a loose string on the row is what keeps `Categorised` honest — the union is the
+      // only thing stopping a File Summary row being paired with a Reconciliation source.
+      { id: 'Chargeback', description: 'Chargeback and dispute files raised against settled transactions' },
     ],
   },
 ] as const

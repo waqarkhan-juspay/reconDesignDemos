@@ -28,6 +28,7 @@ import {
 import { useDialKit } from 'dialkit'
 import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
+import { MiddleTruncate } from '../middle-truncate'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
 import { REPORT_CATEGORY_IDS, type Categorised, type ReportCategory } from '../report-config'
@@ -85,7 +86,7 @@ type ReportConfigRow = Categorised & {
  */
 const COLUMNS = [
   { field: 'configurationName', header: 'Configuration Name' },
-  { field: 'categorySource', header: 'Category/Source' },
+  { field: 'categorySource', header: 'Category' },
   { field: 'sourceType', header: 'Source / Type' },
   { field: 'paymentEntity', header: 'Payment Entity' },
   { field: 'frequency', header: 'Frequency' },
@@ -126,7 +127,7 @@ const rows: ReportConfigRow[] = [
     categorySource: 'File Summary',
     sourceType: 'Settlement',
     paymentEntity: 'Razorpay',
-    frequency: 'Monthly on 19th at 17:15 IST',
+    frequency: 'Monthly · 19th · 17:15 IST',
     channel: 'Email',
     createdDate: '19th Aug 2026',
   },
@@ -136,7 +137,7 @@ const rows: ReportConfigRow[] = [
     categorySource: 'Reconciliation',
     sourceType: 'Overall',
     paymentEntity: 'Razorpay',
-    frequency: 'Daily at 09:00 IST',
+    frequency: 'Daily · 09:00 IST',
     channel: 'Email',
     createdDate: '12th Jul 2026',
   },
@@ -146,7 +147,7 @@ const rows: ReportConfigRow[] = [
     categorySource: 'Reconciliation',
     sourceType: 'Matched',
     paymentEntity: 'Razorpay',
-    frequency: 'Weekly on Mon at 10:00 IST',
+    frequency: 'Weekly · Mon · 10:00 IST',
     channel: 'Email',
     createdDate: '5th Jun 2026',
   },
@@ -166,7 +167,7 @@ const rows: ReportConfigRow[] = [
     categorySource: 'File Summary',
     sourceType: 'Transaction',
     paymentEntity: 'Razorpay',
-    frequency: 'Quarterly on 1st at 08:00 IST',
+    frequency: 'Quarterly · 1st · 08:00 IST',
     channel: 'Email',
     createdDate: '1st Jan 2026',
   },
@@ -186,7 +187,7 @@ const rows: ReportConfigRow[] = [
     categorySource: 'Reconciliation',
     sourceType: 'Overall',
     paymentEntity: 'RazorpayX',
-    frequency: 'Weekly on Fri at 18:00 IST',
+    frequency: 'Weekly · Fri · 18:00 IST',
     channel: 'Email',
     createdDate: '8th May 2026',
   },
@@ -196,7 +197,7 @@ const rows: ReportConfigRow[] = [
     categorySource: 'File Summary',
     sourceType: 'Transaction',
     paymentEntity: 'Razorpay',
-    frequency: 'Daily at 07:30 IST',
+    frequency: 'Daily · 07:30 IST',
     channel: 'Slack',
     createdDate: '30th Aug 2026',
   },
@@ -206,17 +207,20 @@ const rows: ReportConfigRow[] = [
     categorySource: 'File Summary',
     sourceType: 'Settlement',
     paymentEntity: 'Razorpay',
-    frequency: 'Daily at 11:00 IST',
+    frequency: 'Daily · 11:00 IST',
     channel: 'Email',
     createdDate: '15th Feb 2026',
   },
   {
     id: 'row-10',
-    configurationName: 'Chargeback File Export',
+    // Deliberately long, and deliberately a filename: it is the row that exercises
+    // MiddleTruncate. The tenth row is the one written here rather than transcribed from
+    // the design, so it is the one free to carry a value the design never drew.
+    configurationName: 'chargeback_file_export_razorpay_2026-09-03.csv',
     categorySource: 'File Summary',
-    sourceType: 'Transaction',
+    sourceType: 'Chargeback',
     paymentEntity: 'Razorpay',
-    frequency: 'Weekly on Wed at 12:00 IST',
+    frequency: 'Weekly · Wed · 12:00 IST',
     channel: 'Webhook',
     createdDate: '3rd Sep 2026',
   },
@@ -561,6 +565,27 @@ function Configurator() {
             type: ColumnType.SELECT,
             filterType: FilterType.SELECT,
             filterOptions: filterOptionsFor(field as keyof ReportConfigRow),
+          }
+        }
+
+        if (field === 'configurationName') {
+          return {
+            ...base,
+            // The one column with a ceiling instead of `HUG`'s `none`. A column that hugs
+            // without bound can never truncate — it just grows to its longest value and
+            // pushes the table into its own horizontal scroll, which is what this one did
+            // before. 240 is a ceiling rather than a track: the column settles at 210 on
+            // the names transcribed from the design, so the headroom means nothing real is
+            // clipped by it and only a genuine outlier ever meets it.
+            maxWidth: '240px',
+            // Still TEXT, so the column keeps its sort menu and its default cell chrome —
+            // `renderCell` is checked before the generic text branch (TableCell:522) and
+            // after the typed ones, so a TEXT column can supply its own body without
+            // becoming CUSTOM. The wrapper Blend puts around it is already
+            // `width: 100%; min-width: 0; overflow: hidden`, which is exactly the box a
+            // shrinking flex row needs.
+            type: ColumnType.TEXT,
+            renderCell: (value) => <MiddleTruncate text={String(value)} />,
           }
         }
 
