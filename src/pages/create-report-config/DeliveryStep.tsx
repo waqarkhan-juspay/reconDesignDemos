@@ -96,6 +96,18 @@ export function DeliveryStep({
   const { name, frequency, timing, time, channels, emailTo } = answers
   const [specifiedTime, immediately] = TIMINGS
 
+  /**
+   * The step opens on its name alone, and the cadence question arrives once there is one —
+   * the same one-question-at-a-time rhythm as the rest of the flow. Mounting the group is
+   * what plays its `flow-question` entrance, so no animation is written here.
+   *
+   * `|| frequency !== null` keeps it up once it has been answered: clearing the name to
+   * retype it would otherwise pull the cadence (and everything hanging off it) out from
+   * under the user on the empty keystroke, then replay the entrance on the next one.
+   * Before anything below is answered, hiding it again loses nothing.
+   */
+  const showCadence = name.trim() !== '' || frequency !== null
+
   return (
     <>
       <div className="w-[350px]">
@@ -108,6 +120,7 @@ export function DeliveryStep({
         />
       </div>
 
+      {showCadence && (
       <QuestionGroup label="How often?">
         <OptionRow>
           {FREQUENCIES.map((option) => (
@@ -121,10 +134,12 @@ export function DeliveryStep({
           ))}
         </OptionRow>
 
-        {/* Revealed once the config has a name and a cadence — the two things above it.
+        {/* Revealed once there is a cadence. The name no longer needs checking here — this
+            whole group only renders once it has one — and checking it again would make the
+            row vanish mid-retype while the channels below it stayed.
             items-start, not stretch: the design keeps both cards at their natural height
             and hangs the time dropdown below the left one rather than inside the row. */}
-        {name.trim() !== '' && frequency !== null && (
+        {frequency !== null && (
           <div className="flow-question flex items-start gap-4">
             <div className="flex w-[291px] shrink-0 flex-col gap-4">
               <OptionCard
@@ -159,6 +174,7 @@ export function DeliveryStep({
           </div>
         )}
       </QuestionGroup>
+      )}
 
       {timing !== null && (
         <QuestionGroup label="Delivery channel">

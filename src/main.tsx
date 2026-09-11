@@ -23,7 +23,16 @@ createRoot(document.getElementById('root')!).render(
     </ThemeProvider>
     {/* Visual feedback toolbar. Dev only — `import.meta.env.DEV` is inlined as
         `false` at build time, so the whole subtree is dropped from prod bundles.
-        `endpoint` syncs annotations to the local agentation-mcp server. */}
-    {import.meta.env.DEV && <Agentation endpoint="http://localhost:4747" />}
+
+        The endpoint is origin-relative on purpose. The toolbar polls `<endpoint>/health`
+        every 10 seconds and the prop is the only gate on it (agentation/dist/index.mjs:
+        `if (!endpoint || !mounted) return`), so a hardcoded localhost:4747 — which is
+        what this used to be — meant a failed request every 10s for the life of the tab
+        whenever nothing was listening there.
+
+        `/agentation` is served by the dev server itself (vite.config.ts), which starts
+        the feedback server and proxies to it. Being same-origin, it follows the app to
+        whatever port Vite is bound to and needs no CORS. */}
+    {import.meta.env.DEV && <Agentation endpoint="/agentation" />}
   </StrictMode>,
 )

@@ -15,9 +15,9 @@ export const REPORT_CATEGORIES = [
     description:
       'Match your internal records against gateway & bank settlement files to catch any mismatches or missing entries.',
     sourceTypes: [
-      { id: 'Overall', description: 'Every record whether matched or not' },
+      { id: 'Overall', description: 'Every record ever' },
       { id: 'Matched', description: 'Only records that reconciled' },
-      { id: 'Mismatched', description: 'Only mismatched or unreconciled rows' },
+      { id: 'Mismatched', description: 'Only mismatched or unreconciled' },
     ],
   },
   {

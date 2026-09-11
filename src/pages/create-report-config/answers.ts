@@ -167,18 +167,31 @@ export const isFieldSelected = (columns: FieldColumn[], tag: string) =>
   columns.some(({ title }) => normalise(title) === normalise(tag))
 
 /**
+ * Whether a column's title names a field in the vocabulary — i.e. whether a tag already
+ * stands for it. The columns that fail this are custom ones, and they get a tag of their own.
+ * Same case- and space-insensitive match as `isFieldSelected`, so the two can never disagree
+ * about whether a column is covered.
+ */
+export const isVocabularyField = (title: string) =>
+  FIELD_TAGS.some((tag) => normalise(tag) === normalise(title))
+
+/**
  * Step 4 — the rows the report keeps (nodes 4521:12504 / 4520:12023).
  *
- * A rule is a column, a condition and a value. All three are nullable because a row is
- * added empty and filled left to right — the condition and value stay disabled until the
+ * A rule is a column, a condition and a set of values. Column and condition are nullable
+ * because a row is added empty and filled left to right — they stay disabled until the
  * column is chosen, so a half-filled rule is the normal state rather than an error.
+ *
+ * `value` is a list rather than one string: "Gateway equal to Razorpay or PayU" is one rule
+ * a user means, and forcing it into two rows joined by AND says the opposite. Empty is the
+ * unanswered state, so there is no `null` here — one absence, not two.
  */
 export type FilterRule = {
   /** Stable identity, not the index: deleting row 2 must not renumber row 3's React key. */
   id: string
   column: string | null
   condition: string | null
-  value: string | null
+  value: string[]
 }
 
 let nextRuleId = 0
@@ -186,7 +199,7 @@ export const newFilterRule = (): FilterRule => ({
   id: `rule-${(nextRuleId += 1)}`,
   column: null,
   condition: null,
-  value: null,
+  value: [],
 })
 
 export type FiltersAnswers = { rules: FilterRule[] }

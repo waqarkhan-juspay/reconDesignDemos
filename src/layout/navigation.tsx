@@ -13,7 +13,12 @@ import MaskIcon from '../components/MaskIcon'
 
 const ICON_SIZE = 12
 
-export const HOME_PATH = '/'
+/**
+ * Home has its own path rather than sitting at the root, because the root is a redirect to
+ * the Configurator — the app's landing page (src/router.tsx). Leaving Home at `/` would
+ * make the nav row a dead end: clicking it would bounce straight back here.
+ */
+export const HOME_PATH = '/home'
 export const CONFIGURATOR_PATH = '/configurator'
 
 /**

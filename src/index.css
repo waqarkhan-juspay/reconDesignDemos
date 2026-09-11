@@ -263,3 +263,61 @@ html {
     scrollbar-color: var(--table-scroll-thumb) var(--table-scroll-track);
   }
 }
+
+/*
+ * The create flow's content grid — one measure for every step, with an escape hatch.
+ *
+ * Three hand-maintained column widths used to live in index.tsx (632 / 848 / 1158), one per
+ * step that disagreed with the others, so the content column jumped as you walked the flow.
+ * This replaces all three: every step's content sits in the `content` track, and the one
+ * thing that genuinely cannot — the Fields table — breaks out into `full` instead of
+ * widening the column for everybody.
+ *
+ * The gutters are a `minmax(24px, 1fr)` rather than padding on the column so that a `full`
+ * child can actually reach into them; `min(960px, 100% - 48px)` is what keeps the column
+ * off the viewport edge once 1fr has collapsed to its 24px floor.
+ */
+.flow-grid {
+  /* The flow's one content measure, as a custom property so that content living inside a
+     `full` child can be held to the same width without a second number to keep in step. */
+  --flow-content: 960px;
+
+  display: grid;
+  grid-template-columns:
+    [full-start] minmax(24px, 1fr)
+    [content-start] min(var(--flow-content), 100% - 48px) [content-end]
+    minmax(24px, 1fr) [full-end];
+}
+
+/* Every child sits in the measured column unless it says otherwise. */
+.flow-grid > * {
+  grid-column: content;
+}
+
+/*
+ * Wider than the column, but only as wide as it actually needs to be.
+ *
+ * `width: max-content` is the whole point of the rule: a table narrow enough to fit the
+ * 960px column renders at its own width and stays visually inside it, so nothing breaks
+ * out for the sake of it. Only a table whose content genuinely exceeds 960 spills into the
+ * gutters, and `max-width: 100%` stops it at the viewport rather than forcing a page
+ * scrollbar — past that the element scrolls its own content.
+ */
+.flow-grid > .flow-full {
+  grid-column: full;
+  justify-self: center;
+  width: max-content;
+  max-width: 100%;
+}
+
+/*
+ * The Fields step's version 3 (fields-layout.tsx) takes a 1200px measure instead of 960.
+ *
+ * Applied to every `.flow-grid` while the step grid is marked wide, not to the step grid
+ * alone: the footer bar is a `.flow-grid` of its own outside it, and this keeps Exit and the
+ * primary action on the same edges as the wider content above. `:has()` rather than lifting
+ * the dial state to the flow root, which would mean threading it past every other step.
+ */
+:root:has(.flow-grid[data-layout='wide']) .flow-grid {
+  --flow-content: 1200px;
+}
