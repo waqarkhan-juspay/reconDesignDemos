@@ -1,4 +1,4 @@
-import { createBrowserRouter } from 'react-router'
+import { Navigate, createBrowserRouter } from 'react-router'
 import App from './App.tsx'
 import About from './pages/About.tsx'
 import Blend from './pages/Blend.tsx'
@@ -6,6 +6,7 @@ import Configurator from './pages/Configurator.tsx'
 import CreateReportConfig from './pages/create-report-config'
 import Home from './pages/Home.tsx'
 import NotFound from './pages/NotFound.tsx'
+import { CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.tsx'
 
 export const router = createBrowserRouter([
   {
@@ -13,10 +14,14 @@ export const router = createBrowserRouter([
     element: <App />,
     errorElement: <NotFound />,
     children: [
-      { index: true, element: <Home /> },
+      // The app lands on the Configurator. `replace` so the root never enters history —
+      // otherwise Back from the Configurator returns to `/` and immediately redirects
+      // forward again, trapping the user.
+      { index: true, element: <Navigate to={CONFIGURATOR_PATH} replace /> },
+      { path: HOME_PATH.slice(1), element: <Home /> },
       { path: 'about', element: <About /> },
       { path: 'blend', element: <Blend /> },
-      { path: 'configurator', element: <Configurator /> },
+      { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
     ],
   },
   // Deliberately a sibling of the shell route, not a child: this flow is a full-screen

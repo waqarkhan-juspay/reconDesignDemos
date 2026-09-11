@@ -370,7 +370,7 @@ does not filter is yours.
 `[Blend] … is a v1 component`. That one is signal — it tells you a V1 component is rendering —
 so muting it would cost more than it saves.
 
-**Five of those V1 warnings are permanent, and none of them are yours.** The warning fires from
+**Six of those V1 warnings are permanent, and none of them are yours.** The warning fires from
 `useResponsiveTokens.ts:57`, which runs only when a real V1 *component* claims its token slot —
 a V1 utility import never triggers it. Traced against 0.0.37:
 
@@ -381,12 +381,20 @@ a V1 utility import never triggers it. Traced against 0.0.37:
 | `ProgressBar` | `StatCardV2` renders V1 `ProgressBar` (`StatCardV2.tsx:16-19`, used at :293) | any `StatCardV2` with `variant={PROGRESS_BAR}` |
 | `MultiSelect` | `DataTable` renders V1 `MultiSelect` | any page with a table |
 | `Popover` | `DataTable` renders V1 `Popover` | same |
+| `Checkbox` | `SelectItemV2` renders V1 `Checkbox` (`SelectV2/SelectItemV2.tsx:6`) | any open `MultiSelectV2` menu — the checked rows are what draw it |
+
+`SearchInput` joins them wherever a V2 select is given `search={{ show: true }}`:
+`SingleSelectV2Search.tsx:2` and `MultiSelectV2MenuSearch.tsx:2` both reach for the V1
+input. It fires on open rather than on mount, which is why it is easy to miss.
+
+These are all the same shape as the five above — a V1 component rendered *inside* a V2 one,
+with no prop that reaches the choice.
 
 None of these can be removed by migrating an import — there is nothing in your code to
 migrate. `DataTable` has no V2 at all (rule 4), and the other three are V1 components rendered
 *inside* V2 ones, where no prop reaches the choice.
 
-These five are the baseline. The check for whether a **sixth** warning is yours: no file you
+These are the baseline. The check for whether a **new** warning is yours: no file you
 write should import a V1 component that has a V2 pair. Rule 4 lists the V1-only components,
 which are the legitimate exceptions. A warning naming anything else is a real regression.
 

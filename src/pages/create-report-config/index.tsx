@@ -20,7 +20,9 @@ import { FEEDBACK_EASING, FEEDBACK_MS, PAGE_EASING, PAGE_MS } from '../../motion
 import { PrimitiveText, font } from '../../primitives'
 import { DeliveryStep } from './DeliveryStep'
 import { FieldsStep } from './FieldsStep'
+import { FieldsLayoutDials, type FieldsLayout } from './fields-layout'
 import { FiltersStep } from './FiltersStep'
+import { ReviewStep } from './ReviewStep'
 import { SetupStep } from './SetupStep'
 import {
   EMPTY_DELIVERY,
@@ -40,43 +42,33 @@ import {
 const { colors } = FOUNDATION_THEME
 
 /**
- * The flow's own content column — the design centres a 632px column under the bar.
+ * One measure for the whole flow: a 960px content column, with a `full` track beside it
+ * for the one thing that cannot fit (the Fields table). The tracks themselves are
+ * `.flow-grid` in index.css — see the note there; the width is `--flow-content`.
  *
- * A max-width rather than a fixed one: below roughly a 700px viewport a fixed width would
- * simply overflow. The two wider measures below follow the same rule, and each adds the
- * 24px gutters on top of the width the design draws.
+ * Wider than the design's own 800px Review column (node 4530:10457) on purpose: the flow is
+ * card grids, a three-select rule row and tables rather than prose, so the extra width goes
+ * to longer option descriptions and column names instead of to line length. Inputs keep
+ * their own fixed widths and do not stretch. It replaces three per-step widths — 632, 848
+ * and 1158 — which is what made the column jump as you walked the flow.
  */
-const COLUMN = 'mx-auto w-full max-w-[632px] px-6'
-
-/**
- * Fields is wider: a centred table that scrolls rather than growing. 1158 less the gutters
- * is 1110, which is FieldsStep's TABLE_MAX_WIDTH — so the column gives the table exactly
- * the width it asks for, and the heading centres over exactly that.
- */
-const WIDE_COLUMN = 'mx-auto w-full max-w-[1158px] px-6'
-
-/** Filters sits between the two: 800px of card in the design (node 4518:10090). */
-const FILTERS_COLUMN = 'mx-auto w-full max-w-[848px] px-6'
+const COLUMN = 'flow-grid'
 
 /**
  * The five steps of the create flow, with the heading each one carries.
  *
- * `column` is the measure a step's content takes when the flow's default 632px is not it:
- * Fields draws a 1100px table and Filters an 800px card. It is only a measure — every step
- * takes the full width beneath the bar and centres its column inside that.
+ * Every step now takes the same measure, so there is no per-step width here any more —
+ * `.flow-grid` is the one column and a step's own content decides whether any part of it
+ * breaks out (see `.flow-full`).
  *
- * Submit has no design yet — it is named here so the breadcrumb and the progress bar read
- * correctly, and it renders a placeholder rather than blocking the flow.
- * The design draws the bar at 288px of 1440 on Setup, 576px on Delivery and 864px on
- * Fields: one, two and three fifths of these five.
+ * The design draws the progress bar at 288px of 1440 on Setup, 576px on Delivery and 864px
+ * on Fields: one, two and three fifths of these five.
  */
 const STEPS: {
   label: string
   title: string
-  /** Optional standfirst under the title. Only Fields has one in the design. */
+  /** Optional standfirst under the title. */
   description?: string
-  /** The step's content measure. Omitted means the flow's default 632px column. */
-  column?: string
   /** A chip above the title. Only Filters carries one, saying it can be skipped. */
   tag?: string
   /**
@@ -92,38 +84,45 @@ const STEPS: {
   {
     label: 'Fields',
     title: 'Customise your fields',
-    // Transcribed from node 4457:15485, "Re arrange" included — it reads as a typo for
-    // "Rearrange", but this is the designer's copy and not mine to quietly correct.
+    // The first sentence is node 4457:15485's; the second was rewritten in review, replacing
+    // the design's "Re arrange, edit, delete as per your wish!".
     description:
       'Select data from existing columns or add a custom column of your choice. ' +
-      'Re arrange, edit, delete as per your wish!',
-    column: WIDE_COLUMN,
+      'Re-arrange, edit, and delete columns that work for you!',
   },
   {
     label: 'Filters',
     title: 'Choose which rows to filter out',
     description: 'Only the rows matching your conditions are written to the report',
     tag: 'Optional',
-    column: FILTERS_COLUMN,
     skipLabel: 'Skip filters',
   },
-  { label: 'Submit', title: 'Submit' },
+  {
+    label: 'Review',
+    title: 'Review and submit',
+    description: 'Take a moment to review your entire configuration file before submitting.',
+  },
 ]
 
-/** Index of the last step that has a design. */
-const LAST_BUILT_STEP = 3
+/**
+ * The primary action on the final step. Longer than the step's own label on purpose — the
+ * design names the button for what it does to the config (node 4530:10456), not for the
+ * step it sits on.
+ */
+const SUBMIT_LABEL = 'Submit for approval'
 
 
 /**
  * Measure for a step's description.
  *
- * 400 reproduces the design's own two-line break (node 4457:15485) — "…add a custom column /
- * of your choice…". The window is narrow: at this size the first line measures 386px and
- * pulling "of" up needs 403, so anything from 386 to 402 breaks in the same place. Measured
- * against the app's system stack, not the design's Inter Display, so re-check it if the
- * body font ever changes.
+ * 480 gives the Fields description one sentence per line — "…of your choice." /
+ * "Re-arrange, edit, and delete…". Measured in InterDisplay 14px: anything from 460 to 499
+ * breaks there; 400–459 splits the first sentence, and at 400 the last word ends up alone
+ * on a third line, while 500 and up pulls "Re-arrange," onto the first line. 480 sits mid-
+ * window so a rendering difference of a few pixels cannot move the break. Re-measure if the
+ * copy or the body font changes — the window is only 40px wide.
  */
-const DESCRIPTION_WIDTH = 400
+const DESCRIPTION_WIDTH = 480
 
 /**
  * Timings handed to the stylesheet as custom properties, so the keyframes and transitions
@@ -218,7 +217,7 @@ function CreateReportConfig() {
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
   const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
 
-  const { title, description, column, tag, skipLabel } = STEPS[step]
+  const { title, description, tag, skipLabel } = STEPS[step]
   const isLastStep = step === STEPS.length - 1
 
   /**
@@ -254,6 +253,72 @@ function CreateReportConfig() {
 
   const complete = stepComplete[step]
 
+  /**
+   * One step's heading and body. A function rather than inline JSX so the Fields step can
+   * render it inside FieldsLayoutDials, which hands back the spacing and layout version its
+   * dial panel is set to. Every other step calls it with nothing and keeps the defaults: the
+   * inline row-gap is absent, and the heading's custom property falls back to 8px.
+   */
+  const renderStep = (layout?: FieldsLayout) => (
+    <div key={step} className={`${COLUMN} flow-question gap-y-8 pt-24 pb-12`}
+      style={layout?.style}
+      data-layout={layout?.wide ? 'wide' : undefined}
+    >
+      {/* Every step's heading sits on the content column's left edge, Fields
+          included. Node 4457:15485 draws that heading flush with its table's left
+          edge instead, which the old per-step width reproduced — but the table is
+          now the one thing that breaks out of the column, so the two no longer
+          meet. Deliberate: a heading that moved with its step's widest element is
+          exactly the jumping this grid removes. */}
+      <div className="flex flex-col" style={{ gap: 'var(--step-heading-gap, 8px)' }}>
+        {/* Above the title, not beside it: it qualifies the whole step rather than
+            the heading, and it is the first thing worth knowing on a step you are
+            allowed to walk straight past. */}
+        {tag && (
+          <div className="flex">
+            <TagV2
+              text={tag}
+              type={TagV2Type.SUBTLE}
+              subType={TagV2SubType.SQUARICAL}
+              color={TagV2Color.NEUTRAL}
+              size={TagV2Size.XS}
+            />
+          </div>
+        )}
+        <PrimitiveText
+          as="h1"
+          {...font(FOUNDATION_THEME.font.size.heading.lg)}
+          color={colors.gray[700]}
+        >
+          {title}
+        </PrimitiveText>
+        {description && (
+          // Measured, not full-bleed: the design breaks this into two lines against
+          // a 1110px table, and a single 1110px line of 14px copy is a worse read.
+          // The width goes on a wrapper — PrimitiveText builds its own style object
+          // from named props and never forwards a `style` (PrimitiveText.tsx:110).
+          <div style={{ maxWidth: DESCRIPTION_WIDTH }}>
+            <PrimitiveText
+              as="p"
+              {...font(FOUNDATION_THEME.font.size.body.md)}
+              color={colors.gray[500]}
+            >
+              {description}
+            </PrimitiveText>
+          </div>
+        )}
+      </div>
+
+      {step === 0 && <SetupStep answers={setup} onChange={setSetup} />}
+      {step === 1 && <DeliveryStep answers={delivery} onChange={setDelivery} />}
+      {step === 2 && (
+        <FieldsStep answers={fields} onChange={setFields} version={layout?.version} />
+      )}
+      {step === 3 && <FiltersStep answers={filters} onChange={setFilters} />}
+      {step === 4 && <ReviewStep fields={fields} />}
+    </div>
+  )
+
   return (
     <div
       className="flex h-screen flex-col"
@@ -279,80 +344,20 @@ function CreateReportConfig() {
         </div>
       </div>
 
-      {/* The flow takes the full width beneath the bar, with its own actions under it.
-          `column` does not change this pane — it only picks how wide the centred content
-          column inside it is. min-h-0 is what lets that pane's scroller actually scroll:
-          without it a flex child floors at its content height and the overflow escapes to
-          the page. */}
-      <div className="flex min-h-0 flex-1">
-        <div
-          className="flex min-w-0 w-full shrink-0 flex-col"
-        >
+      {/* One pane, full width beneath the bar, with its own actions under it. It used to be
+          a flex row holding a single child — the remains of a split pane whose second half
+          never arrived — which is why nothing here needs `flex-1` or `min-w-0` any more.
+
+          min-h-0 stays and is load-bearing: it is what lets the scroller below actually
+          scroll, since without it a flex child floors at its content height and the
+          overflow escapes to the page. */}
+      <div className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 overflow-auto" data-flow-content>
             {/* Keyed on the step so moving between them replays the arrival rather than
                 cross-fading one set of questions into another. */}
-            <div
-              key={step}
-              className={`${column ?? COLUMN} flow-question flex flex-col gap-8 pt-24 pb-12`}
-            >
-              {/* Every step left-aligns its heading, Fields included — it used to centre
-                  over the table, and the redraw at node 4457:15485 sets it flush with the
-                  table's left edge, which is where WIDE_COLUMN already puts it. */}
-              <div className="flex flex-col gap-2">
-                {/* Above the title, not beside it: it qualifies the whole step rather than
-                    the heading, and it is the first thing worth knowing on a step you are
-                    allowed to walk straight past. */}
-                {tag && (
-                  <div className="flex">
-                    <TagV2
-                      text={tag}
-                      type={TagV2Type.SUBTLE}
-                      subType={TagV2SubType.SQUARICAL}
-                      color={TagV2Color.NEUTRAL}
-                      size={TagV2Size.XS}
-                    />
-                  </div>
-                )}
-                <PrimitiveText
-                  as="h1"
-                  {...font(FOUNDATION_THEME.font.size.heading.lg)}
-                  color={colors.gray[700]}
-                >
-                  {title}
-                </PrimitiveText>
-                {description && (
-                  // Measured, not full-bleed: the design breaks this into two lines against
-                  // a 1110px table, and a single 1110px line of 14px copy is a worse read.
-                  // The width goes on a wrapper — PrimitiveText builds its own style object
-                  // from named props and never forwards a `style` (PrimitiveText.tsx:110).
-                  <div style={{ maxWidth: DESCRIPTION_WIDTH }}>
-                    <PrimitiveText
-                      as="p"
-                      {...font(FOUNDATION_THEME.font.size.body.md)}
-                      color={colors.gray[500]}
-                    >
-                      {description}
-                    </PrimitiveText>
-                  </div>
-                )}
-              </div>
-
-              {step === 0 && <SetupStep answers={setup} onChange={setSetup} />}
-              {step === 1 && <DeliveryStep answers={delivery} onChange={setDelivery} />}
-              {step === 2 && <FieldsStep answers={fields} onChange={setFields} />}
-              {step === 3 && <FiltersStep answers={filters} onChange={setFilters} />}
-              {step > LAST_BUILT_STEP && (
-                // Scaffold, not design: this step is named in the breadcrumb but has no Figma
-                // yet. Drawn plainly so it cannot be mistaken for the real thing, and so the
-                // flow still walks end to end.
-                <PrimitiveText
-                  {...font(FOUNDATION_THEME.font.size.body.md)}
-                  color={colors.gray[400]}
-                >
-                  This step has not been designed yet.
-                </PrimitiveText>
-              )}
-            </div>
+            {/* Only the Fields step gets the layout dials. Mounting FieldsLayoutDials is what
+                registers its panel, and leaving the step unmounts it and takes the panel away. */}
+            {step === 2 ? <FieldsLayoutDials>{renderStep}</FieldsLayoutDials> : renderStep()}
           </div>
 
           <div
@@ -363,7 +368,13 @@ function CreateReportConfig() {
               boxShadow: FOUNDATION_THEME.shadows.md,
             }}
           >
-            <div className={`${COLUMN} flex items-center justify-between px-1 py-6`}>
+            {/* The same grid as the content, so Exit and the primary action sit on the
+                column's own edges. The design draws this bar at 632px (node 4530:10452)
+                while its content column is wider — inset from it on both sides, which reads as
+                a mistake once the two are on screen together. Aligning them is the point of
+                a single measure. */}
+            <div className={COLUMN}>
+              <div className="flex items-center justify-between py-6">
               <ButtonV2
                 buttonType={ButtonV2Type.SECONDARY}
                 subType={ButtonV2SubType.INLINE}
@@ -390,15 +401,14 @@ function CreateReportConfig() {
                 <ButtonV2
                   buttonType={ButtonV2Type.PRIMARY}
                   size={ButtonV2Size.LARGE}
-                  text={isLastStep ? 'Submit' : skipping ? skipLabel : 'Continue'}
+                  text={isLastStep ? SUBMIT_LABEL : skipping ? skipLabel : 'Continue'}
                   disabled={!optional && !complete}
                   onClick={() => (isLastStep ? navigate('/configurator') : setStep(step + 1))}
                 />
               </div>
+              </div>
             </div>
           </div>
-        </div>
-
       </div>
     </div>
   )

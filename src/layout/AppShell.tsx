@@ -27,6 +27,24 @@ import { TopbarStatusIcons } from './topbar'
 const { colors } = FOUNDATION_THEME
 
 /**
+ * The rail starts collapsed — the app opens on the Configurator (src/router.tsx) and the
+ * page, not the nav, is what you came for.
+ *
+ * Seeded into `isRailCollapsed` as well as handed to SidebarV2, because the footer rows
+ * below are ours to draw and SidebarV2 only reports its state from an effect
+ * (SidebarV2.tsx:171-173) — i.e. after the first paint. Initialising from `false` would
+ * paint one frame of full-width footer rows inside a 52px rail before the effect corrected
+ * it.
+ */
+const RAIL_STARTS_EXPANDED = false
+
+/**
+ * Not the default `"/"`, which hijacks the slash key anywhere outside a form field
+ * (AGENTS.md rule 8.6) — a stray keystroke would collapse the rail mid-demo.
+ */
+const SIDEBAR_COLLAPSE_KEY = '['
+
+/**
  * The sidebar rows this file draws — the footer's menu items and the profile.
  *
  * 500, matching the nav rows Blend draws above them (src/theme.ts). They are the same kind
@@ -204,7 +222,7 @@ function AppShell({ children }: { children?: ReactNode }) {
    * its justifyContent. Storing the enum would re-render the whole chrome on the first
    * mouse-enter of an already-expanded rail — a new value, an unchanged answer.
    */
-  const [isRailCollapsed, setIsRailCollapsed] = useState(false)
+  const [isRailCollapsed, setIsRailCollapsed] = useState(!RAIL_STARTS_EXPANDED)
 
   /**
    * Stable by necessity, not tidiness: SidebarV2.tsx:171-173 keys an effect on this
@@ -243,6 +261,8 @@ function AppShell({ children }: { children?: ReactNode }) {
       }}
       topbar={<TopbarContent />}
       rightActions={<TopbarActions />}
+      defaultIsExpanded={RAIL_STARTS_EXPANDED}
+      sidebarCollapseKey={SIDEBAR_COLLAPSE_KEY}
       onSidebarStateChange={handleSidebarState}
       footer={<SidebarFooter collapsed={isRailCollapsed} />}
     >

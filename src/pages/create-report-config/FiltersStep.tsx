@@ -4,6 +4,8 @@ import {
   ButtonV2SubType,
   ButtonV2Type,
   FOUNDATION_THEME,
+  MultiSelectV2,
+  MultiSelectV2Size,
   SingleSelectV2,
   SingleSelectV2Size,
 } from '@juspay/blend-design-system'
@@ -36,6 +38,16 @@ const { colors } = FOUNDATION_THEME
  * and the tenth row is clipped to a sliver — which is how this was first written.
  */
 const COLUMN_MENU_MAX_HEIGHT = 10 * 33 + 36 + 2
+
+/**
+ * Add or remove one value from a rule's selection.
+ *
+ * Order is the order they were picked, and re-picking removes rather than re-appends, so a
+ * value cannot appear twice — `allowCustomValue` means the same string can arrive both from
+ * the list and from the keyboard.
+ */
+const toggleValue = (values: string[], value: string) =>
+  values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
 
 /** One group, no label — every select on this step offers a flat list. */
 const group = (values: readonly string[]) => [
@@ -165,7 +177,7 @@ function RuleRow({
             // Changing the column invalidates what was chosen under it — a value that came
             // from Gateway means nothing once the column is Txn Amount. Cleared here rather
             // than left to look answered.
-            onSelect={(column) => onChange({ ...rule, column, condition: null, value: null })}
+            onSelect={(column) => onChange({ ...rule, column, condition: null, value: [] })}
             search={{ show: true, placeholder: 'Search columns' }}
             triggerDimensions={{ width: '100%' }}
             menuDimensions={{ maxHeight: COLUMN_MENU_MAX_HEIGHT }}
@@ -183,7 +195,7 @@ function RuleRow({
               onChange({
                 ...rule,
                 condition,
-                value: conditionTakesValue(condition) ? rule.value : null,
+                value: conditionTakesValue(condition) ? rule.value : [],
               })
             }
             search={{ show: true, placeholder: 'Search conditions' }}
@@ -205,12 +217,27 @@ function RuleRow({
             is `items-end`, so its height still comes from the two selects beside it. */}
         <div className="min-w-0 flex-1">
           {valueGone ? null : (
-            <SingleSelectV2
+            <MultiSelectV2
+              // Required by MultiSelectV2 where SingleSelectV2 leaves it optional, and
+              // empty on purpose: the column already carries a "Value" header above the
+              // grid, and InputLabels renders nothing for a falsy label
+              // (InputLabels.tsx:48), so this adds no second one and no extra height.
+              label=""
               placeholder="Choose a value"
-              size={SingleSelectV2Size.SM}
+              size={MultiSelectV2Size.SM}
               items={group(valuesFor(rule.column))}
-              selected={rule.value ?? ''}
-              onSelect={(value) => onChange({ ...rule, value })}
+              selectedValues={rule.value}
+              // Two shapes reach this, and they are not interchangeable: a menu row calls
+              // back with the one value it toggled (MultiSelectV2MenuItem.tsx:10), while
+              // the trigger's clear button calls back with the whole new list — `[]`
+              // (MultiSelectV2.tsx:168). Treating the array as a toggle would add the
+              // string "" to the selection.
+              onChange={(next) =>
+                onChange({
+                  ...rule,
+                  value: Array.isArray(next) ? next : toggleValue(rule.value, next),
+                })
+              }
               search={{ show: true, placeholder: 'Search values' }}
               triggerDimensions={{ width: '100%' }}
               disabled={valueLocked}
@@ -259,7 +286,11 @@ export function FiltersStep({
       <div
         className="flex flex-col items-center justify-center gap-8 px-1 py-8"
         style={{
-          border: `1px solid ${colors.gray[200]}`,
+          // Dashed, not solid: the card stands in for rules that do not exist yet, and a dashed
+          // stroke reads as a temporary placeholder where a solid one reads as a finished
+          // container. One step darker than the solid rule was, because the gaps in a dash
+          // make the same colour read lighter.
+          border: `1px dashed ${colors.gray[300]}`,
           borderRadius: FOUNDATION_THEME.border.radius[12],
         }}
       >
@@ -303,7 +334,7 @@ export function FiltersStep({
           buttonType={ButtonV2Type.SECONDARY}
           size={ButtonV2Size.SMALL}
           subType={ButtonV2SubType.DEFAULT}
-          text="Add a row filter"
+          text="Add a filter"
           // V2 groups its slots into objects — `leftIcon` is the V1 spelling and would be
           // dropped in silence (AGENTS.md rule 2).
           leftSlot={{ slot: <Plus size={14} /> }}
