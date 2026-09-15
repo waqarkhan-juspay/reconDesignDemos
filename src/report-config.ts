@@ -12,18 +12,23 @@
 export const REPORT_CATEGORIES = [
   {
     id: 'Reconciliation',
+    // `title` is what the create flow shows; `id` stays the value the Configurator table
+    // filters on, so renaming a card in the design never moves a row out of its filter.
+    // Titles and copy are node 4542:17104's.
+    title: 'Reconciliation Report',
     description:
-      'Match your internal records against gateway & bank settlement files to catch any mismatches or missing entries.',
+      'Match your internal records against gateway & bank settlement files to catch any mismatches or missing entries',
     sourceTypes: [
-      { id: 'Overall', description: 'Every record ever' },
-      { id: 'Matched', description: 'Only records that reconciled' },
-      { id: 'Mismatched', description: 'Only mismatched or unreconciled' },
+      { id: 'Overall', title: 'All records', description: 'Every record whether reconciled or not' },
+      { id: 'Matched', title: 'Reconciled', description: 'Only records that are reconciled' },
+      { id: 'Mismatched', title: 'Unreconciled', description: 'Only records that are not reconciled' },
     ],
   },
   {
     id: 'File Summary',
+    title: 'Source File Report',
     description:
-      'Summarise or export raw data from transaction, settlement, or chargeback files without cross-referencing.',
+      'Generate a simplified or full report containing only the information you need from a single source file',
     sourceTypes: [
       // The design only draws the Reconciliation branch of this question, so these
       // descriptions are written here rather than transcribed. Replace them when the
@@ -42,11 +47,15 @@ export const REPORT_CATEGORIES = [
 export const REPORT_FORMATS = [
   {
     id: 'Raw',
-    description: 'One row per record, ideal for audit trails and custom analysis',
+    title: 'Transaction level records',
+    description:
+      'Each record gets its own row, with no grouping or totals. Best for audits, looking up specific records, or your own analysis.',
   },
   {
     id: 'Aggregated',
-    description: 'Grouped and totalled by the fields you pick in the next step.',
+    title: 'Grouped records',
+    description:
+      "One row for each group, such as gateway or payment method, with totals. You'll choose the fields to group by in the Fields step.",
   },
 ] as const
 
@@ -73,7 +82,7 @@ export const REPORT_CATEGORY_IDS = REPORT_CATEGORIES.map(({ id }) => id) as Repo
  * Widened to a plain array on purpose: the literal type is a union of two readonly tuples,
  * which callers cannot `.map` over without narrowing the category first.
  */
-export type SourceTypeOption = { id: string; description: string }
+export type SourceTypeOption = { id: string; title?: string; description: string }
 
 export const sourceTypesFor = (category: ReportCategory): readonly SourceTypeOption[] =>
   REPORT_CATEGORIES.find(({ id }) => id === category)?.sourceTypes ?? []

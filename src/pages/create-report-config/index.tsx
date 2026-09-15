@@ -9,6 +9,7 @@ import {
   TagV2Size,
   TagV2SubType,
   TagV2Type,
+  ThemeProvider,
   TopbarV2,
 } from '@juspay/blend-design-system'
 import { CaretRight } from '@phosphor-icons/react'
@@ -18,7 +19,9 @@ import tenantLogo from '../../assets/icons/tenant-logo.svg'
 import { TopbarStatusIcons } from '../../layout/topbar'
 import { FEEDBACK_EASING, FEEDBACK_MS, PAGE_EASING, PAGE_MS } from '../../motion'
 import { PrimitiveText, font } from '../../primitives'
+import { ghostButtonTokens } from '../../theme'
 import { DeliveryStep } from './DeliveryStep'
+import { ExitFlowModal } from './ExitFlowModal'
 import { FieldsStep } from './FieldsStep'
 import { FieldsLayoutDials, type FieldsLayout } from './fields-layout'
 import { FiltersStep } from './FiltersStep'
@@ -79,7 +82,13 @@ const STEPS: {
    */
   skipLabel?: string
 }[] = [
-  { label: 'Setup', title: 'Setup your report file' },
+  {
+    label: 'Setup',
+    // Node 4542:17104.
+    title: 'Set up your report',
+    description:
+      'Pick a report type, choose which records to include, and decide how the data is presented.',
+  },
   { label: 'Delivery', title: 'Delivery and scheduling' },
   {
     label: 'Fields',
@@ -185,12 +194,19 @@ function StepBreadcrumb({ step, onNavigate }: StepNavigation) {
   )
 }
 
-function TopbarContent(navigation: StepNavigation) {
+function TopbarContent({ onExit, ...navigation }: StepNavigation & { onExit: () => void }) {
   return (
     <div className="flex w-full items-center justify-between">
-      <div className="flex size-8 items-center justify-center overflow-clip rounded-[6.4px]">
+      {/* The logo is one of the flow's two exits (the footer's Exit is the other). Both open
+          the same confirmation rather than leaving outright — see ExitFlowModal. */}
+      <button
+        type="button"
+        onClick={onExit}
+        aria-label="Exit report setup"
+        className="flex size-8 cursor-pointer items-center justify-center overflow-clip rounded-[6.4px] border-none bg-transparent p-0"
+      >
         <img src={tenantLogo} alt="" className="block size-[18px]" />
-      </div>
+      </button>
       <StepBreadcrumb {...navigation} />
       <TopbarStatusIcons />
     </div>
@@ -216,6 +232,17 @@ function CreateReportConfig() {
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
   const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
+  const [confirmingExit, setConfirmingExit] = useState(false)
+
+  /**
+   * Both exits land on the Configurator. There is no draft store yet, so "Save as draft"
+   * leaves the same way Discard does — the choice is recorded in the UI, not persisted.
+   * When drafts exist, this is the one place that writes one.
+   */
+  const leaveFlow = () => {
+    setConfirmingExit(false)
+    navigate('/configurator')
+  }
 
   const { title, description, tag, skipLabel } = STEPS[step]
   const isLastStep = step === STEPS.length - 1
@@ -260,7 +287,9 @@ function CreateReportConfig() {
    * inline row-gap is absent, and the heading's custom property falls back to 8px.
    */
   const renderStep = (layout?: FieldsLayout) => (
-    <div key={step} className={`${COLUMN} flow-question gap-y-8 pt-24 pb-12`}
+    // Setup follows node 4541:16282, which sets its sections 24px apart; the other steps
+    // keep the 32px rhythm their own frames were drawn at.
+    <div key={step} className={`${COLUMN} flow-question ${step === 0 ? 'gap-y-6' : 'gap-y-8'} pt-24 pb-12`}
       style={layout?.style}
       data-layout={layout?.wide ? 'wide' : undefined}
     >
@@ -270,7 +299,9 @@ function CreateReportConfig() {
           now the one thing that breaks out of the column, so the two no longer
           meet. Deliberate: a heading that moved with its step's widest element is
           exactly the jumping this grid removes. */}
-      <div className="flex flex-col" style={{ gap: 'var(--step-heading-gap, 8px)' }}>
+      {/* 4px between title and standfirst — node 4542:17173's gap. The Fields dials can
+          still override it through the custom property. */}
+      <div className="flex flex-col" style={{ gap: 'var(--step-heading-gap, 4px)' }}>
         {/* Above the title, not beside it: it qualifies the whole step rather than
             the heading, and it is the first thing worth knowing on a step you are
             allowed to walk straight past. */}
@@ -287,8 +318,9 @@ function CreateReportConfig() {
         )}
         <PrimitiveText
           as="h1"
-          {...font(FOUNDATION_THEME.font.size.heading.lg)}
+          {...font(FOUNDATION_THEME.font.size.heading.md)}
           color={colors.gray[700]}
+          fontWeight={FOUNDATION_THEME.font.weight[600]}
         >
           {title}
         </PrimitiveText>
@@ -302,6 +334,7 @@ function CreateReportConfig() {
               as="p"
               {...font(FOUNDATION_THEME.font.size.body.md)}
               color={colors.gray[500]}
+              fontWeight={FOUNDATION_THEME.font.weight[400]}
             >
               {description}
             </PrimitiveText>
@@ -325,7 +358,15 @@ function CreateReportConfig() {
       style={{ ...MOTION, backgroundColor: colors.gray[0] }}
     >
       <div className="shrink-0">
-        <TopbarV2 topbar={<TopbarContent step={step} onNavigate={setStep} />} />
+        <TopbarV2
+          topbar={
+            <TopbarContent
+              step={step}
+              onNavigate={setStep}
+              onExit={() => setConfirmingExit(true)}
+            />
+          }
+        />
         {/* Progress across the five steps. The design draws it as a rule sitting on the
             topbar's bottom edge.
 
@@ -375,13 +416,22 @@ function CreateReportConfig() {
                 a single measure. */}
             <div className={COLUMN}>
               <div className="flex items-center justify-between py-6">
-              <ButtonV2
-                buttonType={ButtonV2Type.SECONDARY}
-                subType={ButtonV2SubType.INLINE}
-                size={ButtonV2Size.LARGE}
-                text="Exit"
-                onClick={() => navigate('/configurator')}
-              />
+              {/* A ghost button (ghostButtonTokens, src/theme.ts): padded to the Back button's
+                  height so the whole pill is clickable. Pulled 16px left so its label still
+                  sits on the column edge, as the inline version did.
+                  blend-gap: ButtonV2 sets `cursor: default` (ButtonV2/utils.ts) with no prop or
+                  token to change it, so the pointer is set from a wrapper this file owns. */}
+              <span className="-ml-4 flex [&_button]:cursor-pointer">
+                <ThemeProvider componentTokens={ghostButtonTokens}>
+                  <ButtonV2
+                    buttonType={ButtonV2Type.SECONDARY}
+                    subType={ButtonV2SubType.INLINE}
+                    size={ButtonV2Size.LARGE}
+                    text="Exit"
+                    onClick={() => setConfirmingExit(true)}
+                  />
+                </ThemeProvider>
+              </span>
               <div className="flex items-center gap-3">
                 {step > 0 && (
                   <ButtonV2
@@ -410,6 +460,13 @@ function CreateReportConfig() {
             </div>
           </div>
       </div>
+
+      <ExitFlowModal
+        isOpen={confirmingExit}
+        onCancel={() => setConfirmingExit(false)}
+        onSaveDraft={leaveFlow}
+        onDiscard={leaveFlow}
+      />
     </div>
   )
 }

@@ -8,6 +8,7 @@ import {
   type ResponsiveTableTokens,
   type ResponsiveTabsV2Tokens,
 } from '@juspay/blend-design-system'
+import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
 
 /**
@@ -112,4 +113,108 @@ export const sectionTabsTokens: ComponentTokenType = {
     TABSV2_TOKENS as unknown as Record<string, { tabList: { gap: unknown } }>,
     (token) => ({ ...token, tabList: { ...token.tabList, gap: FOUNDATION_THEME.unit[24] } }),
   ) as unknown as ResponsiveTabsV2Tokens,
+}
+
+type Sides = 'top' | 'right' | 'bottom' | 'left'
+type GhostButtonToken = {
+  backgroundColor: { secondary: { inline: Record<'default' | 'hover' | 'active' | 'disabled', unknown> } }
+  borderRadius: Record<'lg', { secondary: { inline: unknown } }>
+  padding: Record<Sides, Record<'lg', { secondary: { inline: unknown } }>>
+}
+
+/**
+ * A ghost button: secondary + INLINE (no border, no fill at rest), given the padding of a
+ * LARGE secondary button, a radius, and a gray[50] fill on hover — so it has a real hit area
+ * and a surface that answers the pointer, while still reading as the quiet action.
+ *
+ * blend-gap: ButtonV2Type has no ghost (primary/secondary/danger/success only), and INLINE
+ * zeroes every padding (buttonV2.light.tokens.ts), which left footer Exit a 23×20 target.
+ * Only the LARGE size is touched and the tokens are scoped by a nested ThemeProvider, so
+ * the inline buttons elsewhere (Cc, Bcc, Save as draft) keep their shape.
+ */
+export const ghostButtonTokens: ComponentTokenType = {
+  ...componentTokens,
+  BUTTONV2: perBreakpoint(
+    BUTTONV2_TOKENS as unknown as Record<string, GhostButtonToken>,
+    (token) => {
+      const pad = (side: Sides, value: string) => ({
+        ...token.padding[side],
+        lg: {
+          ...token.padding[side].lg,
+          secondary: { ...token.padding[side].lg.secondary, inline: value },
+        },
+      })
+      return {
+        ...token,
+        backgroundColor: {
+          ...token.backgroundColor,
+          secondary: {
+            ...token.backgroundColor.secondary,
+            inline: {
+              default: 'transparent',
+              hover: FOUNDATION_THEME.colors.gray[50],
+              active: FOUNDATION_THEME.colors.gray[100],
+              disabled: 'transparent',
+            },
+          },
+        },
+        borderRadius: {
+          ...token.borderRadius,
+          lg: {
+            ...token.borderRadius.lg,
+            secondary: { ...token.borderRadius.lg.secondary, inline: FOUNDATION_THEME.border.radius[10] },
+          },
+        },
+        // The secondary LARGE button's padding (9px / 16px on lg) plus its 1px border, so
+        // Exit is exactly as tall as the Back button beside the primary action.
+        padding: {
+          ...token.padding,
+          top: pad('top', '10px'),
+          bottom: pad('bottom', '10px'),
+          left: pad('left', '16px'),
+          right: pad('right', '16px'),
+        },
+      }
+    },
+  ) as unknown as ComponentTokenType['BUTTONV2'],
+}
+
+type ButtonTextColors = {
+  text: {
+    color: { secondary: { inline: Record<'default' | 'hover' | 'active' | 'disabled', unknown> } }
+  }
+}
+
+/**
+ * Secondary inline buttons in gray[500] rather than Blend's gray[600], for quiet link-style
+ * actions such as the email card's "Cc" / "Bcc" links.
+ *
+ * blend-gap: ButtonV2 takes no colour prop and omits `style`, so the only reach is the
+ * token. Scoped with a nested ThemeProvider for the same reason as sectionTabsTokens — set
+ * globally it would also grey out Exit and "Save as draft", which keep gray[600]. Hover
+ * steps up to 600 so the link still acknowledges the pointer.
+ */
+export const neutralLinkTokens: ComponentTokenType = {
+  ...componentTokens,
+  BUTTONV2: perBreakpoint(
+    BUTTONV2_TOKENS as unknown as Record<string, ButtonTextColors>,
+    (token) => ({
+      ...token,
+      text: {
+        ...token.text,
+        color: {
+          ...token.text.color,
+          secondary: {
+            ...token.text.color.secondary,
+            inline: {
+              default: FOUNDATION_THEME.colors.gray[500],
+              hover: FOUNDATION_THEME.colors.gray[600],
+              active: FOUNDATION_THEME.colors.gray[600],
+              disabled: FOUNDATION_THEME.colors.gray[400],
+            },
+          },
+        },
+      },
+    }),
+  ) as unknown as ComponentTokenType['BUTTONV2'],
 }

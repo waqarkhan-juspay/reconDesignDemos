@@ -18,6 +18,10 @@ export const EMPTY_SETUP: SetupAnswers = { category: null, sourceType: null, for
 /** The last question gates the step: nothing below it can be answered without the two above. */
 export const isSetupComplete = ({ format }: SetupAnswers) => format !== null
 
+/** The two cadences that also ask which day they go out on — a weekday, or a date. */
+export const WEEKLY = 'Weekly'
+export const MONTHLY = 'Monthly'
+
 /** Cadence — node 4410:29816. */
 export const FREQUENCIES: Option[] = [
   { id: 'Daily', description: 'Sent every day' },
@@ -35,13 +39,41 @@ export const TIMINGS: Option[] = [
 /**
  * The design draws this as a "datePicker" instance but renders a plain value dropdown, and
  * the published 0.0.37 ships no TimePicker (it exists on GitHub — rule 3), so it is a
- * SingleSelectV2 over the hours. 9:00 AM is the value the design shows.
+ * SingleSelectV2 over the day in 30-minute steps, 12:00 AM to 11:30 PM. Nothing is
+ * preselected: a send time is the user's choice, not a default to overlook.
  */
-export const DEFAULT_TIME = '9:00 AM'
-export const TIME_OPTIONS = Array.from({ length: 24 }, (_, hour) => {
-  const label = `${hour % 12 === 0 ? 12 : hour % 12}:00 ${hour < 12 ? 'AM' : 'PM'}`
+export const TIME_OPTIONS = Array.from({ length: 48 }, (_, step) => {
+  const hour = Math.floor(step / 2)
+  const label = `${hour % 12 === 0 ? 12 : hour % 12}:${step % 2 === 0 ? '00' : '30'} ${hour < 12 ? 'AM' : 'PM'}`
   return { label, value: label }
 })
+
+/** Which day a Weekly report goes out on — one day, so a single select. Week starts Monday. */
+export const DAYS_OF_WEEK = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+].map((day) => ({ label: day, value: day }))
+
+/**
+ * Which day a Monthly report goes out on. The 1st to the 30th, then "Last day of the month"
+ * in place of a 31st — a 31st would silently skip every shorter month, while the last day
+ * always exists.
+ */
+export const LAST_DAY_OF_MONTH = 'Last day of the month'
+const ordinal = (day: number) => {
+  const suffix =
+    day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th'
+  return `${day}${suffix}`
+}
+export const DAYS_OF_MONTH = [
+  ...Array.from({ length: 30 }, (_, index) => ordinal(index + 1)),
+  LAST_DAY_OF_MONTH,
+].map((day) => ({ label: day, value: day }))
 
 /**
  * Where the report goes — node 4418:6398. Checkboxes rather than the single-choice cards
@@ -58,24 +90,45 @@ export type DeliveryAnswers = {
   name: string
   frequency: string | null
   timing: string | null
+  /** Only asked, and only kept, while the cadence is Weekly. */
+  dayOfWeek: string | null
+  /** Only asked, and only kept, while the cadence is Monthly. */
+  dayOfMonth: string | null
   time: string
   channels: string[]
-  emailTo: string
+  /** Confirmed recipients — each one a tag in the field. */
+  emailTo: string[]
+  /** `null` until the "Cc" / "Bcc" link is pressed — the field only exists once asked for. */
+  emailCc: string[] | null
+  emailBcc: string[] | null
 }
+
+/**
+ * Deliberately loose: something, an @, a domain with a dot. It catches a half-typed address
+ * before it becomes a tag; the real check is whether mail arrives.
+ */
+export const isEmailAddress = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 export const EMPTY_DELIVERY: DeliveryAnswers = {
   name: '',
   frequency: null,
   timing: null,
-  time: DEFAULT_TIME,
+  dayOfWeek: null,
+  dayOfMonth: null,
+  // Unselected until the user picks one; isDeliveryComplete holds the step until then.
+  time: '',
   channels: [],
-  emailTo: '',
+  emailTo: [],
+  emailCc: null,
+  emailBcc: null,
 }
 
 export const isDeliveryComplete = ({
   name,
   frequency,
   timing,
+  dayOfWeek,
+  dayOfMonth,
   time,
   channels,
   emailTo,
@@ -84,10 +137,13 @@ export const isDeliveryComplete = ({
   frequency !== null &&
   timing !== null &&
   (timing !== SPECIFIED_TIME || time !== '') &&
+  // A weekly or monthly send at a set time has to know which day; "Immediately" never asks.
+  (frequency !== WEEKLY || timing !== SPECIFIED_TIME || dayOfWeek !== null) &&
+  (frequency !== MONTHLY || timing !== SPECIFIED_TIME || dayOfMonth !== null) &&
   channels.length > 0 &&
   // The To field is marked required in the design, so a ticked Email with nowhere to send
   // it does not count as answered.
-  (!channels.includes(EMAIL_CHANNEL) || emailTo.trim() !== '')
+  (!channels.includes(EMAIL_CHANNEL) || emailTo.length > 0)
 
 /**
  * Step 3 — the columns the report will carry (node 4418:6965).
