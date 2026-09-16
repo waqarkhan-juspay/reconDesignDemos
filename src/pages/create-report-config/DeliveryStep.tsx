@@ -1,4 +1,8 @@
 import {
+  AlertV2,
+  AlertV2ActionPosition,
+  AlertV2SubType,
+  AlertV2Type,
   ButtonV2,
   ButtonV2Size,
   ButtonV2SubType,
@@ -12,6 +16,9 @@ import {
   SingleSelectV2Variant,
   TextInputV2,
   ThemeProvider,
+  UnitInput,
+  UnitInputSize,
+  UnitPosition,
 } from '@juspay/blend-design-system'
 import type { LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -24,6 +31,8 @@ import {
   EMAIL_CHANNEL,
   FREQUENCIES,
   MONTHLY,
+  SFTP_CHANNEL,
+  SLACK_CHANNEL,
   TIME_OPTIONS,
   TIMINGS,
   WEEKLY,
@@ -59,10 +68,17 @@ function ChannelCard({
   icon: Icon,
   checked,
   onToggle,
+  wide = false,
   children,
 }: {
+  /**
+   * Span two of the three tracks, open or closed. Email's recipient fields need the room;
+   * Slack's single channel name does not, so it keeps one column (node 4850:101697).
+   */
+  wide?: boolean
   id: string
-  icon: LucideIcon
+  /** A lucide glyph, or an image src for a brand logo (see DELIVERY_CHANNELS). */
+  icon: LucideIcon | string
   checked: boolean
   onToggle: () => void
   children?: ReactNode
@@ -70,21 +86,34 @@ function ChannelCard({
   const expanded = checked && children !== undefined
   return (
     <div
-      // Expanded, it spans two of the three tracks so its fields have room, and the next
-      // channel flows on into the third column.
-      className={`flex w-full min-w-0 flex-col gap-4 border px-4 pt-3 ${expanded ? 'col-span-2 pb-4' : 'pb-3'}`}
+      // A wide card spans two of the three tracks whether or not it is open, so ticking it
+      // grows it downward only rather than also sideways.
+      className={`flex w-full min-w-0 flex-col gap-4 border px-4 pt-3 ${wide ? 'col-span-2' : ''} ${expanded ? 'pb-4' : 'pb-3'}`}
       style={{
         borderRadius: FOUNDATION_THEME.border.radius[8],
         borderColor: colors.gray[200],
         backgroundColor: colors.gray[0],
       }}
     >
+      {/* min-h-6 is the logo's 24px, held by every card so a glyph card and a logo card
+          sharing a row come out the same height. */}
       <div
         onClick={onToggle}
-        className="flex cursor-pointer items-center justify-between"
+        className="flex min-h-6 cursor-pointer items-center justify-between"
       >
         <span className="flex items-center gap-2">
-          <Icon size={16} color={colors.gray[600]} />
+          {typeof Icon === 'string' ? (
+            // A brand logo, at the design's 24px with a 4px radius (node 4850:101710).
+            // Decorative: the name beside it already says which channel this is.
+            <img
+              src={Icon}
+              alt=""
+              className="size-6 shrink-0 object-contain"
+              style={{ borderRadius: FOUNDATION_THEME.border.radius[4] }}
+            />
+          ) : (
+            <Icon size={16} color={colors.gray[600]} />
+          )}
           <PrimitiveText
             {...font(FOUNDATION_THEME.font.size.body.md)}
             color={colors.gray[700]}
@@ -114,8 +143,19 @@ export function DeliveryStep({
   answers: DeliveryAnswers
   onChange: (next: DeliveryAnswers) => void
 }) {
-  const { name, frequency, timing, dayOfWeek, dayOfMonth, time, channels, emailTo, emailCc, emailBcc } =
-    answers
+  const {
+    name,
+    frequency,
+    timing,
+    dayOfWeek,
+    dayOfMonth,
+    time,
+    channels,
+    emailTo,
+    emailCc,
+    emailBcc,
+    slackChannel,
+  } = answers
   const [specifiedTime, immediately] = TIMINGS
 
   /**
@@ -176,6 +216,10 @@ export function DeliveryStep({
 
       {showCadence && (
       <QuestionGroup label="How often?">
+        {/* The cadence, timing and day/time rows, 16px apart — the same as the gap between
+            cards in a row, so the three read as one grid. QuestionGroup's own 8px stays
+            between the label and the first row. */}
+        <div className="flex flex-col gap-4">
         <OptionRow>
           {FREQUENCIES.map((option) => (
             <OptionCard
@@ -289,21 +333,30 @@ export function DeliveryStep({
           </div>
           </div>
         )}
+        </div>
       </QuestionGroup>
       )}
 
       {timing !== null && (
         <QuestionGroup label="Delivery channel">
-          {/* The same three tracks as the cadence and timing rows, so Email sits under Daily
-              and SFTP under Weekly. items-start: ticking Email grows it by its To field
-              without stretching SFTP beside it. */}
-          <div className="grid grid-cols-3 items-start gap-4">
-            {DELIVERY_CHANNELS.map(({ id, icon }) => (
+          {/* Email on a row of its own, then Slack and SFTP on the next. Each row is the same
+              three tracks as the cadence and timing rows, so the cards line up under Daily
+              and Weekly. Two grids rather than one: in a single grid a collapsed Email would
+              let SFTP flow up beside it. items-start: ticking Email grows it by its To field
+              without stretching anything beside it. */}
+          <div className="flex flex-col gap-4">
+          {[
+            DELIVERY_CHANNELS.filter(({ id }) => id === EMAIL_CHANNEL),
+            DELIVERY_CHANNELS.filter(({ id }) => id !== EMAIL_CHANNEL),
+          ].map((row) => (
+          <div key={row[0].id} className="grid grid-cols-3 items-start gap-4">
+            {row.map(({ id, icon }) => (
               <ChannelCard
                 key={id}
                 id={id}
                 icon={icon}
                 checked={channels.includes(id)}
+                wide={id === EMAIL_CHANNEL}
                 onToggle={() =>
                   onChange({
                     ...answers,
@@ -354,9 +407,63 @@ export function DeliveryStep({
                       </>
                     )}
                   </div>
+                ) : id === SFTP_CHANNEL ? (
+                  // The prototype has no SFTP configurations to look up, so this always shows
+                  // the not-yet-set-up case: delivery via SFTP needs one before it can run.
+                  //
+                  // The action opens the Configurator in a new tab rather than navigating:
+                  // leaving this flow would throw away everything answered so far.
+                  <AlertV2
+                    type={AlertV2Type.ERROR}
+                    subType={AlertV2SubType.SUBTLE}
+                    // Kept to two lines in a one-column card.
+                    description="No SFTP configuration found. Set one up to use SFTP."
+                    actions={{
+                      position: AlertV2ActionPosition.BOTTOM,
+                      primaryAction: {
+                        text: 'Click here to configure',
+                        onClick: () => window.open('/configurator', '_blank', 'noopener'),
+                      },
+                    }}
+                    // Dismissing it would not set anything up, so there is nothing to close —
+                    // AlertV2 shows its ✕ unless told otherwise (AlertV2.tsx:261).
+                    closeButton={{ show: false }}
+                    width="100%"
+                    // AlertV2's token floor is 300px (alertV2.light.tokens.ts:11), wider than
+                    // a one-column card's 275px content box, so it would run past the border.
+                    // A string, not 0: AlertV2 falls back with `minWidth || token`
+                    // (AlertV2.tsx:295), so a numeric 0 is ignored.
+                    minWidth="0px"
+                  />
+                ) : id === SLACK_CHANNEL ? (
+                  // Node 4850:101705 — a "Unit Input Field": the `#` sits in Blend's fixed
+                  // unit box on the left, so it reads as part of the name without being typed.
+                  //
+                  // blend-gap: UnitInput is V1-only (no V2 pair) and hard-codes
+                  // `type="number"` (UnitInput.tsx:273), typing `value` as a number to match.
+                  // It spreads the rest of its props after that (:369), so `type="text"` here
+                  // wins, and the string value is cast through its number type. TextInputV2
+                  // cannot draw the unit box — its slots are inset inside the border.
+                  <UnitInput
+                    label="Channel Name"
+                    required
+                    size={UnitInputSize.MEDIUM}
+                    unit="#"
+                    unitPosition={UnitPosition.LEFT}
+                    type="text"
+                    placeholder="ex: juspay-troubleshoot"
+                    hintText="Alerts will be sent to this specific channel"
+                    value={slackChannel as unknown as number}
+                    // The box already draws the `#`, so a pasted "#channel" drops its own.
+                    onChange={(event) =>
+                      onChange({ ...answers, slackChannel: event.target.value.replace(/^#+/, '') })
+                    }
+                  />
                 ) : undefined}
               </ChannelCard>
             ))}
+          </div>
+          ))}
           </div>
         </QuestionGroup>
       )}

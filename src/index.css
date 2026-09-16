@@ -159,17 +159,9 @@ html {
 }
 
 /*
- * Fields step — the column table is capped at 1100px (FieldsStep.tsx) and scrolls past it.
+ * Fields step — DataTable scrolls its own columns sideways; this only fades the clipped edges,
+ * so a table wider than its container reads as cut off rather than as simply ending.
  *
- * The bar is styled rather than left to the platform: macOS overlay scrollbars fade out when
- * idle, which hides the very thing the user needs to know — that there are columns off the
- * right edge. Giving it an explicit size and colour makes Blink render a classic bar that
- * holds its own space and stays visible. `auto` keeps it absent until the content actually
- * overflows, which is exactly "visible once you have added that many columns".
- *
- * Colours arrive as custom properties from the component, so they stay on the palette.
- */
-/*
  * Registered so the two fade widths can be transitioned. An unregistered custom property is
  * a plain token to the engine and animates by snapping; typed as a <length> it interpolates,
  * so the edge fades in as you scroll into it rather than appearing all at once.
@@ -187,23 +179,15 @@ html {
 }
 
 /*
- * The clipped edges fade out, so a table wider than its container reads as cut off rather
- * than as simply ending. Without it the last column meets the page background at a hard
- * edge and looks deliberate.
- *
  * A mask, not an overlaid gradient: the fade has to reach whatever is behind it, and the
  * table sits on the page's own white rather than on a panel, so a painted gradient would
  * need to know that colour and would stop being right the moment the surface changed.
  *
- * Each side's width is driven from FieldsStep, which sets it to 0px when that edge has
+ * On FieldsStep's wrapper rather than DataTable's scroller, so the letter row and the table's
+ * frame fade together. Each side's width is set from FieldsStep, 0px when that edge has
  * nothing past it — at 0 the gradient's stops coincide and the mask is a no-op.
  */
 .fields-table {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  /* Sits between the table's bottom border and the scrollbar: on a scroll container the bar
-     is laid out at the inner edge of the border box, so bottom padding is the gap. */
-  padding-bottom: 4px;
   --fade-left: 0px;
   --fade-right: 0px;
   -webkit-mask-image: linear-gradient(
@@ -232,36 +216,31 @@ html {
 }
 
 /*
- * `scrollbar-width` / `scrollbar-color` are deliberately NOT set here. Chrome honours the
- * standard properties in preference to ::-webkit-scrollbar and, with the OS in overlay mode,
- * that yields a bar that fades out — measured: offsetHeight - clientHeight was 0. Styling
- * the pseudo-element alone forces a classic bar that reserves its own space and stays.
- * The standard properties are kept below for engines with no pseudo-element to fall back on.
+ * The Fields table's column titles read gray[700] rather than DataTable's muted gray[400].
+ * The token is an inline style on each <th> with no prop reaching it, hence !important. The
+ * value comes from FieldsStep as --header-color, so it stays on FOUNDATION_THEME.
  */
-
-.fields-table::-webkit-scrollbar {
-  height: 5px;
+.fields-table th[data-element='table-header'] {
+  color: var(--header-color) !important;
 }
 
-.fields-table::-webkit-scrollbar-track {
-  background: var(--table-scroll-track);
-  border-radius: 8px;
-}
-
-.fields-table::-webkit-scrollbar-thumb {
-  background: var(--table-scroll-thumb);
-  border-radius: 8px;
-}
-
-.fields-table::-webkit-scrollbar-thumb:hover {
-  background: var(--table-scroll-thumb-hover);
-}
-
-@supports not selector(::-webkit-scrollbar) {
-  .fields-table {
-    scrollbar-width: thin;
-    scrollbar-color: var(--table-scroll-thumb) var(--table-scroll-track);
-  }
+/*
+ * The Fields table's ⋮ menu offers Rename and nothing else.
+ *
+ * DataTable has no prop for this: it only draws the ⋮ for a sortable (or filterable) column,
+ * and the same condition puts Sort Ascending / Sort Descending at the top of the menu
+ * (FilterComponents.tsx:1333). So the column stays sortable and the rows are hidden here.
+ *
+ * What is hidden is structural, not a label match: the menu's direct children are the Sort
+ * group (a plain wrapper), a separator, then Rename — the only direct child with
+ * role="menuitem". Keeping just that child drops Sort and the rule above Rename together.
+ *
+ * Scoped with :has() because the menu is portalled to <body> (Popover.tsx:117) and carries
+ * only the generic data-popover="Popover" every V1 popover has — so it can't be reached from
+ * the table's wrapper, and unscoped this would strip Sort from the Configurator table too.
+ */
+:root:has(.fields-table) [data-popover] > [role='menu'] > :not([role='menuitem']) {
+  display: none;
 }
 
 /*
@@ -283,10 +262,38 @@ html {
   --flow-content: 960px;
 
   display: grid;
+  /*
+   * The left gutter is the only asymmetric part: it never drops below `--flow-rail-gutter`,
+   * which the create flow sets to the width its step rail needs (RAIL_GUTTER in that page).
+   * Both gutters are still `1fr`, so while there is room for one the column stays centred in
+   * the window and the rail simply sits in the space to its left. Below that the column
+   * narrows rather than sliding under the rail. Anything else using `.flow-grid` never sets
+   * the property and keeps the old symmetric 24px.
+   */
   grid-template-columns:
-    [full-start] minmax(24px, 1fr)
-    [content-start] min(var(--flow-content), 100% - 48px) [content-end]
-    minmax(24px, 1fr) [full-end];
+    [full-start] minmax(var(--flow-rail-gutter, 24px), 1fr)
+    [content-start] min(var(--flow-content), 100% - var(--flow-rail-gutter, 24px) - 24px)
+    [content-end] minmax(24px, 1fr) [full-end];
+}
+
+/*
+ * The create flow's step rail (StepRail.tsx), in the gutter that `--flow-rail-gutter` holds
+ * open for it. Positioned rather than laid out beside the content, because node 4853:101733
+ * keeps the content column centred in the window — a rail in flow would push it right, and
+ * push the footer's Exit off the edge the questions above it sit on.
+ *
+ * Absolute against the flow's content pane and not against the scroller inside it, so the
+ * rail stays where it is while the questions scroll past.
+ *
+ * `top` is the step grid's own top padding less the 6px StepperV2 keeps above its first
+ * circle, which is what lines that circle up with the centre of the heading beside it. The
+ * grid's own padding is `pt-8` (32px) in index.tsx — change one and change both.
+ */
+.flow-rail {
+  position: absolute;
+  top: 26px;
+  left: 28px;
+  z-index: 1;
 }
 
 /* Every child sits in the measured column unless it says otherwise. */
@@ -311,7 +318,7 @@ html {
 }
 
 /*
- * The Fields step's version 3 (fields-layout.tsx) takes a 1200px measure instead of 960.
+ * The Fields step's versions 3 and 4 (fields-layout.tsx) take a 1200px measure instead of 960.
  *
  * Applied to every `.flow-grid` while the step grid is marked wide, not to the step grid
  * alone: the footer bar is a `.flow-grid` of its own outside it, and this keeps Exit and the
