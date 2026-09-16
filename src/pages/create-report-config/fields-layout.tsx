@@ -6,12 +6,15 @@ import type { CSSProperties, ReactNode } from 'react'
  * `v2` — the vocabulary and "Add custom column" first, the table last.
  * `v3` — v2's order on a 1200px step, everything on the table's left edge, and left/right
  *        buttons at the table's top right.
+ * `v4` — v1's order and chrome (table first, no arrows) on v3's 1200px step.
+ * `v5` — v4, with "Add custom column" moved out of the step heading and into the container,
+ *        below the chips.
  */
-export type FieldsLayoutVersion = 'v1' | 'v2' | 'v3'
+export type FieldsLayoutVersion = 'v1' | 'v2' | 'v3' | 'v4' | 'v5'
 
 export type FieldsLayout = {
   version: FieldsLayoutVersion
-  /** Whether the step takes the wide 1200px measure (version 3) — see index.css. */
+  /** Whether the step takes the wide 1200px measure (versions 3 and 4) — see index.css. */
   wide: boolean
   /**
    * Goes on the step's grid element. `rowGap` is the grid's own gap between the heading and
@@ -44,7 +47,9 @@ const RESET_ACTION = 'resetToCode'
 
 /**
  * The Fields step's dial panel: which layout version to draw, and every vertical gap on the
- * page. Defaults are the values the page shipped with, so an untouched panel changes nothing.
+ * page. Defaults are the tuned values — version 4, with 32px from the table to the fields and
+ * from the fields to "Add custom column" — so these, not the CSS fallbacks in FieldsStep, are
+ * what an untouched panel draws.
  *
  * A render-prop component rather than a hook called in index.tsx, because the panel should
  * exist only on this step. DialKit removes a panel from its list when the component that
@@ -61,15 +66,17 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
           { value: 'v1', label: 'Version 1 — table first' },
           { value: 'v2', label: 'Version 2 — fields first' },
           { value: 'v3', label: 'Version 3 — 1200px, table arrows' },
+          { value: 'v4', label: 'Version 4 — 1200px, table first' },
+          { value: 'v5', label: 'Version 5 — v4, add button below chips' },
         ],
-        default: 'v1',
+        default: 'v4',
       },
       spacing: {
         titleToDescription: [8, 0, 48, 2],
         headerToContent: [32, 0, 120, 4],
-        tableToFields: [16, 0, 96, 4],
+        tableToFields: [32, 0, 96, 4],
         betweenTagRows: [12, 0, 40, 2],
-        fieldsToAddColumn: [16, 0, 64, 4],
+        fieldsToAddColumn: [32, 0, 64, 4],
       },
       [RESET_ACTION]: { type: 'action', label: 'Reset to code defaults' },
     },
@@ -95,9 +102,15 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
 
   return children({
     // Narrowed by hand: DialKit types a select as a plain string, and a stale stored value
-    // from a version that no longer exists should fall back to the original layout.
-    version: values.version === 'v2' || values.version === 'v3' ? values.version : 'v1',
-    wide: values.version === 'v3',
+    // from a version that no longer exists should fall back to the default layout.
+    version:
+      values.version === 'v1' ||
+      values.version === 'v2' ||
+      values.version === 'v3' ||
+      values.version === 'v5'
+        ? values.version
+        : 'v4',
+    wide: values.version === 'v3' || values.version === 'v4' || values.version === 'v5',
     style: {
       rowGap: `${spacing.headerToContent}px`,
       '--step-heading-gap': `${spacing.titleToDescription}px`,

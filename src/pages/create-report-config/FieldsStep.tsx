@@ -3,16 +3,28 @@ import {
   ButtonV2Size,
   ButtonV2SubType,
   ButtonV2Type,
+  ColumnType,
+  DataTable,
   FOUNDATION_THEME,
   TagV2,
   TagV2Color,
   TagV2Size,
   TagV2SubType,
   TagV2Type,
+  type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { ChevronLeft, ChevronRight, GripVertical, Pencil, Plus, Trash } from 'lucide-react'
-import { useCallback, useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { PrimitiveText, font } from '../../primitives'
+import { AddCustomColumnModal } from './AddCustomColumnModal'
 import type { FieldsLayoutVersion } from './fields-layout'
 import { FIELD_TAGS, isFieldSelected,
   isVocabularyField, newFieldColumn, type FieldsAnswers } from './answers'
@@ -20,26 +32,27 @@ import { FIELD_TAGS, isFieldSelected,
 const { colors } = FOUNDATION_THEME
 
 /**
- * The remove glyph on a lit tag — a plain bin, since clicking it takes the column out of the
- * table. `Trash` rather than `Trash2`: at 12px the second one's inner strokes blur into a
- * filled shape.
+ * Blend's type tokens are unitless numbers; CSS variables need the unit. Typed loosely
+ * because Blend types them as CSSObject values, which include undefined.
+ */
+const px = (value: number | string | undefined) =>
+  typeof value === 'number' ? `${value}px` : value
+
+/**
+ * The remove glyph on a lit tag — the same 12px `X` Blend draws on its own dismissible tags
+ * (Tags/accessibility/TagAccessibility.tsx:381), so it reads as Blend's close affordance.
  *
  * gray[0], not inherited: ATTENTIVE/NEUTRAL paints its label gray[0] on a gray[950] chip
  * (tagV2.light.tokens.ts), so a currentColor glyph would be near-black on near-black.
  */
-const REMOVE_TAG_SLOT = { slot: <Trash size={12} color={colors.gray[0]} /> }
-
-/** Fixed tracks, per the design: 222px per column. */
-const COLUMN_WIDTH = 222
+const REMOVE_TAG_SLOT = { slot: <X size={12} color={colors.gray[0]} /> }
 
 /**
- * Row heights are set, not left to the content.
- *
- * 46/56/56 are the design's own row heights (node 4418:13411) — and they are heights in the
- * CSS sense here, borders included, because Tailwind's Preflight sets border-box globally
- * while Figma's auto-layout measures inside the stroke.
+ * Fixed tracks, per the design: 222px per column. Handed to DataTable as both `minWidth` and
+ * `maxWidth` — its column styles set `width: auto` between the two (utils.ts getColumnStyles),
+ * so pinning both ends is what holds a column at one width.
  */
-const HEADER_HEIGHT = 46
+const COLUMN_WIDTH = 222
 
 /**
  * How wide the table's viewport is allowed to get, and how narrow it settles at.
@@ -52,23 +65,29 @@ const HEADER_HEIGHT = 46
  * The floor is the flow's own content measure (`--flow-content`, index.css) rather than a
  * number of its own: a table that breaks out of the column must never end up narrower than
  * the column it broke out of, and a second copy of the width is how that drifts.
- *
- * The five default columns measure 5 x COLUMN_WIDTH = 1110, which sits inside this range:
- * a fresh flow shows all five with no scrollbar on a wide screen, and starts clipping as
- * the window narrows towards the floor.
  */
 const TABLE_MAX_WIDTH = 1200
+
+/**
+ * The empty state's frame. Dashed, not solid: it stands in for a table that does not exist
+ * yet, and a dashed stroke reads as a temporary placeholder where a solid one reads as a
+ * finished container — the same stroke as FiltersStep's empty state. gray[300] rather than
+ * the table's gray[150], because the gaps in a dash make the same colour read lighter.
+ */
+const EMPTY_FRAME = `1px dashed ${colors.gray[300]}`
 
 /** How far the clipped edge fades out to signal there is more table past it. */
 const EDGE_FADE = 40
 
-/** Scrollbar colours for index.css, which cannot read a JS token itself (rule 1). */
-const SCROLLBAR = {
-  '--table-scroll-track': colors.gray[50],
-  '--table-scroll-thumb': colors.gray[300],
-  '--table-scroll-thumb-hover': colors.gray[400],
-} as CSSProperties
-const RULE = `1px solid ${colors.gray[150]}`
+/** The letter row's height, per the design (node 4418:13411). */
+const LETTER_ROW_HEIGHT = 56
+
+/**
+ * The whole DataTable at rest: its 2px outer inset, 1px frame, 46px header and the three
+ * empty rows with their dividers — measured, since none of it is a prop. The empty state
+ * matches it, plus the letter row, so clearing the last column does not yank the tags up.
+ */
+const TABLE_HEIGHT = 210
 
 /**
  * Spreadsheet labels — A…Z, then AA, AB, so a 27th column still reads sensibly.
@@ -87,144 +106,156 @@ function columnLetter(index: number) {
 }
 
 /**
- * The header cell's title, which becomes an input on click.
- *
- * blend-gap: no inline-editable table header. TextInputV2 is the nearest component but
- * carries its own label slot and container height, which cannot fit the design's 46px
- * header row — so the input is drawn here and styled to match the text it replaces.
- * Committing on blur and Enter, abandoning on Escape.
+ * Empty rows — the table previews columns, not data. Enough of them that the body reads as a
+ * table: DataTable draws a rule between rows, and one row has no "between".
  */
+const PLACEHOLDER_ROW_COUNT = 3
+
+type FieldRow = Record<string, unknown>
+
 /**
- * Editing is controlled from the header rather than owned here, because two things open it:
- * the title itself, and the pencil beside it. One `editing` flag in the parent is what keeps
- * those two in agreement — a second, internal source of truth would let the pencil open a
- * field the title thinks is closed.
- *
- * The draft stays local: it is scratch text that only matters while the field is open, and
- * it is seeded from `title` on the way in.
+ * Blank on purpose. A renderCell is required rather than just leaving the value out:
+ * DataTable draws its own "-" for an empty value, and only a renderCell skips that.
  */
-function EditableTitle({
-  title,
-  onCommit,
-  editing,
-  onEditingChange,
-}: {
-  title: string
-  onCommit: (next: string) => void
-  editing: boolean
-  onEditingChange: (editing: boolean) => void
-}) {
-  const [draft, setDraft] = useState<string | null>(null)
-
-  // Adjust-state-while-rendering (AGENTS.md rule 14's shape, for state rather than motion):
-  // seeding the draft in an effect would render one frame of an empty input first.
-  if (editing && draft === null) setDraft(title)
-  if (!editing && draft !== null) setDraft(null)
-
-  if (!editing) {
-    return (
-      <button
-        type="button"
-        onClick={() => onEditingChange(true)}
-        title="Rename column"
-        className="flex-1 cursor-text overflow-hidden border-none bg-transparent p-0 text-left text-ellipsis whitespace-nowrap"
-        style={{
-          ...font(FOUNDATION_THEME.font.size.body.sm),
-          fontWeight: FOUNDATION_THEME.font.weight[600],
-          color: colors.gray[400],
-        }}
-      >
-        {title}
-      </button>
-    )
-  }
-
-  const commit = () => {
-    // An all-whitespace name would leave a nameless header, so it reverts instead.
-    onCommit((draft ?? '').trim() === '' ? title : (draft ?? '').trim())
-    onEditingChange(false)
-  }
-
-  return (
-    <input
-      autoFocus
-      value={draft ?? title}
-      aria-label="Column name"
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={commit}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') commit()
-        if (event.key === 'Escape') onEditingChange(false)
-      }}
-      className="w-full min-w-0 flex-1 border-none bg-transparent p-0 outline-none"
-      style={{
-        ...font(FOUNDATION_THEME.font.size.body.sm),
-        fontWeight: FOUNDATION_THEME.font.weight[600],
-        color: colors.gray[700],
-      }}
-    />
-  )
-}
+const emptyCell = () => null
 
 /**
  * Step 3 — the report's columns, drawn as the table they will become.
  *
- * Laid out as a row of column stacks rather than a `<table>`: every control here is
- * per-column (rename, delete) and the letter rail sits outside the card, both of which a
- * table's row-major markup fights. Widths are fixed, so the table simply grows wider as
- * columns are added and scrolls inside its own container.
+ * Blend's DataTable, so scrolling, reordering, renaming and deleting are all the table's own:
+ * it scrolls sideways inside its own container, drags columns by the grip it draws on each
+ * header, and puts Rename and Delete in the header's ⋮ menu. It keeps the column order in
+ * state of its own and reports changes back, so the answers here stay the one source of truth
+ * and the table is re-fed from them.
  */
 export function FieldsStep({
   answers,
   onChange,
   version = 'v1',
+  addingColumn,
+  onAddingColumnChange,
 }: {
   answers: FieldsAnswers
   onChange: (next: FieldsAnswers) => void
   /** Which arrangement to draw — see FieldsLayoutDials. Defaults to the original. */
   version?: FieldsLayoutVersion
+  /**
+   * Whether the "Add custom column" modal is open. Owned by the page, because the button
+   * that opens it sits in the step heading, which the page draws.
+   */
+  addingColumn: boolean
+  onAddingColumnChange: (open: boolean) => void
 }) {
   const { columns } = answers
-  const setColumns = (next: typeof columns) => onChange({ columns: next })
+  const setColumns = (next: typeof columns) => onChange({ ...answers, columns: next })
 
   /**
-   * Which column's name is open for editing, by id — one at a time, and lifted here because
-   * two controls open it (the title and the pencil beside it) and a third closes it
-   * (committing). Keyed on id rather than index so a reorder mid-edit does not move the
-   * open field to a different column.
+   * Keyed on the column's `id` rather than its title: titles are free text, and two columns
+   * can legitimately carry the same one.
+   *
+   * Memoised on `columns` because DataTable re-syncs its internal column state in an effect
+   * on this array's identity (DataTable.tsx:215-274) — a fresh array every render would run
+   * that merge on every keystroke elsewhere on the page.
    */
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const tableColumns = useMemo<ColumnDefinition<FieldRow>[]>(
+    () =>
+      columns.map(({ id, title }) => ({
+        field: id,
+        header: title,
+        type: ColumnType.TEXT,
+        // Left sortable on purpose: DataTable only draws a header's ⋮ menu for a column that
+        // can sort or filter (TableHeader/index.tsx:1114-1117), and that menu is where Rename
+        // lives. The Sort rows it brings along are hidden in index.css, leaving Rename alone.
+        isSortable: true,
+        minWidth: `${COLUMN_WIDTH}px`,
+        maxWidth: `${COLUMN_WIDTH}px`,
+        renderCell: emptyCell,
+      })),
+    [columns],
+  )
 
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [overIndex, setOverIndex] = useState<number | null>(null)
+  const tableData = useMemo<FieldRow[]>(
+    () => Array.from({ length: PLACEHOLDER_ROW_COUNT }, (_, index) => ({ id: `row-${index}` })),
+    [],
+  )
+
+  /**
+   * DataTable's own scroll container. It exposes no ref, so it is found the way DataTable
+   * finds it itself — the `<table>`'s parent (TableHeader/index.tsx:1185-1186).
+   */
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const getScroller = () =>
+    wrapperRef.current?.querySelector('table')?.parentElement ?? null
+
+  /** Ties version 3's arrows to the table they move, for assistive tech. */
+  const scrollerId = useId()
 
   /**
    * Which edges are currently cutting content off. Only those fade — a fade on an edge with
-   * nothing past it would promise a column that is not there.
+   * nothing past it would promise a column that is not there — and version 3's arrows disable
+   * against the same state.
    */
-  const scrollRef = useRef<HTMLDivElement>(null)
-  /** Ties version 3's arrows to the scroller they move, for assistive tech. */
-  const scrollerId = useId()
   const [clipped, setClipped] = useState({ left: false, right: false })
 
-  const syncClipped = useCallback(() => {
-    const el = scrollRef.current
-    if (!el) return
+  /**
+   * The letter row, drawn above DataTable rather than inside it: the header row is Blend's,
+   * with no slot above the titles. So it has to track the table by hand — each letter takes
+   * its header cell's measured width and offset, and the row slides with the table's scroll.
+   *
+   * Measured rather than assumed 222px: DataTable lays the table out itself, and a letter that
+   * drifts off its column is worse than no letter.
+   */
+  const railRef = useRef<HTMLDivElement>(null)
+  const [letterTracks, setLetterTracks] = useState<{ offset: number; widths: number[] }>({
+    offset: 0,
+    widths: [],
+  })
+
+  const syncTable = useCallback(() => {
+    const wrapper = wrapperRef.current
+    const table = wrapper?.querySelector('table')
+    const el = table?.parentElement
+    if (!wrapper || !table || !el) return
+
     const furthest = el.scrollWidth - el.clientWidth
     // A pixel of slack: fractional scroll offsets otherwise leave the end fade on forever.
-    setClipped({ left: el.scrollLeft > 1, right: el.scrollLeft < furthest - 1 })
+    const left = el.scrollLeft > 1
+    const right = el.scrollLeft < furthest - 1
+    setClipped((prev) => (prev.left === left && prev.right === right ? prev : { left, right }))
+
+    // Written straight to the row's style rather than through state: this runs on every
+    // scroll event, and a re-render per frame of scrolling buys nothing.
+    if (railRef.current) railRef.current.style.transform = `translateX(${-el.scrollLeft}px)`
+
+    // Offsets are measured at scroll 0 — the table's own left edge inside the wrapper, which
+    // is DataTable's inset plus its frame — so they hold whatever the scroll position.
+    const origin = wrapper.getBoundingClientRect().left
+    const cells = [...table.querySelectorAll('th')]
+    const offset = Math.round(table.getBoundingClientRect().left + el.scrollLeft - origin)
+    const widths = cells.map((cell) => cell.getBoundingClientRect().width)
+    setLetterTracks((prev) =>
+      prev.offset === offset && prev.widths.join() === widths.join() ? prev : { offset, widths },
+    )
   }, [])
 
   // Re-measured on resize as well as on scroll, since the container narrowing can clip an
-  // edge without the scroll position moving at all.
+  // edge without the scroll position moving at all — and the table is observed too, because
+  // it grows when DataTable adds a column in its own effect, after this one has run.
   useEffect(() => {
-    const el = scrollRef.current
-    if (!el) return
-    syncClipped()
-    const observer = new ResizeObserver(syncClipped)
+    const table = wrapperRef.current?.querySelector('table')
+    const el = table?.parentElement
+    if (!table || !el) return
+    syncTable()
+    el.addEventListener('scroll', syncTable, { passive: true })
+    const observer = new ResizeObserver(syncTable)
     observer.observe(el)
-    return () => observer.disconnect()
-  }, [syncClipped, columns.length])
+    observer.observe(table)
+    return () => {
+      el.removeEventListener('scroll', syncTable)
+      observer.disconnect()
+    }
+    // columns.length: going to and from zero columns mounts and unmounts the table.
+  }, [syncTable, columns.length])
 
   /**
    * Set when a column is appended, read once the new column has actually rendered.
@@ -239,37 +270,28 @@ export function FieldsStep({
   useEffect(() => {
     if (!scrollToEnd.current) return
     scrollToEnd.current = false
-    const el = scrollRef.current
-    if (!el) return
-    el.scrollTo({
-      left: el.scrollWidth,
-      // The scroll is the whole point — it is what shows you where the column landed — so
-      // reduced motion gets the jump rather than nothing.
-      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    // One frame on: DataTable adds the column in its own effect, after this one has run.
+    const frame = requestAnimationFrame(() => {
+      const el = getScroller()
+      if (!el) return
+      el.scrollTo({
+        left: el.scrollWidth,
+        // The scroll is the whole point — it is what shows you where the column landed — so
+        // reduced motion gets the jump rather than nothing.
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+          ? 'auto'
+          : 'smooth',
+      })
     })
+    return () => cancelAnimationFrame(frame)
   }, [columns])
 
   /** New columns always land on the right, so appending is always worth scrolling to. */
-  const appendColumn = (title?: string) => {
+  const appendColumn = (title?: string, defaultValue?: string) => {
     scrollToEnd.current = true
-    setColumns([...columns, newFieldColumn(title)])
+    setColumns([...columns, newFieldColumn(title, defaultValue)])
   }
 
-  const move = (from: number, to: number) => {
-    if (from === to || to < 0 || to >= columns.length) return
-    const next = [...columns]
-    next.splice(to, 0, ...next.splice(from, 1))
-    setColumns(next)
-  }
-
-  const endDrag = () => {
-    setDragIndex(null)
-    setOverIndex(null)
-  }
-
-
-  /** The table, with its letter rail. Keyed so a version switch reorders it rather than
-      remounting it — it keeps its scroll position and any column mid-rename. */
   /**
    * Version 3's arrows. Steps by whole columns — one fewer than fit, so the column at the
    * leading edge stays in view as context — and lands on a column boundary, so the table never
@@ -277,7 +299,7 @@ export function FieldsStep({
    * prefers reduced motion.
    */
   const scrollColumns = (direction: -1 | 1) => {
-    const el = scrollRef.current
+    const el = getScroller()
     if (!el) return
     const page = Math.max(1, Math.floor(el.clientWidth / COLUMN_WIDTH) - 1) * COLUMN_WIDTH
     const from = Math.round(el.scrollLeft / COLUMN_WIDTH) * COLUMN_WIDTH
@@ -288,7 +310,7 @@ export function FieldsStep({
   /**
    * Version 3's scroll controls, top right of the table. Disabled at either end rather than
    * hidden, so the pair never jumps in and out as columns are added — when every column fits,
-   * both rest disabled. `clipped` is the same state that drives the edge fades.
+   * both rest disabled.
    */
   const tableArrows = (
     <div className="flex items-center justify-end gap-2">
@@ -316,186 +338,160 @@ export function FieldsStep({
   )
 
   const table = (
-    // The key sits on this wrapper, not the scroller, so switching versions reorders the
-    // block without remounting the scroller — and the arrows' slot before it is always
-    // present (as `false` when hidden), so it keeps its place and its scroll position.
+    // Keyed so a version switch reorders the block rather than remounting the table — it
+    // keeps its scroll position and any column mid-rename.
     <div key="table" className="flex w-full flex-col gap-2">
       {version === 'v3' && tableArrows}
       <div
         id={scrollerId}
-        ref={scrollRef}
-        onScroll={syncClipped}
-        className="fields-table w-full"
+        ref={wrapperRef}
+        // The fade is on this wrapper, not on DataTable's scroller: it has to cover the letter
+        // row and the table's frame together, and the wrapper is the one element that holds
+        // both without reaching into Blend's markup. Widths come from `clipped` — index.css.
+        className="fields-table w-full min-w-0"
         style={
           {
-            ...SCROLLBAR,
             '--fade-left': clipped.left ? `${EDGE_FADE}px` : '0px',
             '--fade-right': clipped.right ? `${EDGE_FADE}px` : '0px',
+            // Column titles at gray[700] rather than DataTable's muted default — index.css.
+            '--header-color': colors.gray[700],
           } as CSSProperties
         }
       >
+        {columns.length > 0 && (
+          <div className="overflow-hidden" aria-hidden="true">
+            <div
+              ref={railRef}
+              className="flex w-max"
+              style={{ paddingLeft: letterTracks.offset }}
+            >
+              {columns.map((column, index) => (
+                <div
+                  key={column.id}
+                  className="flex items-center justify-center"
+                  style={{
+                    width: letterTracks.widths[index] ?? COLUMN_WIDTH,
+                    height: LETTER_ROW_HEIGHT,
+                  }}
+                >
+                  <PrimitiveText
+                    {...font(FOUNDATION_THEME.font.size.body.md)}
+                    color={colors.gray[400]}
+                  >
+                    {columnLetter(index)}
+                  </PrimitiveText>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {columns.length === 0 ? (
-          // Same height as the full table — letter rail included — so clearing does not
-          // yank the tag row up 56px and put a different tag under the cursor.
+          // DataTable with no columns still draws its frame around nothing, so the empty
+          // state is this step's own. Same height as the table plus its letter row.
           <div
             className="flex w-full items-center justify-center"
-            style={{ height: 158, border: RULE, borderRadius: 12 }}
+            style={{ height: LETTER_ROW_HEIGHT + TABLE_HEIGHT, border: EMPTY_FRAME, borderRadius: FOUNDATION_THEME.border.radius[12] }}
           >
             <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.md)} color={colors.gray[400]}>
               No columns yet — pick a field below, or add a custom column.
             </PrimitiveText>
           </div>
         ) : (
-          <div className="flex w-max">
-            {columns.map((column, index) => {
-              const first = index === 0
-              const last = index === columns.length - 1
-              const isDropTarget = overIndex === index && dragIndex !== null && dragIndex !== index
-              return (
-                <div
-                  key={column.id}
-                  data-column
-                  className="group flex flex-col"
-                  style={{
-                    width: COLUMN_WIDTH,
-                    opacity: dragIndex === index ? 0.4 : 1,
-                  }}
-                  onDragOver={(event) => {
-                    if (dragIndex === null) return
-                    // Without preventDefault the browser refuses the drop outright.
-                    event.preventDefault()
-                    event.dataTransfer.dropEffect = 'move'
-                    setOverIndex(index)
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault()
-                    if (dragIndex !== null) move(dragIndex, index)
-                    endDrag()
-                  }}
-                >
-                  <div className="flex h-14 items-center justify-center">
-                    <PrimitiveText
-                      {...font(FOUNDATION_THEME.font.size.body.md)}
-                      color={colors.gray[400]}
-                    >
-                      {columnLetter(index)}
-                    </PrimitiveText>
-                  </div>
-
-                  {/* The card's outer edges belong to whichever columns are on the ends, so
-                    the rightmost one carries the right rule and both right corners. */}
-                  <div
-                    className="flex items-center gap-1.5 px-4"
-                    style={{
-                      height: HEADER_HEIGHT,
-                      backgroundColor: isDropTarget ? colors.primary[50] : colors.gray[25],
-                      borderTop: RULE,
-                      borderLeft: RULE,
-                      borderBottom: RULE,
-                      borderRight: last ? RULE : undefined,
-                      borderTopLeftRadius: first ? 12 : undefined,
-                      borderTopRightRadius: last ? 12 : undefined,
-                      transition: 'background-color var(--flow-feedback) var(--flow-feedback-ease)',
-                    }}
-                  >
-                    {/* The handle is what drags, not the whole header — the title beside it has
-                      to stay clickable to rename. Arrow keys move the column too, since native
-                      drag and drop is mouse-only. */}
-                    <button
-                      type="button"
-                      draggable
-                      aria-label={`Reorder ${column.title}`}
-                      className="flex cursor-grab items-center border-none bg-transparent p-0 active:cursor-grabbing"
-                      onDragStart={(event) => {
-                        setDragIndex(index)
-                        event.dataTransfer.effectAllowed = 'move'
-                        event.dataTransfer.setData('text/plain', column.id)
-                        // Drag the whole column, not the 14px grip that started it.
-                        const stack = event.currentTarget.closest('[data-column]')
-                        if (stack) event.dataTransfer.setDragImage(stack, 24, 24)
-                      }}
-                      onDragEnd={endDrag}
-                      onKeyDown={(event) => {
-                        if (event.key === 'ArrowLeft') move(index, index - 1)
-                        if (event.key === 'ArrowRight') move(index, index + 1)
-                      }}
-                    >
-                      <GripVertical size={14} color={colors.gray[400]} />
-                    </button>
-                    <EditableTitle
-                      title={column.title}
-                      editing={editingId === column.id}
-                      onEditingChange={(editing) => setEditingId(editing ? column.id : null)}
-                      onCommit={(title) =>
-                        setColumns(columns.map((c) => (c.id === column.id ? { ...c, title } : c)))
-                      }
-                    />
-                    {/* Persistent, not hover-revealed: the affordance is the same on every
-                        header at rest, so renaming does not depend on discovering that a
-                        control appears under the pointer. It duplicates the title's own
-                        click rather than adding a second behaviour — two ways into the same
-                        edit, which is why both drive the one `editingId`. */}
-                    <button
-                      type="button"
-                      aria-label={`Rename ${column.title}`}
-                      title="Rename column"
-                      onClick={() => setEditingId(column.id)}
-                      className="flex cursor-pointer items-center border-none bg-transparent p-0"
-                    >
-                      <Pencil size={14} color={colors.gray[400]} />
-                    </button>
-                  </div>
-
-                  <div
-                    className="flex h-14 items-center px-4"
-                    style={{
-                      borderLeft: RULE,
-                      borderBottom: RULE,
-                      borderRight: last ? RULE : undefined,
-                      borderBottomLeftRadius: first ? 12 : undefined,
-                      borderBottomRightRadius: last ? 12 : undefined,
-                    }}
-                  >
-                    {/* The design's empty-value placeholder: a rule where data will sit. */}
-                    <div
-                      style={{
-                        height: 1,
-                        width: 140,
-                        backgroundColor: colors.gray[200],
-                      }}
-                    />
-                  </div>
-                </div>
+          <DataTable
+            data={tableData}
+            columns={tableColumns}
+            idField="id"
+            // The step heading already says what this is.
+            showHeader={false}
+            // One placeholder row paginates nothing.
+            showFooter={false}
+            // Columns are chosen by the tags below, not by the table's own column picker —
+            // which would also add a sticky settings column on the right.
+            enableColumnManager={false}
+            enableFiltering={false}
+            enableColumnReordering
+            onColumnReorder={(reordered) => {
+              const byId = new Map(columns.map((column) => [column.id, column]))
+              setColumns(
+                reordered.flatMap(({ field }) => byId.get(String(field)) ?? []),
               )
-            })}
-          </div>
+            }}
+            // Turns on the ⋮ menu's Rename, which edits the header in place. It also asks for a
+            // row-actions column, which `showActionsColumn` turns back off — the placeholder
+            // row has nothing to edit. No `onDeleteColumn`, so Delete stays out of the menu:
+            // the tags below are how a column leaves.
+            enableInlineEdit
+            showActionsColumn={false}
+            onHeaderChange={(field, next) =>
+              setColumns(
+                columns.map((column) =>
+                  column.id === String(field)
+                    ? // An all-whitespace name would leave a nameless header, so it reverts.
+                      // Either way a new array goes back, which re-feeds the table and puts
+                      // the kept title back over the blank DataTable already drew.
+                      { ...column, title: next.trim() === '' ? column.title : next.trim() }
+                    : column,
+                ),
+              )
+            }
+          />
         )}
       </div>
     </div>
   )
 
   /**
-   * Columns no vocabulary tag stands for — the ones made with "Add custom column". Derived
-   * from `columns`, not stored: rename one to a vocabulary name and it lights that tag
-   * instead of keeping its own.
+   * The custom vocabulary: every field made with "Add custom column", plus any column renamed
+   * to something no tag stands for (it has no stored field, so it is picked up from `columns`).
+   * One tag per name — matched the same case-insensitive way as the vocabulary.
    */
-  const customColumns = columns.filter(({ title }) => !isVocabularyField(title))
-
-  /** Keyed and removed by id rather than title: two custom columns can both be "<Title>". */
-  const customTag = (column: (typeof columns)[number]) => (
-    <TagV2
-      key={column.id}
-      text={column.title}
-      size={TagV2Size.SM}
-      subType={TagV2SubType.ROUNDED}
-      color={TagV2Color.NEUTRAL}
-      type={TagV2Type.ATTENTIVE}
-      aria-pressed={true}
-      title={`Remove ${column.title} from the table`}
-      rightSlot={REMOVE_TAG_SLOT}
-      onClick={() => setColumns(columns.filter(({ id }) => id !== column.id))}
-    />
+  const customTags = [
+    ...answers.customFields,
+    ...columns
+      .filter(({ title }) => !isVocabularyField(title))
+      .map(({ title, defaultValue }) => ({ title, defaultValue })),
+  ].filter(
+    (field, index, all) =>
+      all.findIndex((other) => other.title.trim().toLowerCase() === field.title.trim().toLowerCase()) ===
+      index,
   )
+
+  /**
+   * A custom tag toggles like a vocabulary one: lit, its ✕ takes the column out of the table
+   * and leaves the tag pale; pale, a click puts the column back with its default value.
+   */
+  const customTag = (field: (typeof customTags)[number]) => {
+    const selected = isFieldSelected(columns, field.title)
+    return (
+      <TagV2
+        key={field.title}
+        text={field.title}
+        size={TagV2Size.SM}
+        subType={TagV2SubType.ROUNDED}
+        color={TagV2Color.NEUTRAL}
+        type={selected ? TagV2Type.ATTENTIVE : TagV2Type.NO_FILL}
+        aria-pressed={selected}
+        title={selected ? `Remove ${field.title} from the table` : `Add ${field.title} to the table`}
+        rightSlot={selected ? REMOVE_TAG_SLOT : undefined}
+        onClick={() =>
+          selected
+            ? onChange({
+                // Kept as a field even if it only existed as a renamed column, so deselecting
+                // never makes a tag vanish.
+                customFields: answers.customFields.some(
+                  ({ title }) => title.trim().toLowerCase() === field.title.trim().toLowerCase(),
+                )
+                  ? answers.customFields
+                  : [...answers.customFields, field],
+                columns: columns.filter(
+                  ({ title }) => title.trim().toLowerCase() !== field.title.trim().toLowerCase(),
+                ),
+              })
+            : appendColumn(field.title, field.defaultValue)
+        }
+      />
+    )
+  }
 
   /**
    * The field vocabulary and "Add custom column", as one group held to the flow's content
@@ -556,7 +552,7 @@ export function FieldsStep({
             The rule and the first custom tag wrap as one unit. Loose in the flex-wrap row,
             the rule could end a line on its own with the custom tags starting the next,
             dividing nothing. */}
-        {customColumns.length > 0 && (
+        {customTags.length > 0 && (
           <span className="flex items-center gap-x-3">
             {/* blend-gap: Blend 0.0.37 ships no divider or separator component, so this is a
                 1px rule on a token colour. */}
@@ -566,50 +562,123 @@ export function FieldsStep({
               className="h-4 w-px"
               style={{ backgroundColor: colors.gray[300] }}
             />
-            {customTag(customColumns[0])}
+            {customTag(customTags[0])}
           </span>
         )}
-        {customColumns.slice(1).map((column) => customTag(column))}
+        {customTags.slice(1).map((field) => customTag(field))}
+
+        {/* Last in the row, so it reads as acting on every tag before it. INLINE is Blend's
+            link button — no padding or fill — and SECONDARY keeps it neutral (gray[600]) so it
+            doesn't compete with the tags. Only there when there is something to clear.
+
+            The underline is on the wrapper because ButtonV2 omits className; it targets the
+            label (`[data-id]`) rather than the button, since a flex item doesn't reliably
+            inherit a parent's text-decoration. Keyboard focus gets it too.
+
+            Type is the chips' own: TagV2 sm reads font.fontSize[12] / font.lineHeight[18]
+            (tagV2.light.tokens.ts:162,175), where a small ButtonV2 would be 14px. No ButtonV2
+            prop reaches its label's size, so the tokens are handed to the label as variables.
+            Weight needs nothing — both are already 500. */}
+        {/* Deselects everything, custom tags included — but custom tags stay in the row, pale,
+            because customFields outlives the columns. */}
+        {columns.length > 0 && (
+          <span
+            className="flex self-center [&_[data-id]]:!text-[length:var(--link-size)] [&_[data-id]]:!leading-[var(--link-leading)] [&_button:focus-visible_[data-id]]:underline [&_button:hover_[data-id]]:underline"
+            style={
+              {
+                '--link-size': px(FOUNDATION_THEME.font.fontSize[12]),
+                '--link-leading': px(FOUNDATION_THEME.font.lineHeight[18]),
+              } as CSSProperties
+            }
+          >
+            <ButtonV2
+              buttonType={ButtonV2Type.SECONDARY}
+              size={ButtonV2Size.SMALL}
+              subType={ButtonV2SubType.INLINE}
+              text="Clear all"
+              onClick={() =>
+                // Renamed-only custom columns are folded into customFields first, so clearing
+                // leaves every custom tag in place.
+                onChange({
+                  customFields: customTags,
+                  columns: [],
+                })
+              }
+            />
+          </span>
+        )}
       </div>
 
-      {/* Below the vocabulary, on the tags' own left edge. The two are one gesture read top
-          to bottom: pick a column that exists, or — if none of them is what you want — make
-          one. */}
-      <div className="flex w-full items-center">
-        <ButtonV2
-          buttonType={ButtonV2Type.SECONDARY}
-          size={ButtonV2Size.SMALL}
-          text="Add custom column"
-          leftSlot={{ slot: <Plus size={14} /> }}
-          onClick={() => appendColumn()}
+      {/* The "Add custom column" button lives in the step heading (index.tsx) — except in
+          version 5, which draws it here, below the chips on the table's right edge. The modal
+          stays here either way, beside the answers it writes. */}
+      {version === 'v5' && (
+        <div className="flex w-full items-center justify-end">
+          <ButtonV2
+            buttonType={ButtonV2Type.SECONDARY}
+            size={ButtonV2Size.SMALL}
+            text="Add custom column"
+            leftSlot={{ slot: <Plus size={14} /> }}
+            onClick={() => onAddingColumnChange(true)}
+          />
+        </div>
+      )}
+      <div className="contents">
+        <AddCustomColumnModal
+          isOpen={addingColumn}
+          onClose={() => onAddingColumnChange(false)}
+          onAdd={({ title, defaultValue }) => {
+            scrollToEnd.current = true
+            onChange({
+              // Remembered as a field, so the tag survives being deselected later. A name that
+              // is already a tag just adds the column.
+              customFields:
+                isVocabularyField(title) ||
+                customTags.some((field) => field.title.trim().toLowerCase() === title.toLowerCase())
+                  ? answers.customFields
+                  : [...answers.customFields, { title, defaultValue }],
+              columns: [...columns, newFieldColumn(title, defaultValue)],
+            })
+          }}
         />
       </div>
     </div>
   )
 
+  const wide = version === 'v3' || version === 'v4' || version === 'v5'
+
   return (
     // In versions 1 and 2, `flow-full` puts this in the flow grid's wide track (index.css): the
     // table is the one thing that does not fit the content column, so it breaks out rather
-    // than widening the column for every other step. Version 3 widens the column itself to
-    // 1200px instead, so this stays in the column at full width and the table shares the
+    // than widening the column for every other step. Versions 3 and 4 widen the column itself
+    // to 1200px instead, so this stays in the column at full width and the table shares the
     // heading's left edge at every viewport — a breakout would run edge to edge below 1248px.
     <div
-      className={`${version === 'v3' ? '' : 'flow-full '}flex flex-col items-end`}
+      className={`${wide ? '' : 'flow-full '}flex flex-col items-end`}
       style={{
         // Overrides .flow-full's own `width: max-content` — this element is sized by the
         // window it wants onto the table, not by the table's content.
-        width:
-          version === 'v3' ? '100%' : `clamp(var(--flow-content), 100%, ${TABLE_MAX_WIDTH}px)`,
+        width: wide ? '100%' : `clamp(var(--flow-content), 100%, ${TABLE_MAX_WIDTH}px)`,
         // Restated because an inline `width` at the floor would otherwise stand on a 375px
         // viewport and push the page sideways. `max-width` beats `width`, so below MIN the
         // table takes the space there is and scrolls its own content instead.
         maxWidth: '100%',
         rowGap: 'var(--fields-table-gap, 16px)',
+        // The table and its tags framed as one card. Radius 12 is the design language's card
+        // radius; border-box (Preflight) keeps the padding inside the width above.
+        border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+        borderRadius: FOUNDATION_THEME.border.radius[12],
+        padding: FOUNDATION_THEME.unit[16],
+        // 8px more below the last row of chips, which otherwise reads tight against the frame.
+        paddingBottom: FOUNDATION_THEME.unit[24],
       }}
     >
-      {/* Version 1 reads table, then vocabulary. Versions 2 and 3 put the vocabulary first,
-          so the choice comes before its result. The gap between them is --fields-table-gap. */}
-      {version === 'v1' ? [table, vocabulary] : [vocabulary, table]}
+      {/* Versions 1 and 4 read table, then vocabulary. Versions 2 and 3 put the vocabulary
+          first, so the choice comes before its result. The gap between them is
+          --fields-table-gap. */}
+      {version === 'v1' || version === 'v4' || version === 'v5'
+        ? [table, vocabulary]
+        : [vocabulary, table]}
     </div>
   )
 }

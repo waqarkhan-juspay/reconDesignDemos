@@ -1,4 +1,5 @@
 import { Mail, Server, type LucideIcon } from 'lucide-react'
+import slackLogo from '../../assets/slack-logo.jpg'
 import type { ReportCategory, ReportFormat } from '../../report-config'
 import type { Option } from './options'
 
@@ -81,9 +82,20 @@ export const DAYS_OF_MONTH = [
  * revealed by ticking it.
  */
 export const EMAIL_CHANNEL = 'Email'
-export const DELIVERY_CHANNELS: { id: string; icon: LucideIcon }[] = [
+/** Carries a field of its own too — the channel to post to — revealed by ticking it. */
+export const SLACK_CHANNEL = 'Slack'
+/** Ticking it reveals a notice that no SFTP configuration exists yet. */
+export const SFTP_CHANNEL = 'SFTP'
+/**
+ * In display order: Email alone on the first row, the rest on the second (DeliveryStep).
+ *
+ * `icon` is a lucide glyph, or an image src for a brand mark lucide has no glyph for — Slack's
+ * logo is the asset exported from the design (node 4850:101706).
+ */
+export const DELIVERY_CHANNELS: { id: string; icon: LucideIcon | string }[] = [
   { id: EMAIL_CHANNEL, icon: Mail },
-  { id: 'SFTP', icon: Server },
+  { id: SLACK_CHANNEL, icon: slackLogo },
+  { id: SFTP_CHANNEL, icon: Server },
 ]
 
 export type DeliveryAnswers = {
@@ -101,6 +113,8 @@ export type DeliveryAnswers = {
   /** `null` until the "Cc" / "Bcc" link is pressed — the field only exists once asked for. */
   emailCc: string[] | null
   emailBcc: string[] | null
+  /** The Slack channel to post to, without its leading `#` — the field draws that. */
+  slackChannel: string
 }
 
 /**
@@ -121,6 +135,7 @@ export const EMPTY_DELIVERY: DeliveryAnswers = {
   emailTo: [],
   emailCc: null,
   emailBcc: null,
+  slackChannel: '',
 }
 
 export const isDeliveryComplete = ({
@@ -132,6 +147,7 @@ export const isDeliveryComplete = ({
   time,
   channels,
   emailTo,
+  slackChannel,
 }: DeliveryAnswers) =>
   name.trim() !== '' &&
   frequency !== null &&
@@ -143,7 +159,9 @@ export const isDeliveryComplete = ({
   channels.length > 0 &&
   // The To field is marked required in the design, so a ticked Email with nowhere to send
   // it does not count as answered.
-  (!channels.includes(EMAIL_CHANNEL) || emailTo.length > 0)
+  (!channels.includes(EMAIL_CHANNEL) || emailTo.length > 0) &&
+  // Channel Name is required in the design (node 4850:101705) for the same reason.
+  (!channels.includes(SLACK_CHANNEL) || slackChannel.trim() !== '')
 
 /**
  * Step 3 — the columns the report will carry (node 4418:6965).
@@ -151,20 +169,31 @@ export const isDeliveryComplete = ({
  * Each column keeps an id of its own because the title is editable and duplicable: keying
  * React off the title would make two columns called "<Title>" the same column.
  */
-export type FieldColumn = { id: string; title: string }
+/** `defaultValue` is set only on custom columns — the value every row carries in it. */
+export type FieldColumn = { id: string; title: string; defaultValue?: string }
 
 /** The default title a freshly inserted column carries until it is renamed. */
 export const NEW_COLUMN_TITLE = '<Title>'
 
 let nextColumnId = 0
-export const newFieldColumn = (title = NEW_COLUMN_TITLE): FieldColumn => ({
+export const newFieldColumn = (title = NEW_COLUMN_TITLE, defaultValue?: string): FieldColumn => ({
   id: `field-${(nextColumnId += 1)}`,
   title,
+  ...(defaultValue ? { defaultValue } : {}),
 })
 
-export type FieldsAnswers = { columns: FieldColumn[] }
+/** A field made with "Add custom column" — kept after its column leaves the table. */
+export type CustomField = { title: string; defaultValue?: string }
+
+/**
+ * `customFields` is the user's own vocabulary, beside FIELD_TAGS. It is stored rather than
+ * derived from `columns` because a custom tag has to survive being deselected: once its
+ * column is gone, nothing in `columns` remembers it existed.
+ */
+export type FieldsAnswers = { columns: FieldColumn[]; customFields: CustomField[] }
 
 export const EMPTY_FIELDS: FieldsAnswers = {
+  customFields: [],
   columns: [
     'Payment Entity Txn ID',
     'Merchant ID',

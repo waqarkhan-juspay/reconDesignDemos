@@ -12,8 +12,8 @@ import {
   ThemeProvider,
   TopbarV2,
 } from '@juspay/blend-design-system'
-import { CaretRight } from '@phosphor-icons/react'
-import { Fragment, useState, type CSSProperties } from 'react'
+import { Plus } from 'lucide-react'
+import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import tenantLogo from '../../assets/icons/tenant-logo.svg'
 import { TopbarStatusIcons } from '../../layout/topbar'
@@ -27,6 +27,7 @@ import { FieldsLayoutDials, type FieldsLayout } from './fields-layout'
 import { FiltersStep } from './FiltersStep'
 import { ReviewStep } from './ReviewStep'
 import { SetupStep } from './SetupStep'
+import { StepRail } from './StepRail'
 import {
   EMPTY_DELIVERY,
   EMPTY_FIELDS,
@@ -89,15 +90,17 @@ const STEPS: {
     description:
       'Pick a report type, choose which records to include, and decide how the data is presented.',
   },
-  { label: 'Delivery', title: 'Delivery and scheduling' },
+  {
+    label: 'Delivery',
+    title: 'Delivery and scheduling',
+    // Walks the step's own questions in order: the name, how often, then the channels.
+    description: 'Name your report, set how often it runs, and choose where it gets delivered.',
+  },
   {
     label: 'Fields',
     title: 'Customise your fields',
-    // The first sentence is node 4457:15485's; the second was rewritten in review, replacing
-    // the design's "Re arrange, edit, delete as per your wish!".
-    description:
-      'Select data from existing columns or add a custom column of your choice. ' +
-      'Re-arrange, edit, and delete columns that work for you!',
+    // Rewritten in review, replacing node 4457:15485's two sentences.
+    description: 'Arrange, rename or add a custom column field.',
   },
   {
     label: 'Filters',
@@ -124,12 +127,9 @@ const SUBMIT_LABEL = 'Submit for approval'
 /**
  * Measure for a step's description.
  *
- * 480 gives the Fields description one sentence per line — "…of your choice." /
- * "Re-arrange, edit, and delete…". Measured in InterDisplay 14px: anything from 460 to 499
- * breaks there; 400–459 splits the first sentence, and at 400 the last word ends up alone
- * on a third line, while 500 and up pulls "Re-arrange," onto the first line. 480 sits mid-
- * window so a rendering difference of a few pixels cannot move the break. Re-measure if the
- * copy or the body font changes — the window is only 40px wide.
+ * 480 was measured against the Fields step's old two-sentence description, to put one
+ * sentence on each line. Its current one-liner fits well inside it, so nothing depends on the
+ * exact number any more — re-measure if a step's copy grows long enough to wrap.
  */
 const DESCRIPTION_WIDTH = 480
 
@@ -145,56 +145,23 @@ const MOTION = {
   '--flow-feedback-ease': FEEDBACK_EASING,
 } as CSSProperties
 
-type StepNavigation = {
-  step: number
-  onNavigate: (target: number) => void
-}
+/**
+ * Space held clear down the left of the flow for the step rail, which is positioned rather
+ * than laid out (`.flow-rail` in index.css). `.flow-grid` reads it as the minimum width of
+ * its left gutter, so the content column stays centred while the window is wide enough for
+ * that, and gives ground on the left before it gives any to the rail.
+ *
+ * 160 = the rail's 28px inset, its 106px measured width, and enough air after it that the
+ * Fields step's 1200px measure (fields-layout.tsx) does not end up butted against it.
+ */
+const RAIL_GUTTER = { '--flow-rail-gutter': '160px' } as CSSProperties
 
 /**
- * TEMPORARY — every step is reachable, on request. Nothing gates the breadcrumb: no step is
- * disabled, and any label jumps straight to its step whether or not the ones before it have
- * been answered. To put the gate back, restore `canGoTo` (see the git history for this file)
- * and take `reachable` back into `disabled`, the cursor and the colour below.
- *
- * Dark therefore has to mean something else now. It used to mean *reachable*, which with
- * everything reachable would light the whole bar and say nothing; it now marks the step you
- * are standing on, which is the one thing left worth reading off it — and the same thing
- * `aria-current` already told a screen reader.
- *
- * The button is always rendered rather than swapped in: a label that changes element type
- * moves focus out from under the keyboard.
+ * The bar holds nothing but the flow's two ends now: the logo you leave by, and the app's
+ * status icons. Where a step breadcrumb used to sit in the middle, the vertical StepRail
+ * beside the content says the same thing with room for state per step (node 4853:101733).
  */
-function StepBreadcrumb({ step, onNavigate }: StepNavigation) {
-  return (
-    <div className="flex items-center gap-2">
-      {STEPS.map(({ label }, index) => {
-        const current = index === step
-        return (
-          <Fragment key={label}>
-            {index > 0 && <CaretRight size={16} color={colors.gray[400]} />}
-            <button
-              type="button"
-              aria-current={current ? 'step' : undefined}
-              onClick={() => onNavigate(index)}
-              className={`border-none bg-transparent p-0 ${
-                current ? 'cursor-default' : 'cursor-pointer'
-              }`}
-            >
-              <PrimitiveText
-                {...font(FOUNDATION_THEME.font.size.body.lg)}
-                color={current ? colors.gray[700] : colors.gray[400]}
-              >
-                {label}
-              </PrimitiveText>
-            </button>
-          </Fragment>
-        )
-      })}
-    </div>
-  )
-}
-
-function TopbarContent({ onExit, ...navigation }: StepNavigation & { onExit: () => void }) {
+function TopbarContent({ onExit }: { onExit: () => void }) {
   return (
     <div className="flex w-full items-center justify-between">
       {/* The logo is one of the flow's two exits (the footer's Exit is the other). Both open
@@ -207,7 +174,6 @@ function TopbarContent({ onExit, ...navigation }: StepNavigation & { onExit: () 
       >
         <img src={tenantLogo} alt="" className="block size-[18px]" />
       </button>
-      <StepBreadcrumb {...navigation} />
       <TopbarStatusIcons />
     </div>
   )
@@ -233,6 +199,8 @@ function CreateReportConfig() {
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
   const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
   const [confirmingExit, setConfirmingExit] = useState(false)
+  /** The Fields step's "Add custom column" modal — its button sits in the heading row below. */
+  const [addingColumn, setAddingColumn] = useState(false)
 
   /**
    * Both exits land on the Configurator. There is no draft store yet, so "Save as draft"
@@ -261,22 +229,26 @@ function CreateReportConfig() {
   const skipping = optional && !hasAnyFilter(filters)
 
   /**
-   * Each step's answers, checked. Only the current step is read today — the breadcrumb used
-   * to need the whole list and no longer does (see StepBreadcrumb) — but it stays a list
-   * because that is what putting the gate back needs, and five booleans cost nothing.
+   * Whether each step has actually been answered — what the rail ticks off.
    *
-   * Steps past the built ones have nothing to answer, so they are complete by definition
-   * and never hold the flow up.
+   * Filters counts as answered once there is a filter to carry forward, and Review has no
+   * questions of its own to answer, so it is never ticked: the flow ends by submitting it,
+   * not by completing it.
    */
-  const stepComplete = STEPS.map((_, index) =>
-    index === 0
-      ? isSetupComplete(setup)
-      : index === 1
-        ? isDeliveryComplete(delivery)
-        : index === 2
-          ? isFieldsComplete(fields)
-          : true,
-  )
+  const stepAnswered = [
+    isSetupComplete(setup),
+    isDeliveryComplete(delivery),
+    isFieldsComplete(fields),
+    hasAnyFilter(filters),
+    false,
+  ]
+
+  /**
+   * The same steps read as a gate on Continue, which is a looser question: a step with
+   * nothing to answer cannot hold the flow up, so it is complete by definition. That is the
+   * one place this differs from `stepAnswered` above, and why the two are separate lists.
+   */
+  const stepComplete = STEPS.map((_, index) => (index <= 2 ? stepAnswered[index] : true))
 
   const complete = stepComplete[step]
 
@@ -289,7 +261,7 @@ function CreateReportConfig() {
   const renderStep = (layout?: FieldsLayout) => (
     // Setup follows node 4541:16282, which sets its sections 24px apart; the other steps
     // keep the 32px rhythm their own frames were drawn at.
-    <div key={step} className={`${COLUMN} flow-question ${step === 0 ? 'gap-y-6' : 'gap-y-8'} pt-24 pb-12`}
+    <div key={step} className={`${COLUMN} flow-question ${step === 0 ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
       style={layout?.style}
       data-layout={layout?.wide ? 'wide' : undefined}
     >
@@ -301,6 +273,9 @@ function CreateReportConfig() {
           exactly the jumping this grid removes. */}
       {/* 4px between title and standfirst — node 4542:17173's gap. The Fields dials can
           still override it through the custom property. */}
+      {/* The heading, with the step's own action — Fields' "Add custom column" — pushed to
+          the far right of the same row. */}
+      <div className="flex items-end justify-between gap-4">
       <div className="flex flex-col" style={{ gap: 'var(--step-heading-gap, 4px)' }}>
         {/* Above the title, not beside it: it qualifies the whole step rather than
             the heading, and it is the first thing worth knowing on a step you are
@@ -341,11 +316,30 @@ function CreateReportConfig() {
           </div>
         )}
       </div>
+        {/* Version 5 of the Fields dials draws this button below the chips instead. */}
+        {step === 2 && layout?.version !== 'v5' && (
+          <div className="flex shrink-0">
+            <ButtonV2
+              buttonType={ButtonV2Type.SECONDARY}
+              size={ButtonV2Size.SMALL}
+              text="Add custom column"
+              leftSlot={{ slot: <Plus size={14} /> }}
+              onClick={() => setAddingColumn(true)}
+            />
+          </div>
+        )}
+      </div>
 
       {step === 0 && <SetupStep answers={setup} onChange={setSetup} />}
       {step === 1 && <DeliveryStep answers={delivery} onChange={setDelivery} />}
       {step === 2 && (
-        <FieldsStep answers={fields} onChange={setFields} version={layout?.version} />
+        <FieldsStep
+          answers={fields}
+          onChange={setFields}
+          version={layout?.version}
+          addingColumn={addingColumn}
+          onAddingColumnChange={setAddingColumn}
+        />
       )}
       {step === 3 && <FiltersStep answers={filters} onChange={setFilters} />}
       {step === 4 && <ReviewStep fields={fields} />}
@@ -355,34 +349,12 @@ function CreateReportConfig() {
   return (
     <div
       className="flex h-screen flex-col"
-      style={{ ...MOTION, backgroundColor: colors.gray[0] }}
+      style={{ ...MOTION, ...RAIL_GUTTER, backgroundColor: colors.gray[0] }}
     >
+      {/* No progress rule under the bar any more: it said "three of five" and nothing else,
+          which is the one thing the rail now says per step, with the state of each. */}
       <div className="shrink-0">
-        <TopbarV2
-          topbar={
-            <TopbarContent
-              step={step}
-              onNavigate={setStep}
-              onExit={() => setConfirmingExit(true)}
-            />
-          }
-        />
-        {/* Progress across the five steps. The design draws it as a rule sitting on the
-            topbar's bottom edge.
-
-            blend-gap: no 2px linear progress. ProgressBarV2's smallest linear height is
-            unit[12] with a rounded fill (progressBarV2.light.tokens.ts:13-17), which cannot
-            sit flush on the topbar edge. */}
-        <div className="h-0.5 w-full" style={{ backgroundColor: colors.gray[150] }}>
-          <div
-            className="h-full"
-            style={{
-              width: `${((step + 1) / STEPS.length) * 100}%`,
-              backgroundColor: colors.primary[500],
-              transition: `width var(--flow-reveal) var(--flow-reveal-ease)`,
-            }}
-          />
-        </div>
+        <TopbarV2 topbar={<TopbarContent onExit={() => setConfirmingExit(true)} />} />
       </div>
 
       {/* One pane, full width beneath the bar, with its own actions under it. It used to be
@@ -392,7 +364,23 @@ function CreateReportConfig() {
           min-h-0 stays and is load-bearing: it is what lets the scroller below actually
           scroll, since without it a flex child floors at its content height and the
           overflow escapes to the page. */}
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="relative flex min-h-0 flex-1 flex-col">
+          {/* Before the scroller in the DOM, so the rail is the first thing a keyboard reaches
+              under the bar — it is navigation, and it sits above the questions on screen.
+              `.flow-rail` (index.css) takes it out of flow into the content column's left
+              gutter, which `--flow-rail-gutter` on the root above keeps clear for it. */}
+          <nav className="flow-rail" aria-label="Report setup steps">
+            <StepRail
+              steps={STEPS.map(({ label, skipLabel }, index) => ({
+                label,
+                optional: skipLabel !== undefined,
+                answered: stepAnswered[index],
+              }))}
+              current={step}
+              onNavigate={setStep}
+            />
+          </nav>
+
           <div className="flex-1 overflow-auto" data-flow-content>
             {/* Keyed on the step so moving between them replays the arrival rather than
                 cross-fading one set of questions into another. */}
