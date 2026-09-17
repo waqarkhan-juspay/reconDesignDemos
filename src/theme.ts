@@ -10,6 +10,7 @@ import {
 } from '@juspay/blend-design-system'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
+import { TAGV2_TOKENS } from './tokens/TagV2'
 
 /**
  * Component token overrides — the only mechanism this app uses to restyle a Blend
@@ -217,4 +218,37 @@ export const neutralLinkTokens: ComponentTokenType = {
       },
     }),
   ) as unknown as ComponentTokenType['BUTTONV2'],
+}
+
+type TagBorderToken = { border: { subtle: { neutral: unknown } } }
+
+/**
+ * The field vocabulary's chips in version 6, with the design's lighter subtle border.
+ *
+ * Node 4861:105311 sets `tag/borderColor/subtle/neutral` to #ECEFF3 — gray[150]. Blend's own
+ * token is gray[200] (#E1E4EA), one step darker on the ramp. On a single chip the difference
+ * is invisible; across twenty-two of them it is the difference between a field of soft
+ * shapes and a grid of hard-edged boxes, which is the whole point of the subtle style.
+ *
+ * Scoped by a nested ThemeProvider rather than set globally, for the same reason as
+ * sectionTabsTokens: SUBTLE/NEUTRAL is also the Filters step's "Optional" chip, and that one
+ * keeps Blend's default. Every other value the design asks for — gray[50] fill, radius 6,
+ * 24px height, 10/4 padding, 6px gap, 14px/500 type — is already Blend's MD SQUARICAL token,
+ * so this override is one path deep and nothing else moves.
+ */
+export const fieldTagTokens: ComponentTokenType = {
+  ...componentTokens,
+  TAGV2: perBreakpoint(
+    TAGV2_TOKENS as unknown as Record<string, TagBorderToken>,
+    (token) => ({
+      ...token,
+      border: {
+        ...token.border,
+        subtle: {
+          ...token.border.subtle,
+          neutral: `1px solid ${FOUNDATION_THEME.colors.gray[150]}`,
+        },
+      },
+    }),
+  ) as unknown as ComponentTokenType['TAGV2'],
 }

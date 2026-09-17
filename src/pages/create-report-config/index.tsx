@@ -353,7 +353,9 @@ function CreateReportConfig() {
         />
       )}
       {step === 3 && <FiltersStep answers={filters} onChange={setFilters} />}
-      {step === 4 && <ReviewStep fields={fields} />}
+      {step === 4 && (
+        <ReviewStep setup={setup} delivery={delivery} fields={fields} filters={filters} />
+      )}
     </div>
   )
 

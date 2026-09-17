@@ -9,8 +9,13 @@ import type { CSSProperties, ReactNode } from 'react'
  * `v4` — v1's order and chrome (table first, no arrows) on v3's 1200px step.
  * `v5` — v4, with "Add custom column" moved out of the step heading and into the container,
  *        below the chips.
+ * `v6` — v4's layout with the redrawn field chips (node 4861:105311): subtle rather than
+ *        outlined when off, squarical rather than pill, md rather than sm, and a leading #
+ *        on a selected one.
+ * `v7` — v6 plus the grouping rule: an ordered "Group by" bar above the table, drawn from the
+ *        columns already chosen, with the grouped columns pinned to the table's left edge.
  */
-export type FieldsLayoutVersion = 'v1' | 'v2' | 'v3' | 'v4' | 'v5'
+export type FieldsLayoutVersion = 'v1' | 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7'
 
 export type FieldsLayout = {
   version: FieldsLayoutVersion
@@ -68,6 +73,8 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
           { value: 'v3', label: 'Version 3 — 1200px, table arrows' },
           { value: 'v4', label: 'Version 4 — 1200px, table first' },
           { value: 'v5', label: 'Version 5 — v4, add button below chips' },
+          { value: 'v6', label: 'Version 6 — v4, redrawn field chips' },
+          { value: 'v7', label: 'Version 7 — v6, plus Group by' },
         ],
         default: 'v4',
       },
@@ -107,10 +114,17 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
       values.version === 'v1' ||
       values.version === 'v2' ||
       values.version === 'v3' ||
-      values.version === 'v5'
+      values.version === 'v5' ||
+      values.version === 'v6' ||
+      values.version === 'v7'
         ? values.version
         : 'v4',
-    wide: values.version === 'v3' || values.version === 'v4' || values.version === 'v5',
+    wide:
+      values.version === 'v3' ||
+      values.version === 'v4' ||
+      values.version === 'v5' ||
+      values.version === 'v6' ||
+      values.version === 'v7',
     style: {
       rowGap: `${spacing.headerToContent}px`,
       '--step-heading-gap': `${spacing.titleToDescription}px`,
