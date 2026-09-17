@@ -11,9 +11,10 @@ import {
   TagV2Size,
   TagV2SubType,
   TagV2Type,
+  ThemeProvider,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Hash, Plus, X } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -24,10 +25,12 @@ import {
   type CSSProperties,
 } from 'react'
 import { PrimitiveText, font } from '../../primitives'
+import { fieldTagTokens } from '../../theme'
 import { AddCustomColumnModal } from './AddCustomColumnModal'
+import { GroupByBar } from './GroupByBar'
 import type { FieldsLayoutVersion } from './fields-layout'
-import { FIELD_TAGS, isFieldSelected,
-  isVocabularyField, newFieldColumn, type FieldsAnswers } from './answers'
+import { activeGroupBy, FIELD_TAGS, isFieldSelected,
+  isVocabularyField, newFieldColumn, type FieldColumn, type FieldsAnswers } from './answers'
 
 const { colors } = FOUNDATION_THEME
 
@@ -46,6 +49,30 @@ const px = (value: number | string | undefined) =>
  * (tagV2.light.tokens.ts), so a currentColor glyph would be near-black on near-black.
  */
 const REMOVE_TAG_SLOT = { slot: <X size={12} color={colors.gray[0]} /> }
+
+/**
+ * Version 6's chips — node 4861:105311, which draws two states and nothing between them.
+ *
+ * Off: SUBTLE, a gray[50] fill inside a hairline, and no slots at all. On: ATTENTIVE, the
+ * near-black chip, with a leading # and the same trailing ✕. Both SQUARICAL/MD, where the
+ * shipped chips are ROUNDED/SM — so this is a different shape and a different size, not a
+ * recolour, which is why it is a version rather than an edit.
+ *
+ * The # only exists on a selected chip. That is the design's call and it is a defensible
+ * one — the hash reads as "this is now a column", so it arrives with the column it names —
+ * but it does mean the two states differ by more than fill, and a chip changes width when
+ * you click it. Worth a look on screen before v6 becomes the default.
+ *
+ * Both glyphs are gray[0] for the reason REMOVE_TAG_SLOT already gives: they sit on gray[950].
+ * `tag/slot/size/md` is 12, which is the size Blend's own md slot expects.
+ */
+const FIELD_HASH_SLOT = { slot: <Hash size={12} color={colors.gray[0]} /> }
+
+/** The chip props that differ between the shipped chips and version 6's. */
+const TAG_SHAPE = {
+  current: { size: TagV2Size.SM, subType: TagV2SubType.ROUNDED, offType: TagV2Type.NO_FILL },
+  v6: { size: TagV2Size.MD, subType: TagV2SubType.SQUARICAL, offType: TagV2Type.SUBTLE },
+} as const
 
 /**
  * Fixed tracks, per the design: 222px per column. Handed to DataTable as both `minWidth` and
@@ -113,6 +140,25 @@ const PLACEHOLDER_ROW_COUNT = 3
 
 type FieldRow = Record<string, unknown>
 
+/** One shared empty list, so the ungrouped case does not mint a new array every render. */
+const NO_GROUPS: readonly string[] = []
+
+/**
+ * The columns in the order the table draws them: grouped ones first, in grouping order, then
+ * everything else as it stands. That is what grouping does to the output, and the preview is
+ * the only place it can be seen.
+ *
+ * `columns` itself is never reordered by this — it is the answer, and the grouping is a
+ * second fact about it.
+ */
+function orderColumns(columns: FieldColumn[], groupedIds: readonly string[]) {
+  if (groupedIds.length === 0) return columns
+  return [
+    ...groupedIds.flatMap((id) => columns.filter((column) => column.id === id)),
+    ...columns.filter((column) => !groupedIds.includes(column.id)),
+  ]
+}
+
 /**
  * Blank on purpose. A renderCell is required rather than just leaving the value out:
  * DataTable draws its own "-" for an empty value, and only a renderCell skips that.
@@ -149,6 +195,33 @@ export function FieldsStep({
   const { columns } = answers
   const setColumns = (next: typeof columns) => onChange({ ...answers, columns: next })
 
+  /** Versions 6 and 7 redraw the field chips; every other version keeps the shipped ones. */
+  const newChips = version === 'v6' || version === 'v7'
+  const shape = newChips ? TAG_SHAPE.v6 : TAG_SHAPE.current
+
+  /** Version 7 adds the grouping rule above the table — see GroupByBar. */
+  const grouping = version === 'v7'
+  /**
+   * Derived, so a column leaving the table takes its grouping with it — and memoised, because
+   * everything below keys off this array's identity. `answers` only changes when an answer
+   * does, which is exactly when the grouping can have moved.
+   */
+  const groupBy = useMemo(
+    () => (grouping ? activeGroupBy(answers) : NO_GROUPS),
+    [grouping, answers],
+  )
+
+  /**
+   * What the table draws, and in what order. Grouped columns lead: that is what grouping does
+   * to the output, and showing it here is the only feedback that the rule above the table is
+   * about *these* columns. Everything else keeps the order the user dragged it into.
+   *
+   * `columns` itself is untouched — this is the preview's order, not the answer's.
+   */
+  /** The grouping as one string, for the DataTable key below. */
+  const groupKey = groupBy.join()
+  const displayColumns = useMemo(() => orderColumns(columns, groupBy), [columns, groupBy])
+
   /**
    * Keyed on the column's `id` rather than its title: titles are free text, and two columns
    * can legitimately carry the same one.
@@ -159,7 +232,10 @@ export function FieldsStep({
    */
   const tableColumns = useMemo<ColumnDefinition<FieldRow>[]>(
     () =>
-      columns.map(({ id, title }) => ({
+      // Memoised because DataTable re-syncs its column state off this array's identity in an
+      // effect (DataTable.tsx:215-274) — a fresh array every render would run that merge on
+      // every keystroke elsewhere on the page.
+      displayColumns.map(({ id, title }) => ({
         field: id,
         header: title,
         type: ColumnType.TEXT,
@@ -171,7 +247,7 @@ export function FieldsStep({
         maxWidth: `${COLUMN_WIDTH}px`,
         renderCell: emptyCell,
       })),
-    [columns],
+    [displayColumns],
   )
 
   const tableData = useMemo<FieldRow[]>(
@@ -365,7 +441,7 @@ export function FieldsStep({
               className="flex w-max"
               style={{ paddingLeft: letterTracks.offset }}
             >
-              {columns.map((column, index) => (
+              {displayColumns.map((column, index) => (
                 <div
                   key={column.id}
                   className="flex items-center justify-center"
@@ -376,7 +452,11 @@ export function FieldsStep({
                 >
                   <PrimitiveText
                     {...font(FOUNDATION_THEME.font.size.body.md)}
-                    color={colors.gray[400]}
+                    // A grouped column's letter is tinted to match its chip in the bar above,
+                    // so the rule and the columns it moved read as one thing.
+                    color={
+                      groupBy.includes(column.id) ? colors.primary[600] : colors.gray[400]
+                    }
                   >
                     {columnLetter(index)}
                   </PrimitiveText>
@@ -398,6 +478,13 @@ export function FieldsStep({
           </div>
         ) : (
           <DataTable
+            // Remounted when the grouping changes, and only then. DataTable keeps a column
+            // order of its own and merges a new `columns` array into it by field, walking its
+            // own list first (DataTable.tsx:215-274) — so it adopts a renamed header but never
+            // a new order. Left alone, the letter row would move a grouped column to A while
+            // the header under it still said something else. Nothing is lost: the scroll
+            // resets to the left edge, which is where the newly grouped column now is.
+            key={`columns-${groupKey}`}
             data={tableData}
             columns={tableColumns}
             idField="id"
@@ -409,7 +496,9 @@ export function FieldsStep({
             // which would also add a sticky settings column on the right.
             enableColumnManager={false}
             enableFiltering={false}
-            enableColumnReordering
+            // Off while a grouping stands: grouped columns own the left edge, so a drag would
+            // either be undone on the next render or quietly rewrite the grouping order.
+            enableColumnReordering={groupBy.length === 0}
             onColumnReorder={(reordered) => {
               const byId = new Map(columns.map((column) => [column.id, column]))
               setColumns(
@@ -466,16 +555,18 @@ export function FieldsStep({
       <TagV2
         key={field.title}
         text={field.title}
-        size={TagV2Size.SM}
-        subType={TagV2SubType.ROUNDED}
+        size={shape.size}
+        subType={shape.subType}
         color={TagV2Color.NEUTRAL}
-        type={selected ? TagV2Type.ATTENTIVE : TagV2Type.NO_FILL}
+        type={selected ? TagV2Type.ATTENTIVE : shape.offType}
+        leftSlot={selected && newChips ? FIELD_HASH_SLOT : undefined}
         aria-pressed={selected}
         title={selected ? `Remove ${field.title} from the table` : `Add ${field.title} to the table`}
         rightSlot={selected ? REMOVE_TAG_SLOT : undefined}
         onClick={() =>
           selected
             ? onChange({
+                ...answers,
                 // Kept as a field even if it only existed as a renamed column, so deselecting
                 // never makes a tag vanish.
                 customFields: answers.customFields.some(
@@ -503,8 +594,14 @@ export function FieldsStep({
    * own edges — the tags line up with the heading, not with the table.
    */
   const vocabulary = (
+    /* Version 6's chips want a lighter subtle border than Blend's token (fieldTagTokens,
+       src/theme.ts). Scoped here rather than set globally so the Filters step's "Optional"
+       chip — also SUBTLE/NEUTRAL — keeps the default. Every other version renders inside the
+       app's own tokens, unwrapped. */
+    /* `key` belongs on this element, not the div: it is the array entry in the
+       [table, vocabulary] render below. */
+    <ThemeProvider key="vocabulary" componentTokens={newChips ? fieldTagTokens : undefined}>
     <div
-      key="vocabulary"
       className="flex w-full flex-col self-center"
       style={{ maxWidth: 'var(--flow-content)', rowGap: 'var(--fields-add-gap, 16px)' }}
     >
@@ -525,10 +622,11 @@ export function FieldsStep({
             <TagV2
               key={tag}
               text={tag}
-              size={TagV2Size.SM}
-              subType={TagV2SubType.ROUNDED}
+              size={shape.size}
+              subType={shape.subType}
               color={TagV2Color.NEUTRAL}
-              type={selected ? TagV2Type.ATTENTIVE : TagV2Type.NO_FILL}
+              type={selected ? TagV2Type.ATTENTIVE : shape.offType}
+              leftSlot={selected && newChips ? FIELD_HASH_SLOT : undefined}
               aria-pressed={selected}
               title={selected ? `Remove ${tag} from the table` : `Add ${tag} to the table`}
               rightSlot={selected ? REMOVE_TAG_SLOT : undefined}
@@ -600,6 +698,7 @@ export function FieldsStep({
                 // Renamed-only custom columns are folded into customFields first, so clearing
                 // leaves every custom tag in place.
                 onChange({
+                  ...answers,
                   customFields: customTags,
                   columns: [],
                 })
@@ -630,6 +729,7 @@ export function FieldsStep({
           onAdd={({ title, defaultValue }) => {
             scrollToEnd.current = true
             onChange({
+              ...answers,
               // Remembered as a field, so the tag survives being deselected later. A name that
               // is already a tag just adds the column.
               customFields:
@@ -643,9 +743,29 @@ export function FieldsStep({
         />
       </div>
     </div>
+    </ThemeProvider>
   )
 
-  const wide = version === 'v3' || version === 'v4' || version === 'v5'
+  /**
+   * The grouping rule, above the table. Inside the same card and above the letter row, because
+   * it describes what the table below it will contain — and a rule stated after its result
+   * reads as an afterthought.
+   */
+  const groupBar = grouping ? (
+    <GroupByBar
+      key="group-by"
+      columns={columns}
+      groupBy={groupBy}
+      onChange={(next) => onChange({ ...answers, groupBy: next })}
+    />
+  ) : null
+
+  const wide =
+    version === 'v3' ||
+    version === 'v4' ||
+    version === 'v5' ||
+    version === 'v6' ||
+    version === 'v7'
 
   return (
     // In versions 1 and 2, `flow-full` puts this in the flow grid's wide track (index.css): the
@@ -676,7 +796,12 @@ export function FieldsStep({
       {/* Versions 1 and 4 read table, then vocabulary. Versions 2 and 3 put the vocabulary
           first, so the choice comes before its result. The gap between them is
           --fields-table-gap. */}
-      {version === 'v1' || version === 'v4' || version === 'v5'
+      {groupBar}
+      {version === 'v1' ||
+      version === 'v4' ||
+      version === 'v5' ||
+      version === 'v6' ||
+      version === 'v7'
         ? [table, vocabulary]
         : [vocabulary, table]}
     </div>

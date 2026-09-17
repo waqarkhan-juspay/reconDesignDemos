@@ -190,10 +190,23 @@ export type CustomField = { title: string; defaultValue?: string }
  * derived from `columns` because a custom tag has to survive being deselected: once its
  * column is gone, nothing in `columns` remembers it existed.
  */
-export type FieldsAnswers = { columns: FieldColumn[]; customFields: CustomField[] }
+export type FieldsAnswers = {
+  columns: FieldColumn[]
+  customFields: CustomField[]
+  /**
+   * Column ids the report groups by, outermost first — see GroupByBar. Order is the whole
+   * point: "Gateway, then Txn Type" is a different report from "Txn Type, then Gateway", so
+   * this is a list and not a set.
+   *
+   * Optional because it arrived after the other two and every version but 7 ignores it. Ids
+   * rather than titles, so renaming a column in the table header does not orphan its grouping.
+   */
+  groupBy?: string[]
+}
 
 export const EMPTY_FIELDS: FieldsAnswers = {
   customFields: [],
+  groupBy: [],
   columns: [
     'Payment Entity Txn ID',
     'Merchant ID',
@@ -349,6 +362,14 @@ const VALUE_SUGGESTIONS: Record<string, string[]> = {
 
 export const valuesFor = (column: string | null) =>
   column === null ? [] : (VALUE_SUGGESTIONS[column] ?? [])
+
+/**
+ * The groupings that still stand, in order — derived on every read rather than pruned on
+ * write. A column can leave the table from four places (its chip, its ✕, Clear all, a
+ * rename), and a stored list kept in sync from all four is a list that eventually is not.
+ */
+export const activeGroupBy = ({ columns, groupBy }: FieldsAnswers) =>
+  (groupBy ?? []).filter((id) => columns.some((column) => column.id === id))
 
 /** A column with a blank name would produce a nameless header in the report. */
 export const isFieldsComplete = ({ columns }: FieldsAnswers) =>
