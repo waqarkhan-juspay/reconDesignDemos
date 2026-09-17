@@ -194,6 +194,15 @@ function TopbarContent({ onExit }: { onExit: () => void }) {
 function CreateReportConfig() {
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
+  /**
+   * The steps the user has committed — walked up to and clicked the primary action on. This
+   * is what the rail ticks off (StepRail.tsx).
+   *
+   * A Set rather than a high-water mark because the rail lets you jump to any step, so the
+   * committed steps are not necessarily a prefix of the flow: jump straight to Filters,
+   * commit it, and Setup and Delivery are still untouched behind you.
+   */
+  const [confirmed, setConfirmed] = useState<ReadonlySet<number>>(() => new Set())
   const [setup, setSetup] = useState<SetupAnswers>(EMPTY_SETUP)
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
@@ -229,7 +238,9 @@ function CreateReportConfig() {
   const skipping = optional && !hasAnyFilter(filters)
 
   /**
-   * Whether each step has actually been answered — what the rail ticks off.
+   * Whether each step has actually been answered. Gates Continue below, and lets the rail
+   * take a tick back off a step whose answers have since been cleared — but the tick itself
+   * is earned by committing the step, not by this (StepRail.tsx).
    *
    * Filters counts as answered once there is a filter to carry forward, and Review has no
    * questions of its own to answer, so it is never ticked: the flow ends by submitting it,
@@ -375,6 +386,7 @@ function CreateReportConfig() {
                 label,
                 optional: skipLabel !== undefined,
                 answered: stepAnswered[index],
+                confirmed: confirmed.has(index),
               }))}
               current={step}
               onNavigate={setStep}
@@ -441,7 +453,18 @@ function CreateReportConfig() {
                   size={ButtonV2Size.LARGE}
                   text={isLastStep ? SUBMIT_LABEL : skipping ? skipLabel : 'Continue'}
                   disabled={!optional && !complete}
-                  onClick={() => (isLastStep ? navigate('/configurator') : setStep(step + 1))}
+                  onClick={() => {
+                    if (isLastStep) {
+                      navigate('/configurator')
+                      return
+                    }
+                    // Committing the step is what ticks it on the rail. Back does not undo
+                    // it: you answered those questions, and walking back to look at them
+                    // does not unanswer them. Clearing a required answer does — that is
+                    // `answered`'s job over in statusOf.
+                    setConfirmed((prev) => new Set(prev).add(step))
+                    setStep(step + 1)
+                  }}
                 />
               </div>
               </div>

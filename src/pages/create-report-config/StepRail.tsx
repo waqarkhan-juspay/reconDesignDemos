@@ -12,23 +12,34 @@ export type RailStep = {
   optional: boolean
   /** Whether this step's own questions have been answered. */
   answered: boolean
+  /**
+   * Whether the user has committed this step — reached it and clicked the flow's primary
+   * action on it. This, not `answered`, is what earns a tick.
+   */
+  confirmed: boolean
 }
 
 /**
  * What the rail says about one step.
  *
- * Read off the answers rather than off how far you have walked, because the flow lets you
- * jump to any step (see the note on navigation in index.tsx): arriving at Filters from the
- * rail does not mean Setup and Delivery were filled in on the way, so position alone would
- * tick steps nobody answered.
+ * A step is ticked once the user has *committed* it — clicked the primary action on it and
+ * moved on. Answers alone are not enough: several steps start out already valid (Fields
+ * ships a default column set, so `isFieldsComplete` is true on first render), so reading
+ * `answered` on its own ticked steps nobody had opened. Position is not enough either —
+ * the rail lets you jump anywhere, so arriving at Filters says nothing about Setup.
  *
- * `skipped` is the one place position still matters — it is the difference between an
- * optional step you have not reached yet and one you walked past and left empty.
+ * `answered` still has a say, in one direction only: it can take a tick back. Commit a
+ * step, walk back into it and clear a required answer, and the tick goes rather than
+ * standing over questions that no longer have any.
+ *
+ * `skipped` is the optional step (Filters) committed with nothing filled in. Its button
+ * says "Skip filters" in that state, and the rail should not then claim it was completed.
  */
-function statusOf({ optional, answered }: RailStep, index: number, current: number) {
+function statusOf({ optional, answered, confirmed }: RailStep, index: number, current: number) {
   if (index === current) return StepperV2StepStatus.CURRENT
+  if (!confirmed) return StepperV2StepStatus.PENDING
   if (answered) return StepperV2StepStatus.COMPLETED
-  if (index < current && optional) return StepperV2StepStatus.SKIPPED
+  if (optional) return StepperV2StepStatus.SKIPPED
   return StepperV2StepStatus.PENDING
 }
 
