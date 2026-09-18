@@ -1,23 +1,29 @@
 import {
-  AccordionV2,
-  AccordionV2Item,
-  AccordionV2Type,
   ButtonV2,
   ButtonV2Size,
   ButtonV2Type,
   ColumnType,
   DataTable,
-  FOUNDATION_THEME,
+  InputSizeV2,
   TagV2,
   TagV2Color,
   TagV2Size,
   TagV2SubType,
   TagV2Type,
+  TextAreaV2,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { Pencil } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
-import { PrimitiveText, font } from '../../primitives'
+import { Pencil, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { SAMPLE_ROW_COUNT, sampleFor } from '../../field-samples'
+import {
+  ConfigSummaryCard,
+  ConfigSummaryChipRow,
+  ConfigSummaryRow,
+  UNSET,
+  summaryChip,
+} from '../../config-summary'
+import { REPORT_FORMATS } from '../../report-config'
 import {
   activeGroupBy,
   LAST_DAY_OF_MONTH,
@@ -25,13 +31,12 @@ import {
   SPECIFIED_TIME,
   WEEKLY,
   type DeliveryAnswers,
+  type CustomField,
   type FieldColumn,
   type FieldsAnswers,
   type FiltersAnswers,
   type SetupAnswers,
 } from './answers'
-
-const { colors } = FOUNDATION_THEME
 
 /**
  * Step 5 — the config read back before it is submitted (node 4530:10413).
@@ -42,49 +47,6 @@ const { colors } = FOUNDATION_THEME
  */
 
 /**
- * Sample values the preview fills its rows with, keyed by column title.
- *
- * The design writes real-looking values into every cell (node 4530:10508 onwards), and a
- * preview of blank cells would say nothing about what the report will contain. Keyed on
- * title rather than positional so a reordered or renamed column keeps its own kind of
- * value; anything unrecognised falls back to `SAMPLE_FALLBACK`.
- */
-const SAMPLES: Record<string, string> = {
-  'Merchant Id': 'Demo Merchant',
-  'Merchant ID': 'Demo Merchant',
-  'Payment Entity': '19933239749',
-  'Payment Entity Txn Id': '19933239749',
-  'Payment Entity Txn ID': '19933239749',
-  Gateway: 'PAYU',
-  'Txn Amount': '1100.000000000',
-  'Txn Type': 'ORDER',
-  'Txn Currency': 'INR',
-  'Txn Date': '2026-09-10',
-  'Recon Status': 'Reconciled',
-  'Recon Sub Status': 'Matched',
-  'Recon Id': 'RCN-4417',
-  'Settlement Amount': '1078.500000000',
-  'Settlement Currency': 'INR',
-  'Settlement Date': '2026-09-12',
-  'Reconciled At': '2026-09-11 04:12',
-  Credit: 'Yes',
-  Debit: 'No',
-  Fee: '21.500000000',
-  Tax: '3.870000000',
-  ID: '8841207',
-  Label: 'Standard',
-}
-
-/** What a column with no sample of its own shows — an em dash reads as "nothing here yet". */
-const SAMPLE_FALLBACK = '—'
-
-/**
- * Three rows, as the design draws (nodes 4530:10508-10510). Enough to read as a table
- * rather than a single record, and few enough that it stays a preview.
- */
-const PREVIEW_ROW_COUNT = 3
-
-/**
  * Rows per page in the preview's footer.
  *
  * The table is a fixed three rows, so this paginates nothing — it is the design's own
@@ -93,8 +55,6 @@ const PREVIEW_ROW_COUNT = 3
  * on a hard edge where the design ends on a rule.
  */
 const PREVIEW_PAGE_SIZE = 10
-
-const sampleFor = (title: string) => SAMPLES[title] ?? SAMPLE_FALLBACK
 
 /**
  * `Record<string, unknown>` rather than `Record<string, string>` because that is the shape
@@ -109,10 +69,16 @@ type PreviewRow = { id: string } & Record<string, unknown>
  * Keyed on the column's `id` rather than its title: titles are free text the user edits on
  * the Fields step, and two columns can legitimately carry the same one.
  */
-const buildPreviewRows = (columns: FieldColumn[]): PreviewRow[] =>
-  Array.from({ length: PREVIEW_ROW_COUNT }, (_, row) => {
+const buildPreviewRows = (columns: FieldColumn[], customFields: CustomField[]): PreviewRow[] =>
+  Array.from({ length: SAMPLE_ROW_COUNT }, (_, row) => {
     const cells: Record<string, string> = {}
-    for (const column of columns) cells[column.id] = sampleFor(column.title)
+    for (const column of columns) {
+      cells[column.id] = sampleFor(
+        column.title,
+        row,
+        customFields.find((field) => field.title === column.title)?.defaultValue,
+      )
+    }
     return { id: `preview-${row}`, ...cells }
   })
 
@@ -126,101 +92,35 @@ const buildPreviewColumns = (
     isSortable: false,
   }))
 
-/** Nothing answered yet. An em dash reads as "left blank", where an empty cell reads as a bug. */
-const UNANSWERED = '—'
-
 /**
- * A label in the summary panel. Uppercase and tracked out, per the design — the case is set
- * on a wrapper because `text-transform` inherits and PrimitiveText takes no className
- * (rule 2), so the wrapper is the only place to put it.
- */
-function FieldLabel({ children }: { children: string }) {
-  return (
-    <span className="uppercase tracking-[0.04em]">
-      <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.sm)} color={colors.gray[500]}>
-        {children}
-      </PrimitiveText>
-    </span>
-  )
-}
-
-/** A value in the summary panel — a string, or whatever the caller draws instead. */
-function FieldValue({ children }: { children: ReactNode }) {
-  return typeof children === 'string' ? (
-    <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.md)} color={colors.gray[700]}>
-      {children}
-    </PrimitiveText>
-  ) : (
-    <>{children}</>
-  )
-}
-
-/**
- * One cell of the six across the top — label above value.
+ * The schedule and the channel, as the one sentence they are.
  *
- * `gray[0]` on every cell over the panel's `gray[200]` background is what draws the grid
- * lines: the 1px gaps between cells are the only place the background shows. Borders per
- * cell would need a different rule on the cells that happen to start a row, and the row a
- * cell starts changes with the viewport.
- */
-function SummaryCell({ label, value }: { label: string; value: string }) {
-  return (
-    <div
-      className="flex min-w-0 flex-col gap-1 px-4 py-3"
-      style={{ backgroundColor: colors.gray[0] }}
-    >
-      <FieldLabel>{label}</FieldLabel>
-      <FieldValue>{value}</FieldValue>
-    </div>
-  )
-}
-
-/**
- * One of the full-width rows below them — a shaded label column beside its value.
+ * Assembled rather than stored: the Delivery step asks it as five questions — cadence,
+ * timing, which day, what time, where to — and reading five labels back is not how anyone
+ * holds "every Monday at 09:00, by email" in their head. "As soon as recon completes"
+ * answers the cadence on its own; nothing below it is asked (isDeliveryComplete), so nothing
+ * below it is read.
  *
- * These three carry lists rather than single words, and a list in a sixth of the panel's
- * width wraps into a column of fragments. So they get the full measure, with the label
- * moved beside the value rather than above it.
+ * An unset schedule says what happens instead of what is missing: a config with no cadence
+ * is not broken, it is a report you run yourself.
  */
-function SummaryBand({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="grid gap-px sm:grid-cols-[176px_1fr]">
-      <div className="px-4 py-3" style={{ backgroundColor: colors.gray[50] }}>
-        <FieldLabel>{label}</FieldLabel>
-      </div>
-      <div
-        className="flex min-w-0 flex-wrap items-center gap-2 px-4 py-3"
-        style={{ backgroundColor: colors.gray[0] }}
-      >
-        {children}
-      </div>
-    </div>
-  )
-}
+function scheduleAndChannel({
+  frequency,
+  timing,
+  dayOfWeek,
+  dayOfMonth,
+  time,
+  channels,
+}: DeliveryAnswers) {
+  const where = channels.length ? ` to ${channels.join(', ')}` : ''
 
-/** A field name in one of the bands. Neutral — it names a column, it is not a state. */
-const fieldChip = (text: string, key?: string) => (
-  <TagV2
-    key={key ?? text}
-    text={text}
-    size={TagV2Size.SM}
-    subType={TagV2SubType.SQUARICAL}
-    color={TagV2Color.NEUTRAL}
-    type={TagV2Type.SUBTLE}
-  />
-)
+  if (timing !== null && timing !== SPECIFIED_TIME) {
+    return `As soon as recon completes${where}`
+  }
+  if (frequency === null) {
+    return channels.length ? `Runs on demand${where}` : `${UNSET} — runs once, on demand`
+  }
 
-/**
- * The schedule, as the one sentence it is.
- *
- * Assembled rather than stored: the Delivery step asks it as four questions — cadence,
- * timing, which day, what time — and reading four labels back is not how anyone holds a
- * schedule in their head. "Immediately" answers the whole thing on its own; nothing below
- * it is asked (isDeliveryComplete), so nothing below it is read.
- */
-function scheduleSentence({ frequency, timing, dayOfWeek, dayOfMonth, time }: DeliveryAnswers) {
-  if (timing !== null && timing !== SPECIFIED_TIME) return 'As soon as recon completes'
-  if (frequency === null) return UNANSWERED
   const day =
     frequency === WEEKLY && dayOfWeek
       ? ` on ${dayOfWeek}`
@@ -229,8 +129,19 @@ function scheduleSentence({ frequency, timing, dayOfWeek, dayOfMonth, time }: De
           ? ' on the last day'
           : ` on the ${dayOfMonth}`
         : ''
-  return `${frequency}${day}${time ? ` at ${time}` : ''}`
+  return `${frequency}${day}${time ? ` at ${time}` : ''}${where}`
 }
+
+/**
+ * The report format in the words the flow offered it by.
+ *
+ * `setup.format` holds the id — 'Raw' / 'Aggregated' — which is what the rest of the app
+ * switches on, and which nobody picked: the Setup step's third question offers "Transaction
+ * level records" and "Grouped records" (REPORT_FORMATS). Read off that list rather than
+ * copied from it, so the two cannot drift.
+ */
+const formatTitle = (format: SetupAnswers['format']) =>
+  format === null ? '' : (REPORT_FORMATS.find((option) => option.id === format)?.title ?? format)
 
 /** One filter rule as a sentence. A condition that takes no value ends after the condition. */
 const ruleSentence = ({ column, condition, value }: FiltersAnswers['rules'][number]) =>
@@ -253,52 +164,77 @@ export function ReviewStep({
   const rules = filters.rules.filter(({ column }) => column !== null)
 
   /**
-   * The header-info control is a toggle rather than a link: the design draws the button
-   * alone (node 4530:10899) with nothing behind it yet, and a button that navigates
-   * nowhere is worse than one that visibly does the small thing it can.
+   * The report header, or `null` when the report has none.
    *
-   * blend-gap: the design's own "report header info" panel has no node yet, so what the
-   * toggle reveals is the preview's own column list rather than a form.
+   * `null` rather than a boolean beside a string, because "no header" and "an empty header"
+   * are the same thing to the user and should be one state in the code — otherwise the empty
+   * string is reachable two ways and the button and the field can disagree about which one
+   * is showing.
+   *
+   * blend-gap: the design draws the button (node 4530:10899) with nothing behind it yet, so
+   * the field it opens is composed here rather than taken from a node.
    */
-  const [showHeaderInfo, setShowHeaderInfo] = useState(false)
+  const [headerText, setHeaderText] = useState<string | null>(null)
 
   return (
     <>
-      <div className="flex flex-col gap-2">
-        <div className="flex">
-          <ButtonV2
-            buttonType={ButtonV2Type.SECONDARY}
-            size={ButtonV2Size.LARGE}
-            text="Add report header info"
-            // `rightSlot`, matching the design — the glyph trails the label rather than
-            // leading it, which reads as "and then edit" rather than labelling the button.
-            rightSlot={{ slot: <Pencil size={16} /> }}
-            onClick={() => setShowHeaderInfo((shown) => !shown)}
-          />
-        </div>
+      <div className="flex flex-col gap-4">
+        {/* The button and the field are the same control in two states, never both at once.
+            Leaving the button up beside an open field would offer to add a second header to
+            a file that has one first row — and deleting the field is what puts the button
+            back, so the pair reads as one toggle rather than two things to keep in step. */}
+        {headerText === null ? (
+          <div className="flex">
+            <ButtonV2
+              buttonType={ButtonV2Type.SECONDARY}
+              size={ButtonV2Size.LARGE}
+              text="Add report header info"
+              // `rightSlot`, matching the design — the glyph trails the label rather than
+              // leading it, which reads as "and then edit" rather than labelling the button.
+              rightSlot={{ slot: <Pencil size={16} /> }}
+              onClick={() => setHeaderText('')}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <TextAreaV2
+              label="Report header"
+              // TextAreaV2 computes its accessible name from `label` alone — `filteredRest`
+              // is built and then never spread (TextAreaV2.tsx:236), so an `aria-label` here
+              // would be dropped. Which is why the label is the component's and not a
+              // PrimitiveText above it.
+              placeholder="This text will appear in the first row of your Excel file."
+              size={InputSizeV2.MD}
+              rows={3}
+              // Vertical only: the field already fills the column, and a horizontal handle
+              // just lets it be dragged out of the layout.
+              resize="vertical"
+              value={headerText}
+              autoFocus
+              onChange={(event) => setHeaderText(event.target.value)}
+            />
 
-        {showHeaderInfo && (
-          <div
-            className="flex flex-col gap-1 rounded-[12px] border px-6 py-4"
-            style={{ borderColor: colors.gray[200] }}
-          >
-            <PrimitiveText
-              {...font(FOUNDATION_THEME.font.size.body.sm)}
-              color={colors.gray[500]}
-            >
-              Header row
-            </PrimitiveText>
-            <PrimitiveText
-              {...font(FOUNDATION_THEME.font.size.body.md)}
-              color={colors.gray[700]}
-            >
-              {columns.map(({ title }) => title).join(', ')}
-            </PrimitiveText>
+            {/* Below the field and trailing, rather than floating beside it: TextAreaV2 puts
+                a label above and a footer below, so anything aligned to its side lands
+                against one of those instead of against the box. Labelled rather than a bare
+                glyph, because "delete" with nothing named is a question. */}
+            <div className="flex justify-end">
+              <ButtonV2
+                buttonType={ButtonV2Type.SECONDARY}
+                size={ButtonV2Size.SMALL}
+                text="Delete header"
+                leftSlot={{ slot: <Trash2 size={14} /> }}
+                // Back to null, which both removes the field and restores the button. The
+                // text goes with it: a header you deleted and then added again is a new
+                // header, not the old one waiting where you left it.
+                onClick={() => setHeaderText(null)}
+              />
+            </div>
           </div>
         )}
 
         <DataTable
-          data={buildPreviewRows(columns)}
+          data={buildPreviewRows(columns, fields.customFields)}
           columns={buildPreviewColumns(columns)}
           idField="id"
           // The heading above already says what this is; a second title inside the frame
@@ -312,116 +248,95 @@ export function ReviewStep({
           pagination={{
             currentPage: 1,
             pageSize: PREVIEW_PAGE_SIZE,
-            totalRows: PREVIEW_ROW_COUNT,
+            totalRows: SAMPLE_ROW_COUNT,
             pageSizeOptions: [PREVIEW_PAGE_SIZE],
           }}
         />
       </div>
 
-      <AccordionV2 accordionType={AccordionV2Type.BORDER} defaultValue="configuration">
-        <AccordionV2Item
-          value="configuration"
-          title="Configuration details"
-          // The count sits in the header so it survives the panel being collapsed — it is the
-          // one number worth knowing without opening anything.
-          rightSlot={
-            // The wrapper is doing real work: the trigger lays its slots out as a flex row
-            // that lets this one shrink, and at its natural basis the label breaks after every
-            // word. TagV2 omits className (rule 2), so the rule goes on an element we own.
-            <span className="shrink-0 whitespace-nowrap">
-              <TagV2
-                text={`${columns.length} ${columns.length === 1 ? 'column' : 'columns'} selected`}
-                size={TagV2Size.SM}
-                subType={TagV2SubType.SQUARICAL}
-                color={TagV2Color.PRIMARY}
-                type={TagV2Type.SUBTLE}
-              />
-            </span>
+      <ConfigSummaryCard
+        title="Configuration"
+        keyColumn="240px"
+        // The count sits on the header row, which is where the one number worth knowing
+        // before reading anything belongs.
+        action={
+          // The wrapper is doing real work: TagV2 omits className (rule 2), and at its
+          // natural basis in a flex row the label breaks after every word.
+          <span className="whitespace-nowrap">
+            <TagV2
+              text={`${columns.length} ${columns.length === 1 ? 'column' : 'columns'} selected`}
+              size={TagV2Size.SM}
+              subType={TagV2SubType.SQUARICAL}
+              color={TagV2Color.PRIMARY}
+              type={TagV2Type.SUBTLE}
+            />
+          </span>
+        }
+      >
+        <ConfigSummaryRow
+          label="Configuration name"
+          value={delivery.name.trim() || UNSET}
+          muted={!delivery.name.trim()}
+        />
+        <ConfigSummaryRow
+          label="Category"
+          value={setup.category ?? UNSET}
+          muted={setup.category === null}
+        />
+        {/* Type and format on one row, as the reference pairs them: neither answer
+            means much alone — "Settlement" does not say whether you get rows or
+            totals — and read together they are one sentence about what the file is. */}
+        <ConfigSummaryRow
+          label="Report type and format"
+          value={
+            setup.sourceType || setup.format
+              ? [setup.sourceType, formatTitle(setup.format)].filter(Boolean).join(' · ')
+              : UNSET
           }
+          muted={setup.sourceType === null && setup.format === null}
+        />
+        <ConfigSummaryRow
+          label="Schedule and channel"
+          value={scheduleAndChannel(delivery)}
+          muted={delivery.frequency === null && delivery.channels.length === 0}
+        />
+        <ConfigSummaryChipRow
+          label="Filters"
+          empty={rules.length === 0 ? 'None' : undefined}
         >
-          {/* blend-gap: Blend 0.0.37 ships no description-list or key-value panel, so this is
-              a grid of Block-free cells on token colours. The 1px gaps are the rules: the
-              container's gray[200] shows through between cells that each paint themselves. */}
-          <div className="px-6 pb-4">
-            <div
-              className="flex flex-col gap-px overflow-hidden"
-              style={{
-                backgroundColor: colors.gray[200],
-                border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
-                borderRadius: FOUNDATION_THEME.border.radius[12],
-              }}
-            >
-              {/* The six single-word answers, across the top. Two columns on a phone rather
-                  than one, because these are short and a six-deep stack buries the rest. */}
-              <div className="grid grid-cols-2 gap-px md:grid-cols-3 xl:grid-cols-6">
-                <SummaryCell label="Configuration name" value={delivery.name.trim() || UNANSWERED} />
-                <SummaryCell label="Category" value={setup.category ?? UNANSWERED} />
-                <SummaryCell label="Report type" value={setup.sourceType ?? UNANSWERED} />
-                <SummaryCell label="Report format" value={setup.format ?? UNANSWERED} />
-                <SummaryCell label="Schedule" value={scheduleSentence(delivery)} />
-                <SummaryCell
-                  label="Channel"
-                  value={delivery.channels.join(', ') || UNANSWERED}
+          {rules.map((rule) => summaryChip(ruleSentence(rule), rule.id))}
+        </ConfigSummaryChipRow>
+        {/* The count is in the label rather than in a tag beside it: it is a fact about
+            this row, and the accordion header already carries the headline count. */}
+        <ConfigSummaryChipRow
+          label={`Columns · ${columns.length}`}
+          empty={columns.length === 0 ? UNSET : undefined}
+        >
+          {columns.map((column, index) => (
+            <span key={column.id} className="flex items-center gap-1.5">
+              {/* Numbered, because this row is about order and nothing else — the same
+                  names carry no rank on their own. A grouped column keeps its place and
+                  is marked rather than moved: the order is one fact, the grouping is a
+                  second fact about one of them. */}
+              {summaryChip(`${index + 1} · ${column.title}`)}
+              {groupBy.includes(column.id) && (
+                <TagV2
+                  text={
+                    groupBy.length > 1
+                      ? `Group by ${groupBy.indexOf(column.id) + 1}`
+                      : 'Group by'
+                  }
+                  size={TagV2Size.XS}
+                  subType={TagV2SubType.SQUARICAL}
+                  color={TagV2Color.PRIMARY}
+                  type={TagV2Type.SUBTLE}
+                  title={`Grouping level ${groupBy.indexOf(column.id) + 1} of ${groupBy.length}`}
                 />
-              </div>
-
-              <SummaryBand label="Metrics">
-                {columns.length === 0 ? (
-                  <FieldValue>{UNANSWERED}</FieldValue>
-                ) : (
-                  columns.map(({ id, title }) => fieldChip(title, id))
-                )}
-              </SummaryBand>
-
-              <SummaryBand label="Filters">
-                {rules.length === 0 ? (
-                  <FieldValue>{UNANSWERED}</FieldValue>
-                ) : (
-                  rules.map((rule) => fieldChip(ruleSentence(rule), rule.id))
-                )}
-              </SummaryBand>
-
-              {/* Numbered, because this row is about order and nothing else — the chips above
-                  carry the same names and say nothing about which comes first. A grouped
-                  column keeps its place here and is marked rather than moved: this reads back
-                  the column order, and the grouping is a second fact about one of them. */}
-              <SummaryBand label="Column order">
-                {columns.length === 0 ? (
-                  <FieldValue>{UNANSWERED}</FieldValue>
-                ) : (
-                  columns.map((column, index) => (
-                    <span key={column.id} className="flex items-center gap-1.5">
-                      <PrimitiveText
-                        {...font(FOUNDATION_THEME.font.size.body.md)}
-                        color={colors.gray[400]}
-                      >
-                        {`${index + 1}.`}
-                      </PrimitiveText>
-                      <FieldValue>{column.title}</FieldValue>
-                      {groupBy.includes(column.id) && (
-                        <TagV2
-                          // The level number only earns its place once there is more than
-                          // one: "Group by 1" of 1 states a rank nothing else competes for.
-                          text={
-                            groupBy.length > 1
-                              ? `Group by ${groupBy.indexOf(column.id) + 1}`
-                              : 'Group by'
-                          }
-                          size={TagV2Size.XS}
-                          subType={TagV2SubType.SQUARICAL}
-                          color={TagV2Color.PRIMARY}
-                          type={TagV2Type.SUBTLE}
-                          title={`Grouping level ${groupBy.indexOf(column.id) + 1} of ${groupBy.length}`}
-                        />
-                      )}
-                    </span>
-                  ))
-                )}
-              </SummaryBand>
-            </div>
-          </div>
-        </AccordionV2Item>
-      </AccordionV2>
+              )}
+            </span>
+          ))}
+        </ConfigSummaryChipRow>
+      </ConfigSummaryCard>
     </>
   )
 }

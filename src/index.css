@@ -225,6 +225,21 @@ html {
 }
 
 /*
+ * …and the same for their size. DataTable writes `font-size: 12px` inline on the <th> and
+ * again on the <p> inside it, with no prop reaching either, so both are named here and both
+ * need !important. The values arrive as --header-size / --header-leading from FieldsStep,
+ * so the type stays on FOUNDATION_THEME rather than becoming two numbers in a stylesheet.
+ *
+ * The leading matters as much as the size: Blend's own `line-height: 1.2` on the <p> is what
+ * would otherwise render 14px text at ~17px instead of the token's 20.
+ */
+.fields-table th[data-element='table-header'],
+.fields-table th[data-element='table-header'] p {
+  font-size: var(--header-size) !important;
+  line-height: var(--header-leading) !important;
+}
+
+/*
  * The Fields table's ⋮ menu offers Rename and nothing else.
  *
  * DataTable has no prop for this: it only draws the ⋮ for a sortable (or filterable) column,
@@ -327,4 +342,163 @@ html {
  */
 :root:has(.flow-grid[data-layout='wide']) .flow-grid {
   --flow-content: 1200px;
+}
+
+/*
+ * ── The report config detail sheet (src/pages/ConfigDetailSheet.tsx) ────────────────────
+ *
+ * Three rules, and each is here because Blend offers no prop for what it does. Nothing below
+ * reaches for a colour or a size of its own: every value is a token, handed in from the
+ * component or read off FOUNDATION_THEME there.
+ */
+
+/*
+ * The header's ✕.
+ *
+ * DrawerClose renders a bare <button>, and Tailwind's Preflight has already stripped it to
+ * transparent with no border (rule 12), so everything it needs is here. A 28px target rather
+ * than the 16px glyph: the glyph is the icon, the button is the thing you hit.
+ *
+ * Radius, hover fill and timing arrive as --sheet-* from ConfigDetailSheet — no fallbacks on
+ * purpose, so a token that stops being handed in fails visibly here rather than silently
+ * resolving to a hex literal this stylesheet had kept a copy of (rule 1).
+ */
+.config-sheet-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: var(--sheet-radius);
+  cursor: pointer;
+  transition: background-color var(--sheet-micro) var(--sheet-ease);
+}
+
+.config-sheet-close:hover {
+  background-color: var(--sheet-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .config-sheet-close {
+    transition: none;
+  }
+}
+
+/*
+ * The detail sheet's footer.
+ *
+ * Blend's DrawerFooter brings the padding, the background, the 12px gap and the flex-end
+ * alignment; the only thing it has no token for is the rule that separates it from a body
+ * scrolling underneath it. Colour arrives as --sheet-border from ConfigDetailSheet, on the
+ * same no-fallback terms as the close button above.
+ */
+.config-sheet-footer {
+  border-top: var(--sheet-border);
+}
+
+/*
+ * The configuration summary card — see src/config-summary.tsx for what it is and why it is
+ * composed rather than taken from Blend.
+ *
+ * Every value arrives as a --summary-* custom property set on the card's own root, so this
+ * block holds no colours, no radii and no spacing of its own. No fallbacks, deliberately: a
+ * property that stops being handed in should fail visibly here rather than resolve to a
+ * literal this stylesheet had kept a copy of (rule 1). The one exception is
+ * --summary-key-column, which every caller sets and which has a sensible narrow default.
+ */
+.config-summary {
+  border: var(--summary-line);
+  border-radius: var(--summary-radius);
+  background-color: var(--summary-surface);
+  /* The header and the first row both carry the card's radius on their outer corners; this
+     is what stops their square corners showing through it. */
+  overflow: hidden;
+}
+
+.config-summary-header {
+  padding: var(--summary-pad-y) var(--summary-pad-x);
+  border-bottom: var(--summary-line);
+}
+
+/*
+ * A row, and the rule above it.
+ *
+ * `border-top` on every row rather than `border-bottom`, so the last row has no rule to
+ * collide with the card's own bottom edge — and the header's own border-bottom already
+ * separates it from the first row, which is why the first row suppresses its top rule.
+ */
+.config-summary-row {
+  padding: var(--summary-pad-y) var(--summary-pad-x);
+  border-top: var(--summary-line);
+}
+
+.config-summary-header + .config-summary-row {
+  border-top: none;
+}
+
+/*
+ * The label column.
+ *
+ * KeyValuePairV2's horizontal layout is `space-between` with key and value both `flex: 1`,
+ * which splits the row 50/50 and leaves the values ragged against the card's right edge. The
+ * key is given a fixed basis and the value takes the rest, so every value in the card starts
+ * at one x — which is the keyline that makes a list of this length scannable.
+ *
+ * Scoped to `[data-element='key']` / `[data-element='value']`, the attributes
+ * KeyValuePairLayout puts on its two halves — structural, not class names that could change.
+ */
+.config-summary [data-keyvaluepair] > [data-element='key'] {
+  flex: 0 0 var(--summary-key-column, 220px);
+}
+
+.config-summary [data-keyvaluepair] > [data-element='value'] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * A chip row lays itself out on the same two columns, since its value is markup rather than
+ * the string KeyValuePairV2 takes.
+ */
+.config-summary-chips {
+  display: grid;
+  grid-template-columns: var(--summary-key-column, 220px) 1fr;
+  gap: var(--summary-gap, 32px);
+  align-items: start;
+}
+
+/*
+ * Below the card's own measure the two columns stop being two columns: a 220px label beside
+ * what is left of a phone screen gives the value about twelve characters. Container query,
+ * not a media query, because this card sits in a full-width page on one screen and in a
+ * 600px panel on another — what matters is the width it actually got (better-layout).
+ */
+@container config-summary (max-width: 420px) {
+  .config-summary [data-keyvaluepair] > [data-element='key'] {
+    flex: 0 0 auto;
+  }
+
+  .config-summary [data-keyvaluepair] {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .config-summary-chips {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
+
+/*
+ * A value that is not an answer — "Not set".
+ *
+ * KeyValuePairV2 colours its value from a token (gray[700]) and takes no colour prop, and
+ * the token is global: moving it would repaint every answered row in the app too. So the
+ * one row that needs a different colour gets it here, scoped to the flag the component sets
+ * — which is also why the rule reaches for the text node rather than the block, since the
+ * colour is set on the <p> inside.
+ */
+.config-summary-row[data-muted] [data-element='value'] p {
+  color: var(--summary-muted);
 }

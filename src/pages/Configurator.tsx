@@ -28,6 +28,7 @@ import {
 import { useDialKit } from 'dialkit'
 import { useCallback, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
+import { ConfigDetailSheet } from './ConfigDetailSheet'
 import { MiddleTruncate } from '../middle-truncate'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
@@ -238,10 +239,16 @@ const filterOptionsFor = (field: keyof ReportConfigRow): FilterOption[] =>
     .sort((a, b) => a.localeCompare(b))
     .map((value) => ({ id: `${String(field)}-${value}`, label: value, value }))
 
-/** Status is not on `rows` — it is derived — so its two values are named here. */
+/**
+ * Status is not on `rows` — it is derived — so its two values are named here.
+ *
+ * "Inactive", not "Disabled": the column's other value is "Active", and a pair should be one
+ * word and its opposite. "Disabled" also carries a second meaning in an interface — a control
+ * you cannot use — which is not what a switched-off config is.
+ */
 const STATUS_FILTER_OPTIONS: FilterOption[] = [
   { id: 'status-active', label: 'Active', value: 'Active' },
-  { id: 'status-disabled', label: 'Disabled', value: 'Disabled' },
+  { id: 'status-inactive', label: 'Inactive', value: 'Inactive' },
 ]
 
 /**
@@ -253,6 +260,49 @@ const frequencyRank = (value: string) => {
   const index = FREQUENCY_ORDER.findIndex((word) => value.startsWith(word))
   // Anything unrecognised sorts after every known cadence rather than silently landing first.
   return index === -1 ? FREQUENCY_ORDER.length : index
+}
+
+/**
+ * How a channel is named inside a sentence, rather than as a column value.
+ *
+ * "the monthly Email" reads as a column heading dropped into prose; "the monthly email" is
+ * what a person says. The three that are proper nouns keep their capital and take a noun
+ * after them, because a Slack is not a thing you send.
+ */
+const CHANNEL_NOUN: Record<string, string> = {
+  Email: 'email',
+  Slack: 'Slack message',
+  Webhook: 'webhook call',
+  SFTP: 'SFTP drop',
+}
+
+/** "Mon" is a column width; a sentence says Monday. */
+const WEEKDAY_NAMES: Record<string, string> = {
+  Mon: 'Monday',
+  Tue: 'Tuesday',
+  Wed: 'Wednesday',
+  Thu: 'Thursday',
+  Fri: 'Friday',
+  Sat: 'Saturday',
+  Sun: 'Sunday',
+}
+
+/**
+ * What turning this config off actually stops, as a sentence.
+ *
+ * The row carries its schedule as one packed string — "Monthly · 19th · 17:15 IST" — which is
+ * a table cell, not something to drop into a paragraph. So it is taken apart and said: the
+ * cadence, the day it falls on, and the time. A Real-time config names neither a day nor a
+ * time and the sentence simply stops early rather than inventing either.
+ */
+const disableConsequence = ({ frequency, channel }: ReportConfigRow) => {
+  const [cadence, ...rest] = frequency.split(' · ')
+  const time = rest.find((part) => /\d{1,2}:\d{2}/.test(part))
+  const day = rest.find((part) => part !== time)
+  // A weekday recurs — "on Mondays" — where a date in the month is the one day it lands on.
+  const on = day ? ` on ${WEEKDAY_NAMES[day] ? `${WEEKDAY_NAMES[day]}s` : `the ${day}`}` : ''
+  const what = CHANNEL_NOUN[channel] ?? channel.toLowerCase()
+  return `We will not send the ${cadence.toLowerCase()} ${what}${on}${time ? ` at ${time}` : ''} any more.`
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -384,6 +434,14 @@ function Configurator() {
   const handleFilterTabChange = (next: string) => {
     setFilter(next)
     setPage(1)
+    // A category tab hides the Category column, and a filter set on a hidden column is a
+    // filter with no menu to clear it from — the table would narrow for a reason nothing on
+    // screen explains. The tab is the stronger statement of the same thing, so it wins.
+    if (next !== ALL) {
+      setColumnFilters((filters) =>
+        filters.filter((filter) => filter.field !== 'categorySource'),
+      )
+    }
   }
 
   const handleFilterChange = useCallback((filters: ColumnFilter[]) => {
@@ -421,6 +479,39 @@ function Configurator() {
   const [pendingDisableId, setPendingDisableId] = useState<string | null>(null)
   const pendingRow = rows.find((row) => row.id === pendingDisableId) ?? null
 
+  /**
+   * Id of the row whose detail sheet is open, or null. An id rather than the row itself, for
+   * the same reason `pendingDisableId` is: the row is looked up from `rows` on the way to
+   * render, so a sheet can never be showing a stale copy of a row that has since changed.
+   */
+  const [detailId, setDetailId] = useState<string | null>(null)
+  const detailRow = rows.find((row) => row.id === detailId) ?? null
+
+  /**
+   * DataTable fires `onRowClick` from the `<tr>` (TableBody/index.tsx:766), so every click
+   * inside a row reaches it — the Actions toggle included. That cell stops its own clicks
+   * below, so this only ever has to handle a click on a value.
+   */
+  const openDetail = useCallback((row: Record<string, unknown>) => {
+    /*
+     * Let go of the clicked cell before the sheet opens.
+     *
+     * DataTable gives every cell a tabindex and focuses the one you click (it tracks a
+     * `focusedCell` of its own), and the drawer then puts `aria-hidden` on everything behind
+     * it. Focus inside an aria-hidden subtree is the one combination that actually breaks a
+     * screen reader — the browser says so out loud: "Blocked aria-hidden on an element
+     * because its descendant retained focus."
+     *
+     * Blurring here rather than after the fact, because the alternative is moving focus into
+     * the drawer manually and racing vaul's own autofocus for it. With the cell released,
+     * vaul's autofocus lands unopposed and Escape / Tab behave as they should.
+     */
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    setDetailId(String(row.id))
+  }, [])
+
+  const closeDetail = useCallback(() => setDetailId(null), [])
+
   const closeConfirm = () => setPendingDisableId(null)
 
   const confirmDisable = () => {
@@ -443,7 +534,7 @@ function Configurator() {
         enabled: isEnabled,
         // A TAG column's value must be TagData — an object carrying `text`. That text
         // is what the Status filter matches on; the chip comes from renderCell.
-        status: { text: isEnabled ? 'Active' : 'Disabled' },
+        status: { text: isEnabled ? 'Active' : 'Inactive' },
       }
     })
 
@@ -479,14 +570,17 @@ function Configurator() {
   )
 
   /**
-   * Built once, deliberately. DataTable seeds `visibleColumns` from a `useState`
-   * initialiser and its resync effect only notices a changed `renderCell` when the column
-   * is `ColumnType.CUSTOM` (DataTable.tsx:265-274) — so for a REACT_ELEMENT column the
-   * FIRST `renderCell` closure is the only one that ever runs. Rebuilding this memo per
-   * toggle would therefore be silently ignored, leaving a one-way switch.
+   * Rebuilt on a tab change and on nothing else. DataTable seeds `visibleColumns` from a
+   * `useState` initialiser and its resync effect only notices a changed `renderCell` when
+   * the column is `ColumnType.CUSTOM` (DataTable.tsx:265-274) — so for a REACT_ELEMENT
+   * column the FIRST `renderCell` closure is the only one that ever runs. Rebuilding this
+   * memo per *toggle* would therefore be silently ignored, leaving a one-way switch.
    *
    * So the cell reads its state from `row`, which is always current because `data` is a
-   * prop, and writes through `setEnabled`, which React guarantees is stable.
+   * prop, and writes through `setEnabled`, which React guarantees is stable. That is what
+   * makes `activeCategory` a safe dependency: a tab change alters the column *count*, which
+   * the resync effect does act on (`hasChanges` compares lengths first), and the closures it
+   * adopts along the way are interchangeable with the ones they replace.
    */
   const columns = useMemo<ColumnDefinition<Record<string, unknown>>[]>(
     () =>
@@ -494,7 +588,22 @@ function Configurator() {
       // they all share, written once; each branch then adds only what makes it different.
       // Kept as three returns rather than a spread of partials because ColumnDefinition is
       // a union discriminated on `type` — a widened `type` stops it narrowing at all.
-      COLUMNS.map(({ field, header }) => {
+      COLUMNS.filter(
+        /*
+         * On a category tab the Category column says the same word in every row — it is the
+         * tab, restated once per row, spending a column's width to tell you what you just
+         * clicked. So it is dropped there, and kept on "All", where it is the one thing
+         * telling the two kinds of report apart.
+         *
+         * Dropped from the list rather than hidden with `isVisible: false`, because
+         * DataTable treats them identically and removal is the smaller statement: its resync
+         * effect rebuilds `visibleColumns` from whatever survives and splices a returning
+         * column back at its original index (DataTable.tsx:215-274), so switching back to
+         * All puts Category between Configuration Name and Source / Type rather than on the
+         * end. No remount, so the header's sort and filter menus keep their state.
+         */
+        ({ field }) => activeCategory === null || field !== 'categorySource',
+      ).map(({ field, header }) => {
         const base = { field, header, ...HUG }
 
         if (field === 'status') {
@@ -507,14 +616,14 @@ function Configurator() {
             type: ColumnType.TAG,
             // TAG's type config is `filterComponent: 'select'`, so the header offers a
             // one-of list. The two values are named rather than scraped from the page,
-            // so "Disabled" is offerable on a page where every row is Active.
+            // so "Inactive" is offerable on a page where every row is Active.
             filterType: FilterType.SELECT,
             filterOptions: STATUS_FILTER_OPTIONS,
             renderCell: (_value, row) => {
               const isEnabled = row.enabled !== false
               return (
                 <TagV2
-                  text={isEnabled ? 'Active' : 'Disabled'}
+                  text={isEnabled ? 'Active' : 'Inactive'}
                   color={isEnabled ? TagV2Color.SUCCESS : TagV2Color.NEUTRAL}
                   type={TagV2Type.SUBTLE}
                   size={TagV2Size.SM}
@@ -536,6 +645,18 @@ function Configurator() {
               const id = String(row.id)
               const checked = row.enabled !== false
               return (
+                // The row is now clickable (onRowClick, below), and DataTable listens on the
+                // <tr> — so without this a click on the toggle would also open the detail
+                // sheet behind the confirmation. Stopped here rather than sniffing the event
+                // target in the row handler: the cell knows it is a control, and the row
+                // should not have to know what its cells contain.
+                <div
+                  className="contents"
+                  onClick={(event) => event.stopPropagation()}
+                  // Keyboard reaches the switch directly, so this wrapper takes no focus and
+                  // needs no key handler — the click it stops is a pointer click only.
+                  role="presentation"
+                >
                 <SwitchV2
                   checked={checked}
                   size={SelectorV2Size.MD}
@@ -551,6 +672,7 @@ function Configurator() {
                     }
                   }}
                 />
+                </div>
               )
             },
           }
@@ -591,7 +713,7 @@ function Configurator() {
 
         return { ...base, type: ColumnType.TEXT }
       }),
-    [],
+    [activeCategory],
   )
 
   return (
@@ -711,6 +833,9 @@ function Configurator() {
             serverSideFiltering
             onFilterChange={handleFilterChange}
             onSortChange={handleSortChange}
+            // Opens the detail sheet. DataTable also gives a clickable row `cursor: pointer`
+            // off this prop alone (TableBody/index.tsx:739), so the affordance comes with it.
+            onRowClick={openDetail}
             // The footer describes the set the parent sliced, not `data.length`, which is
             // only ever the current page — otherwise ten of forty rows would read as "10".
             pagination={{
@@ -729,18 +854,36 @@ function Configurator() {
         </div>
       </div>
 
-      {/* Copy follows the reference dialog: a "Confirm to …" title, a body that names the
-          thing in quotes and asks in plain words, and a destructive primary. `isOpen` is
-          driven by the pending id, and the row name is read from `pendingRow` rather than
-          held in its own state so the two cannot disagree. */}
+      {/* Clicking a row opens it. Rendered once here rather than per row — one sheet that
+          changes what it shows, not ten mounted sheets waiting their turn. */}
+      <ConfigDetailSheet row={detailRow} onClose={closeDetail} />
+
+      {/* The title asks the question, and the body answers "what happens if I say yes?".
+          It used to be split the other way — a standing "Confirm to disable config" heading
+          with the actual question as the body's first line — which spent the one line
+          everybody reads on a label for the dialog rather than on the decision, and then
+          made the name of the thing being turned off the second thing you saw.
+
+          `isOpen` is driven by the pending id, and the name is read from `pendingRow`
+          rather than held in its own state, so the two cannot disagree. Curly quotes are
+          written into the string because ModalV2 types `title` as `string` — no JSX, so no
+          entities. */}
       <ModalV2
         isOpen={pendingRow !== null}
         onClose={closeConfirm}
-        title="Confirm to disable config"
+        title={`Turn OFF “${pendingRow?.configurationName ?? ''}”?`}
         showCloseButton
         closeOnBackdropClick
+        // ModalV2's default width is the better part of a laptop screen, which for two
+        // sentences means a line you have to track across rather than read. 480 keeps the
+        // copy near the 45-75 character measure.
+        dimensions={{ width: 480 }}
         primaryAction={{
-          text: 'Yes, Disable it',
+          // The heading asks whether to turn it off, and the body says it can be turned back
+          // on — so the button answers in those words too. "Disable" was a third word for the
+          // same switch, and a confirm button that renames the action it is confirming makes
+          // you check the heading again before pressing it.
+          text: 'Yes, turn it off',
           buttonType: ButtonV2Type.DANGER,
           onClick: confirmDisable,
         }}
@@ -750,13 +893,23 @@ function Configurator() {
           onClick: closeConfirm,
         }}
       >
+        {/* The consequence, in the config's own schedule and channel rather than in general
+            terms — "you will stop receiving a report" is something a user has to translate,
+            where "the monthly email on the 19th at 17:15 IST" names the thing they will
+            notice missing. Spelled out as prose rather than by pasting the schedule cell in:
+            see disableConsequence.
+
+            Plain copy at gray[700], not a callout: two sentences in a 480px dialog do not
+            need a box around them to be read, and a banner inside the dialog that is already
+            asking the question is a frame around a frame. */}
         <PrimitiveText
           as="p"
           {...font(FOUNDATION_THEME.font.size.body.md)}
-          color={colors.gray[600]}
+          color={colors.gray[700]}
         >
-          Are you sure you want to turn OFF the &ldquo;{pendingRow?.configurationName}&rdquo;
-          config?
+          You will stop receiving this report.{' '}
+          {pendingRow ? disableConsequence(pendingRow) : ''} Although, you can turn this back
+          on any time.
         </PrimitiveText>
       </ModalV2>
     </div>

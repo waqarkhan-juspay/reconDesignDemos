@@ -43,6 +43,36 @@ const SUPPRESSED: Rule[] = [
       '(Block.tsx:181) contains only `outline` — so it is forwarded to the DOM. Fires ' +
       'wherever a StepperV2 renders.',
   },
+  /*
+   * The five below are one bug with five names, from V1 Drawer — which is what the report
+   * config detail sheet uses, deliberately (see ConfigDetailSheet.tsx for why V1 and not
+   * DrawerV2). `StyledContent` is `styled(VaulDrawer.Content)` and takes these as styling
+   * props without the `$` prefix styled-components needs to mark a prop transient
+   * (DrawerBase.tsx:51-63). Underlying element is a DOM div, so all five are forwarded.
+   *
+   * Listed one per prop rather than matched loosely, so the same message about a prop *we*
+   * leaked still comes through. They fire once per drawer open.
+   */
+  ...['hasSnapPoints', 'contentDriven', 'customWidth', 'customMaxWidth', 'fullScreen'].map(
+    (prop) => ({
+      match: 'React does not recognize the `%s` prop on a DOM element',
+      args: [prop],
+      why:
+        `DrawerBase.tsx's StyledContent declares ${prop} as a styling prop without a $ ` +
+        'prefix, so styled-components forwards it to the underlying div. Fires whenever a ' +
+        'V1 Drawer opens.',
+    }),
+  ),
+  {
+    match: 'requires a `DialogTitle` for the component to be accessible',
+    why:
+      'A false negative, and unreachable from here. radix checks for an element carrying ' +
+      "the id *it* generated, but Blend's DrawerTitle overrides that id with a useId of " +
+      'its own (DrawerBase.tsx:594) and wires it up through its own accessibility context ' +
+      'instead — so the drawer IS labelled (StyledContent gets aria-labelledby, and ' +
+      'ConfigDetailSheet also passes an aria-label), radix just cannot see it. Nothing a ' +
+      'caller passes can change the id Blend writes.',
+  },
 ]
 
 /**
@@ -61,6 +91,17 @@ const SUPPRESSED_WARNINGS: Rule[] = [
   {
     match: 'motion() is deprecated',
     why: "Blend's dist calls the deprecated motion(Component) factory. Not reachable from here.",
+  },
+  {
+    match: 'Missing `Description` or `aria-describedby={undefined}`',
+    why:
+      "radix's other content check, and unreachable for the same reason as the DialogTitle " +
+      'one above: Blend\'s DrawerDescription overrides radix\'s generated id with a useId of ' +
+      'its own (DrawerBase.tsx:626), so radix cannot find a description whether one is ' +
+      'rendered or not. Passing aria-describedby={undefined} — the escape hatch the message ' +
+      'names — does not reach it either: DrawerContent resolves that prop against its own ' +
+      'accessibility context before forwarding (DrawerBase.tsx:489). Fires on every V1 ' +
+      'Drawer open.',
   },
   {
     match: "several instances of 'styled-components'",

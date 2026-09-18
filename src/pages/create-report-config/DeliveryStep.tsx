@@ -3,10 +3,6 @@ import {
   AlertV2ActionPosition,
   AlertV2SubType,
   AlertV2Type,
-  ButtonV2,
-  ButtonV2Size,
-  ButtonV2SubType,
-  ButtonV2Type,
   CheckboxV2,
   FOUNDATION_THEME,
   InputSizeV2,
@@ -15,16 +11,15 @@ import {
   SingleSelectV2Size,
   SingleSelectV2Variant,
   TextInputV2,
-  ThemeProvider,
   UnitInput,
   UnitInputSize,
   UnitPosition,
 } from '@juspay/blend-design-system'
-import type { LucideIcon } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Info, type LucideIcon } from 'lucide-react'
+import { useState, type ReactNode } from 'react'
 import { PrimitiveText, font } from '../../primitives'
-import { neutralLinkTokens } from '../../theme'
 import {
+  DAILY,
   DAYS_OF_MONTH,
   DAYS_OF_WEEK,
   DELIVERY_CHANNELS,
@@ -33,13 +28,15 @@ import {
   MONTHLY,
   SFTP_CHANNEL,
   SLACK_CHANNEL,
+  SPECIFIED_TIME,
   TIME_OPTIONS,
   TIMINGS,
   WEEKLY,
+  scheduleNoteFor,
   type DeliveryAnswers,
 } from './answers'
 import { OptionCard, OptionRow, QuestionGroup } from './options'
-import { RecipientsInput } from './RecipientsInput'
+import { EmailRecipientFields } from './EmailRecipients'
 
 const { colors } = FOUNDATION_THEME
 
@@ -159,34 +156,15 @@ export function DeliveryStep({
   const [specifiedTime, immediately] = TIMINGS
 
   /**
-   * Cc and Bcc each hold one slot under To — Cc's first — showing either its link or its
-   * open field. So an open Cc pushes the Bcc link below it, and an open Bcc keeps the Cc
-   * link above it. Only while both are closed do the two links share a single row.
+   * The schedule sentence, and the one the user has closed.
    *
-   * Secondary + INLINE is Blend's borderless text button; the scoped ThemeProvider tints it
-   * gray[500] (neutralLinkTokens, src/theme.ts).
-   *
-   * blend-gap: ButtonV2 hard-codes `cursor: default` and has no text-decoration token, so
-   * the pointer and the hover underline that make these read as links come from the wrapper.
+   * Dismissal is held as the note's own text rather than as a boolean, so closing it settles
+   * *that* sentence and nothing else: change the day, the time or the cadence and the new
+   * sentence is a different string, so it arrives. Otherwise a single ✕ early in the step
+   * would silence every schedule the user went on to try.
    */
-  const extraLinks = (fields: ('Cc' | 'Bcc')[]) => (
-    <ThemeProvider componentTokens={neutralLinkTokens}>
-      <div className="flex items-center gap-4 [&_button]:cursor-pointer [&_button:hover_span]:underline [&_button:hover_span]:underline-offset-2">
-        {fields.map((field) => (
-          <ButtonV2
-            key={field}
-            buttonType={ButtonV2Type.SECONDARY}
-            subType={ButtonV2SubType.INLINE}
-            size={ButtonV2Size.SMALL}
-            text={field}
-            onClick={() =>
-              onChange({ ...answers, ...(field === 'Cc' ? { emailCc: [] } : { emailBcc: [] }) })
-            }
-          />
-        ))}
-      </div>
-    </ThemeProvider>
-  )
+  const note = scheduleNoteFor(answers)
+  const [dismissed, setDismissed] = useState<string | null>(null)
 
   /**
    * The step opens on its name alone, and the cadence question arrives once there is one —
@@ -229,24 +207,35 @@ export function DeliveryStep({
               dimmed={frequency !== null && frequency !== option.id}
               // Leaving a cadence drops its day, so a stale Monday or 15th cannot ride
               // along on another cadence and resurface if the first is picked again.
+              //
+              // Weekly and Monthly are never asked the timing question (see SPECIFIED_TIME
+              // in answers.ts), so picking one answers it on their behalf — the step's
+              // remaining questions, and isDeliveryComplete, both read `timing` and would
+              // otherwise stall on a question that is not on screen.
               onSelect={() =>
                 onChange({
                   ...answers,
                   frequency: option.id,
                   dayOfWeek: option.id === WEEKLY ? dayOfWeek : null,
                   dayOfMonth: option.id === MONTHLY ? dayOfMonth : null,
+                  timing: option.id === DAILY ? timing : SPECIFIED_TIME,
                 })
               }
             />
           ))}
         </OptionRow>
 
-        {/* Revealed once there is a cadence. The name no longer needs checking here — this
-            whole group only renders once it has one — and checking it again would make the
-            row vanish mid-retype while the channels below it stayed.
+        {/* Revealed once the cadence is Daily, and only then. The name no longer needs
+            checking here — this whole group only renders once it has one — and checking it
+            again would make the row vanish mid-retype while the channels below it stayed.
+
+            Weekly and Monthly skip this row entirely rather than showing it with one card
+            disabled: "as soon as recon completes" is a daily answer wearing a weekly label,
+            and a cadence that cannot take it should not have to explain why. They go
+            straight to the day and time below.
             items-start, not stretch: the design keeps both cards at their natural height
             and hangs the time dropdown below the left one rather than inside the row. */}
-        {frequency !== null && (
+        {frequency === DAILY && (
           // The same three tracks as the cadence row above (OptionRow: equal columns, 16px
           // gap), so Specified Time sits exactly under Daily and Immediately under Weekly.
           // items-start keeps each card at its own height rather than matching its neighbour.
@@ -333,6 +322,36 @@ export function DeliveryStep({
           </div>
           </div>
         )}
+
+        {/* The schedule read back as a sentence, once it is answerable.
+
+            It says the one thing the controls above it cannot: which stretch of data the
+            file covers. A cadence, a day and a time are three answers; "covering the 1st to
+            the last day of the month" is what they add up to, and getting that wrong is the
+            mistake this step exists to prevent.
+
+            Closable, because it is a confirmation rather than a warning — there is nothing
+            to act on once it has been read, and the user may be several attempts into
+            choosing a schedule. Keyed on the sentence so a new schedule plays its own
+            entrance rather than swapping the text inside a box that is already there. */}
+        {note !== null && note !== dismissed && (
+          <div key={note} className="flow-question">
+            <AlertV2
+              type={AlertV2Type.PRIMARY}
+              subType={AlertV2SubType.SUBTLE}
+              // AlertV2 draws no icon of its own — the slot is the only way to one, and
+              // without it the sentence starts hard against the alert's left padding.
+              slot={{ slot: <Info size={16} /> }}
+              description={note}
+              closeButton={{ show: true, onClick: () => setDismissed(note) }}
+              width="100%"
+              // AlertV2 caps itself at 900px (alertV2.light.tokens.ts:10) and this step is
+              // wider than that, so without this the alert stops ~60px short of the cards
+              // above it and reads as a box that failed to fill its row.
+              maxWidth="100%"
+            />
+          </div>
+        )}
         </div>
       </QuestionGroup>
       )}
@@ -367,46 +386,14 @@ export function DeliveryStep({
                 }
               >
                 {id === EMAIL_CHANNEL ? (
-                  <div className="flex flex-col gap-3">
-                    <RecipientsInput
-                      label="To"
-                      required
-                      recipients={emailTo}
-                      onChange={(next) => onChange({ ...answers, emailTo: next })}
-                    />
-                    {/* Cc's slot, then Bcc's — each its link or its field (see extraLinks). */}
-                    {emailCc === null && emailBcc === null ? (
-                      extraLinks(['Cc', 'Bcc'])
-                    ) : (
-                      <>
-                        {emailCc === null ? (
-                          extraLinks(['Cc'])
-                        ) : (
-                          <div className="flow-question">
-                            <RecipientsInput
-                              label="Cc"
-                              recipients={emailCc}
-                              onChange={(next) => onChange({ ...answers, emailCc: next })}
-                              // Folding it away drops what was typed, back to the "Cc" link.
-                              onRemove={() => onChange({ ...answers, emailCc: null })}
-                            />
-                          </div>
-                        )}
-                        {emailBcc === null ? (
-                          extraLinks(['Bcc'])
-                        ) : (
-                          <div className="flow-question">
-                            <RecipientsInput
-                              label="Bcc"
-                              recipients={emailBcc}
-                              onChange={(next) => onChange({ ...answers, emailBcc: next })}
-                              onRemove={() => onChange({ ...answers, emailBcc: null })}
-                            />
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
+                  // Shared with the detail sheet's Download panel — see EmailRecipients.
+                  <EmailRecipientFields
+                    required
+                    value={{ to: emailTo, cc: emailCc, bcc: emailBcc }}
+                    onChange={({ to, cc, bcc }) =>
+                      onChange({ ...answers, emailTo: to, emailCc: cc, emailBcc: bcc })
+                    }
+                  />
                 ) : id === SFTP_CHANNEL ? (
                   // The prototype has no SFTP configurations to look up, so this always shows
                   // the not-yet-set-up case: delivery via SFTP needs one before it can run.
@@ -445,7 +432,7 @@ export function DeliveryStep({
                   // wins, and the string value is cast through its number type. TextInputV2
                   // cannot draw the unit box — its slots are inset inside the border.
                   <UnitInput
-                    label="Channel Name"
+                    label="Channel ID"
                     required
                     size={UnitInputSize.MEDIUM}
                     unit="#"

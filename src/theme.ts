@@ -1,6 +1,7 @@
 import {
   FOUNDATION_THEME,
   getDirectoryTokens,
+  getKeyValuePairV2Tokens,
   getTableToken,
   type ComponentTokenType,
   type DirectoryTokenType,
@@ -9,6 +10,7 @@ import {
   type ResponsiveTabsV2Tokens,
 } from '@juspay/blend-design-system'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
+import { DRAWER_TOKENS } from './tokens/Drawer'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
 import { TAGV2_TOKENS } from './tokens/TagV2'
 
@@ -251,4 +253,53 @@ export const fieldTagTokens: ComponentTokenType = {
       },
     }),
   ) as unknown as ComponentTokenType['TAGV2'],
+}
+
+/**
+ * The report config detail sheet's spacing, set on Blend's own tokens rather than on the
+ * markup around them — see ConfigDetailSheet.tsx.
+ *
+ * Two values move, and both are the panel's own rhythm rather than anything about a single
+ * row:
+ *
+ * `DRAWER.content.padding` 16/20 → 24. Blend's values are a bottom-sheet inset — right on a
+ * phone, thin on a 600px reference panel, where 20px leaves the title, the key column and the
+ * preview table all running to within 20px of the edge and nothing reading as a margin. 24 is
+ * the step the pages already use, and because DrawerHeader, DrawerBody and DrawerFooter all
+ * read this one token, the header/body boundary opens to 48px at the same time — which is
+ * what lets the sheet separate its zones with space instead of a rule (better-layout: group
+ * with space, not lines).
+ *
+ * `KEYVALUEPAIRV2.gap.vertical` 4 → 8. Only the stacked rows use it (Metrics, Filters, Column
+ * Order, File Name Template), and their values wrap to two 20px lines. At 4px the key sits
+ * closer to its value than the value's own lines sit to each other, so the pair reads as one
+ * paragraph and the list loses its keys; 8px still leaves the 20px between those rows at
+ * 2.5x the gap inside one, which is the ratio that makes a group read as a group.
+ *
+ * Scoped by a nested ThemeProvider for the same reason as sectionTabsTokens: DRAWER is also
+ * every mobile select panel Blend opens (SingleSelectDrawer and friends), which want the
+ * bottom-sheet inset they were designed with.
+ */
+export const detailSheetTokens: ComponentTokenType = {
+  ...componentTokens,
+  DRAWER: perBreakpoint(
+    DRAWER_TOKENS as unknown as Record<
+      string,
+      { content: { padding: { x: unknown; y: unknown } } }
+    >,
+    (token) => ({
+      ...token,
+      content: {
+        ...token.content,
+        padding: { x: FOUNDATION_THEME.unit[24], y: FOUNDATION_THEME.unit[24] },
+      },
+    }),
+  ) as unknown as ComponentTokenType['DRAWER'],
+  KEYVALUEPAIRV2: perBreakpoint(
+    getKeyValuePairV2Tokens(FOUNDATION_THEME) as unknown as Record<
+      string,
+      { gap: { vertical: unknown; horizontal: unknown } }
+    >,
+    (token) => ({ ...token, gap: { ...token.gap, vertical: FOUNDATION_THEME.unit[8] } }),
+  ) as unknown as ComponentTokenType['KEYVALUEPAIRV2'],
 }
