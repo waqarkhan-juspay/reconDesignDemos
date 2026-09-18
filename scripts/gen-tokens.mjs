@@ -16,7 +16,12 @@ import { join } from 'node:path'
 const LIB = 'node_modules/@juspay/blend-design-system/lib'
 const COMPONENTS = join(LIB, 'components')
 
-/** The V2 components this app actually renders. */
+/**
+ * The components this app actually renders and overrides a token on.
+ *
+ * V2 throughout bar one: `Drawer`, which has no V2 worth using (DrawerV2 ships no tokens at
+ * all — see ConfigDetailSheet.tsx) and so is the V1 exception rule 4 allows.
+ */
 const RENDERED = [
   'AlertV2',
   'AvatarV2',
@@ -32,7 +37,25 @@ const RENDERED = [
   'TagV2',
   'InputsV2/TextInputV2',
   'TopbarV2',
+  'Drawer',
 ]
+
+/**
+ * Responsive token types the package root does not re-export, and what a generated file
+ * should say instead.
+ *
+ * Only Drawer so far: its index publishes the components and `DrawerTokensType` and stops
+ * short of `ResponsiveDrawerTokens`. The breakpoint map is the type's whole content
+ * (`{ [key in BreakpointType]: DrawerTokensType }`), so spelling it out is structurally the
+ * same type — and it typechecks against the ComponentTokenType slot, which is the test that
+ * matters.
+ */
+const TYPE_FALLBACK = {
+  ResponsiveDrawerTokens: {
+    type: "Record<'sm' | 'lg', DrawerTokensType>",
+    imports: ['DrawerTokensType'],
+  },
+}
 
 /** SLOT name ← the responsive token type it is declared with, read out of ThemeContext. */
 const slotsByType = new Map()
@@ -93,8 +116,12 @@ mkdirSync(outDir, { recursive: true })
 const generated = []
 for (const folder of RENDERED) {
   const dir = join(COMPONENTS, folder)
-  const file = readdirSync(dir).find((f) => /\.light\.tokens?\.tsx?$/.test(f))
-  if (!file) throw new Error(`no light token file in ${folder}`)
+  // V2 components split light and dark; the V1s ship one tree in `<name>.tokens.ts`.
+  const files = readdirSync(dir)
+  const file =
+    files.find((f) => /\.light\.tokens?\.tsx?$/.test(f)) ??
+    files.find((f) => /^[a-z][\w.]*\.tokens\.tsx?$/.test(f))
+  if (!file) throw new Error(`no token file in ${folder}`)
 
   const src = readFileSync(join(dir, file), 'utf8')
   const type = src.match(/\):\s*(Responsive\w+)\s*=>/)?.[1]
@@ -120,8 +147,11 @@ for (const folder of RENDERED) {
     .map((m) => m[1])
     .filter((name) => name !== 'FOUNDATION_THEME'))].sort()
 
+  const fallback = TYPE_FALLBACK[type]
+  const typeNames = [...enums.map((e) => e), ...(fallback?.imports ?? [type]).map((t) => `type ${t}`)]
+
   const header = [
-    `import { FOUNDATION_THEME, ${enums.map((e) => `${e}, `).join('')}type ${type} } from '@juspay/blend-design-system'`,
+    `import { FOUNDATION_THEME, ${typeNames.join(', ')} } from '@juspay/blend-design-system'`,
     '',
     '/**',
     ` * \`${slot}\` — the complete token tree for this component, at the values 0.0.37 ships.`,
@@ -140,7 +170,7 @@ for (const folder of RENDERED) {
     ' */',
   ].join('\n')
 
-  const body = `${header}\n${locals ? `${locals}\n\n` : ''}export const ${constName}: ${type} = ${tree}\n`
+  const body = `${header}\n${locals ? `${locals}\n\n` : ''}export const ${constName}: ${fallback?.type ?? type} = ${tree}\n`
   writeFileSync(join(outDir, `${stem}.ts`), body)
   generated.push({ stem, slot, constName, lines: body.split('\n').length })
 }

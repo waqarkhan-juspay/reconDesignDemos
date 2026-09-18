@@ -22,6 +22,7 @@ import { PrimitiveText, font } from '../../primitives'
 import { ghostButtonTokens } from '../../theme'
 import { DeliveryStep } from './DeliveryStep'
 import { ExitFlowModal } from './ExitFlowModal'
+import { SubmitConfigModal } from './SubmitConfigModal'
 import { FieldsStep } from './FieldsStep'
 import { FieldsLayoutDials, type FieldsLayout } from './fields-layout'
 import { FiltersStep } from './FiltersStep'
@@ -223,6 +224,9 @@ function CreateReportConfig() {
 
   const { title, description, tag, skipLabel } = STEPS[step]
   const isLastStep = step === STEPS.length - 1
+
+  /** Whether the submit dialog is up. Only ever set from the last step's primary action. */
+  const [submitting, setSubmitting] = useState(false)
 
   /**
    * Filters is the one step nothing has to be answered on, so its primary action is not
@@ -457,7 +461,8 @@ function CreateReportConfig() {
                   disabled={!optional && !complete}
                   onClick={() => {
                     if (isLastStep) {
-                      navigate('/configurator')
+                      // One more question before the flow closes — see SubmitConfigModal.
+                      setSubmitting(true)
                       return
                     }
                     // Committing the step is what ticks it on the rail. Back does not undo
@@ -479,6 +484,16 @@ function CreateReportConfig() {
         onCancel={() => setConfirmingExit(false)}
         onSaveDraft={leaveFlow}
         onDiscard={leaveFlow}
+      />
+
+      {/* Submit asks for the file name, then leaves — which is why its primary reads "Submit
+          and Exit" rather than "Submit". There is nothing behind this modal to come back to:
+          the config is made, and the flow's job is done. */}
+      <SubmitConfigModal
+        isOpen={submitting}
+        configName={delivery.name}
+        onClose={() => setSubmitting(false)}
+        onSubmit={() => navigate('/configurator')}
       />
     </div>
   )

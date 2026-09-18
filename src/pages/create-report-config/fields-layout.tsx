@@ -4,8 +4,9 @@ import type { CSSProperties, ReactNode } from 'react'
 /**
  * `v1` — the table first, the field vocabulary and "Add custom column" under it.
  * `v2` — the vocabulary and "Add custom column" first, the table last.
- * `v3` — v2's order on a 1200px step, everything on the table's left edge, and left/right
- *        buttons at the table's top right.
+ * `v3` — v2's order on a 1200px step, everything on the table's left edge. The left/right
+ *        buttons it used to own alone are now on every version — see FieldsStep — so this is
+ *        v4 with the vocabulary above the table.
  * `v4` — v1's order and chrome (table first, no arrows) on v3's 1200px step.
  * `v5` — v4, with "Add custom column" moved out of the step heading and into the container,
  *        below the chips.
@@ -70,7 +71,7 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
         options: [
           { value: 'v1', label: 'Version 1 — table first' },
           { value: 'v2', label: 'Version 2 — fields first' },
-          { value: 'v3', label: 'Version 3 — 1200px, table arrows' },
+          { value: 'v3', label: 'Version 3 — 1200px, fields first' },
           { value: 'v4', label: 'Version 4 — 1200px, table first' },
           { value: 'v5', label: 'Version 5 — v4, add button below chips' },
           { value: 'v6', label: 'Version 6 — v4, redrawn field chips' },

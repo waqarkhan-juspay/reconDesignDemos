@@ -14,7 +14,7 @@ import {
   ThemeProvider,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { ChevronLeft, ChevronRight, Hash, Plus, X } from 'lucide-react'
+import { Asterisk, ChevronLeft, ChevronRight, Hash, Plus, X } from 'lucide-react'
 import {
   useCallback,
   useEffect,
@@ -24,6 +24,7 @@ import {
   useState,
   type CSSProperties,
 } from 'react'
+import { SAMPLE_ROW_COUNT, sampleFor } from '../../field-samples'
 import { PrimitiveText, font } from '../../primitives'
 import { fieldTagTokens } from '../../theme'
 import { AddCustomColumnModal } from './AddCustomColumnModal'
@@ -67,6 +68,40 @@ const REMOVE_TAG_SLOT = { slot: <X size={12} color={colors.gray[0]} /> }
  * `tag/slot/size/md` is 12, which is the size Blend's own md slot expects.
  */
 const FIELD_HASH_SLOT = { slot: <Hash size={12} color={colors.gray[0]} /> }
+
+/**
+ * Off for now. The paragraph above already flags the cost — a chip that changes width when
+ * you click it — and on screen that is what it does, so the # is switched off while the two
+ * states are looked at side by side.
+ *
+ * A flag rather than deleting the slot: the design does call for it (node 4861:105311), so
+ * this is a decision being held open, not a mistake being corrected. One value to flip.
+ */
+const SHOW_FIELD_HASH = false
+
+/**
+ * The mark that says "this field is yours, not ours" — on every custom chip, lit or pale, so a
+ * field made with "Add custom column" is identifiable before you click it rather than only
+ * after.
+ *
+ * blend-gap: the design names `asterisk-02`, which is Untitled UI's icon set. lucide (rule 11)
+ * ships one asterisk, `Asterisk`, and it is the same glyph — six strokes through a centre — so
+ * this is the nearest real icon rather than a substitute for a missing one.
+ *
+ * Tinted by state for the reason REMOVE_TAG_SLOT gives: a lit chip is gray[950], so the glyph
+ * has to be gray[0] to be seen at all. A pale chip keeps it at gray[400], one step under the
+ * label, so the mark reads as an annotation rather than as part of the name.
+ */
+const customFieldSlot = (selected: boolean) => ({
+  slot: <Asterisk size={12} color={selected ? colors.gray[0] : colors.gray[400]} />,
+})
+
+/**
+ * Field names are free text the user can rename, so two of them are the same name when they
+ * are the same name ignoring case and surrounding space — the rule `isFieldSelected` already
+ * applies (answers.ts), repeated here because that module keeps its own copy private.
+ */
+const sameField = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 /** The chip props that differ between the shipped chips and version 6's. */
 const TAG_SHAPE = {
@@ -132,12 +167,6 @@ function columnLetter(index: number) {
   return label
 }
 
-/**
- * Empty rows — the table previews columns, not data. Enough of them that the body reads as a
- * table: DataTable draws a rule between rows, and one row has no "between".
- */
-const PLACEHOLDER_ROW_COUNT = 3
-
 type FieldRow = Record<string, unknown>
 
 /** One shared empty list, so the ungrouped case does not mint a new array every render. */
@@ -158,12 +187,6 @@ function orderColumns(columns: FieldColumn[], groupedIds: readonly string[]) {
     ...columns.filter((column) => !groupedIds.includes(column.id)),
   ]
 }
-
-/**
- * Blank on purpose. A renderCell is required rather than just leaving the value out:
- * DataTable draws its own "-" for an empty value, and only a renderCell skips that.
- */
-const emptyCell = () => null
 
 /**
  * Step 3 — the report's columns, drawn as the table they will become.
@@ -245,14 +268,39 @@ export function FieldsStep({
         isSortable: true,
         minWidth: `${COLUMN_WIDTH}px`,
         maxWidth: `${COLUMN_WIDTH}px`,
-        renderCell: emptyCell,
       })),
     [displayColumns],
   )
 
+  /**
+   * Three rows of plausible output, one cell per configured column.
+   *
+   * The table used to draw three empty rows — it previewed the columns and nothing else,
+   * which showed you the shape of the file but never what would be in it. Filling them costs
+   * nothing and answers the question the step is actually about: is this the report I want?
+   *
+   * Values come from the shared vocabulary in field-samples.ts, so a column shows the same
+   * example here and in the Review step's preview. Keyed on the column's *title* because
+   * that is what names the field; a custom column has no entry there and falls back to the
+   * default value its author gave it (`customFields`), which is genuinely what every row of
+   * that column will contain.
+   */
   const tableData = useMemo<FieldRow[]>(
-    () => Array.from({ length: PLACEHOLDER_ROW_COUNT }, (_, index) => ({ id: `row-${index}` })),
-    [],
+    () =>
+      Array.from({ length: SAMPLE_ROW_COUNT }, (_, index) => ({
+        id: `row-${index}`,
+        ...Object.fromEntries(
+          displayColumns.map(({ id, title }) => [
+            id,
+            sampleFor(
+              title,
+              index,
+              answers.customFields.find((field) => field.title === title)?.defaultValue,
+            ),
+          ]),
+        ),
+      })),
+    [displayColumns, answers.customFields],
   )
 
   /**
@@ -369,7 +417,7 @@ export function FieldsStep({
   }
 
   /**
-   * Version 3's arrows. Steps by whole columns — one fewer than fit, so the column at the
+   * The arrows above the table. Steps by whole columns — one fewer than fit, so the column at the
    * leading edge stays in view as context — and lands on a column boundary, so the table never
    * rests with a header cut in half. The browser clamps the far ends. Smooth unless the user
    * prefers reduced motion.
@@ -384,9 +432,17 @@ export function FieldsStep({
   }
 
   /**
-   * Version 3's scroll controls, top right of the table. Disabled at either end rather than
-   * hidden, so the pair never jumps in and out as columns are added — when every column fits,
-   * both rest disabled.
+   * The scroll controls, top right of the table.
+   *
+   * Every layout, not just version 3 — Blend's DataTable scrolls sideways but ships no
+   * control for it (no scroll prop, and its container is not exposed), so past four or five
+   * columns the only ways across are a trackpad swipe, a shift-wheel, or tabbing through
+   * every header. None of those is visible, which is the problem: the fade at the clipped
+   * edge says there is more table, and then offers nothing to press.
+   *
+   * Disabled at either end rather than hidden, so the pair never jumps in and out as columns
+   * are added — when every column fits, both rest disabled, which is itself the answer to
+   * "is there more?".
    */
   const tableArrows = (
     <div className="flex items-center justify-end gap-2">
@@ -417,7 +473,8 @@ export function FieldsStep({
     // Keyed so a version switch reorders the block rather than remounting the table — it
     // keeps its scroll position and any column mid-rename.
     <div key="table" className="flex w-full flex-col gap-2">
-      {version === 'v3' && tableArrows}
+      {/* Nothing to scroll with no columns, and the empty state below is its own frame. */}
+      {columns.length > 0 && tableArrows}
       <div
         id={scrollerId}
         ref={wrapperRef}
@@ -431,6 +488,11 @@ export function FieldsStep({
             '--fade-right': clipped.right ? `${EDGE_FADE}px` : '0px',
             // Column titles at gray[700] rather than DataTable's muted default — index.css.
             '--header-color': colors.gray[700],
+            // …and at body.md rather than DataTable's hardcoded 12px, so a column title
+            // matches the letter above it and the field names below. Both halves of the
+            // token travel together — see rule 6 on why the leading cannot be dropped.
+            '--header-size': `${FOUNDATION_THEME.font.size.body.md.fontSize}px`,
+            '--header-leading': `${FOUNDATION_THEME.font.size.body.md.lineHeight}px`,
           } as CSSProperties
         }
       >
@@ -559,7 +621,11 @@ export function FieldsStep({
         subType={shape.subType}
         color={TagV2Color.NEUTRAL}
         type={selected ? TagV2Type.ATTENTIVE : shape.offType}
-        leftSlot={selected && newChips ? FIELD_HASH_SLOT : undefined}
+        // The asterisk, never the hash. Both want the one left slot, and of the two only the
+        // asterisk says something the chip's own text does not — the hash marks "this is a
+        // column now", which the fill already says, while the asterisk marks "this field is
+        // yours". So a custom chip keeps its mark even if SHOW_FIELD_HASH is turned back on.
+        leftSlot={customFieldSlot(selected)}
         aria-pressed={selected}
         title={selected ? `Remove ${field.title} from the table` : `Add ${field.title} to the table`}
         rightSlot={selected ? REMOVE_TAG_SLOT : undefined}
@@ -583,6 +649,75 @@ export function FieldsStep({
       />
     )
   }
+
+  /**
+   * A vocabulary chip — the same toggle as `customTag`, over a name Blend's field list owns
+   * rather than one the user wrote, so deselecting simply drops the column and there is no
+   * `customFields` bookkeeping to do.
+   *
+   * A function rather than an inline map body because the chips are no longer drawn in one
+   * pass: a selected chip is drawn from `columns` and an unselected one from FIELD_TAGS, and
+   * both have to produce the identical chip.
+   */
+  const vocabularyTag = (tag: string) => {
+    const selected = isFieldSelected(columns, tag)
+    return (
+      <TagV2
+        key={tag}
+        text={tag}
+        size={shape.size}
+        subType={shape.subType}
+        color={TagV2Color.NEUTRAL}
+        type={selected ? TagV2Type.ATTENTIVE : shape.offType}
+        leftSlot={selected && newChips && SHOW_FIELD_HASH ? FIELD_HASH_SLOT : undefined}
+        aria-pressed={selected}
+        title={selected ? `Remove ${tag} from the table` : `Add ${tag} to the table`}
+        rightSlot={selected ? REMOVE_TAG_SLOT : undefined}
+        onClick={() =>
+          selected
+            ? setColumns(columns.filter(({ title }) => !sameField(title, tag)))
+            : appendColumn(tag)
+        }
+      />
+    )
+  }
+
+  /**
+   * The chips, selected first.
+   *
+   * The selected run is read off `columns` in `columns` order, which makes the row say two
+   * things at once and keeps them free: click a chip and it lands at the end of the selected
+   * run, because `appendColumn` appends; drag a column in the table and its chip moves with
+   * it, because DataTable reports the new order back into `columns`. Neither needed code of
+   * its own — the order was already the answer, it just was not being read.
+   *
+   * That is also why there is no separate "selection order" state. One would have to be kept
+   * in step with `columns` on every add, remove, rename and drag, and the first place it fell
+   * behind would be a chip sitting in a position the table disagrees with.
+   *
+   * Duplicates are dropped by name: two columns may legitimately carry one title (the table
+   * keys on `id`), but two identical chips would be two controls for one thing.
+   */
+  const selectedTitles = columns
+    .map(({ title }) => title)
+    .filter((title, index, all) => all.findIndex((other) => sameField(other, title)) === index)
+
+  const selectedChips = selectedTitles.map((title) => {
+    const custom = customTags.find((field) => sameField(field.title, title))
+    if (custom) return customTag(custom)
+    // The canonical spelling, not the column's: a column renamed to "merchant id" is still the
+    // Merchant Id field (that is what `isVocabularyField` decides), and its chip is the one
+    // FIELD_TAGS draws — otherwise the same chip would change its own label when renamed.
+    return vocabularyTag(FIELD_TAGS.find((tag) => sameField(tag, title)) ?? title)
+  })
+
+  /** Everything not in the table, in the order it is offered: vocabulary first, then custom. */
+  const unselectedChips = [
+    ...FIELD_TAGS.filter((tag) => !isFieldSelected(columns, tag)).map(vocabularyTag),
+    ...customTags
+      .filter((field) => !isFieldSelected(columns, field.title))
+      .map((field) => customTag(field)),
+  ]
 
   /**
    * The field vocabulary and "Add custom column", as one group held to the flow's content
@@ -610,47 +745,21 @@ export function FieldsStep({
 
           The whole tag is the control rather than just the bin, because TagV2 renders as a
           single <button> once it is given an onClick — a second button nested inside that
-          one is invalid markup, and the browser resolves it by ignoring the inner one. */}
+          one is invalid markup, and the browser resolves it by ignoring the inner one.
+
+          Selected chips lead, in the table's column order — see `selectedChips` above. The
+          rule that used to divide vocabulary from custom now divides chosen from offered,
+          which is the division the row actually has once the chosen ones are hoisted. */}
       <div
         className="flex w-full flex-wrap items-start gap-x-3"
         style={{ rowGap: 'var(--fields-tag-row-gap, 12px)' }}
       >
-        {FIELD_TAGS.map((tag) => {
-          const selected = isFieldSelected(columns, tag)
+        {selectedChips}
 
-          return (
-            <TagV2
-              key={tag}
-              text={tag}
-              size={shape.size}
-              subType={shape.subType}
-              color={TagV2Color.NEUTRAL}
-              type={selected ? TagV2Type.ATTENTIVE : shape.offType}
-              leftSlot={selected && newChips ? FIELD_HASH_SLOT : undefined}
-              aria-pressed={selected}
-              title={selected ? `Remove ${tag} from the table` : `Add ${tag} to the table`}
-              rightSlot={selected ? REMOVE_TAG_SLOT : undefined}
-              onClick={() =>
-                selected
-                  ? setColumns(
-                      columns.filter(
-                        ({ title }) => title.trim().toLowerCase() !== tag.toLowerCase(),
-                      ),
-                    )
-                  : appendColumn(tag)
-              }
-            />
-          )
-        })}
-
-        {/* Custom columns get a tag of their own, lit, after the vocabulary — so a column made
-            with "Add custom column" shows up here and can be removed like any other — set off
-            by a rule that only exists once there is something on its far side.
-
-            The rule and the first custom tag wrap as one unit. Loose in the flex-wrap row,
-            the rule could end a line on its own with the custom tags starting the next,
-            dividing nothing. */}
-        {customTags.length > 0 && (
+        {/* The rule and the first offered chip wrap as one unit. Loose in the flex-wrap row,
+            the rule could end a line on its own with the chips starting the next, dividing
+            nothing. Only drawn when there is something on both sides of it. */}
+        {selectedChips.length > 0 && unselectedChips.length > 0 && (
           <span className="flex items-center gap-x-3">
             {/* blend-gap: Blend 0.0.37 ships no divider or separator component, so this is a
                 1px rule on a token colour. */}
@@ -660,10 +769,10 @@ export function FieldsStep({
               className="h-4 w-px"
               style={{ backgroundColor: colors.gray[300] }}
             />
-            {customTag(customTags[0])}
+            {unselectedChips[0]}
           </span>
         )}
-        {customTags.slice(1).map((field) => customTag(field))}
+        {selectedChips.length > 0 ? unselectedChips.slice(1) : unselectedChips}
 
         {/* Last in the row, so it reads as acting on every tag before it. INLINE is Blend's
             link button — no padding or fill — and SECONDARY keeps it neutral (gray[600]) so it

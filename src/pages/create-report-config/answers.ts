@@ -23,14 +23,24 @@ export const isSetupComplete = ({ format }: SetupAnswers) => format !== null
 export const WEEKLY = 'Weekly'
 export const MONTHLY = 'Monthly'
 
+/** The one cadence that can also be answered with "whenever recon finishes". */
+export const DAILY = 'Daily'
+
 /** Cadence — node 4410:29816. */
 export const FREQUENCIES: Option[] = [
-  { id: 'Daily', description: 'Sent every day' },
+  { id: DAILY, description: 'Sent every day' },
   { id: 'Weekly', description: 'Sent on a chosen day each week' },
   { id: 'Monthly', description: 'Sent on a chosen date each month' },
 ]
 
-/** When within that cadence — node 4410:29801, nested inside the same question. */
+/**
+ * When within that cadence — node 4410:29801, nested inside the same question.
+ *
+ * Only Daily is asked. A weekly or monthly report has nothing to fire off the back of: recon
+ * completes every day, so "as soon as recon completes" on a Monday cadence is either a daily
+ * report or a sentence with no meaning. Those two cadences take SPECIFIED_TIME as given (see
+ * DeliveryStep) and go straight to which day and what time.
+ */
 export const SPECIFIED_TIME = 'Specified Time'
 export const TIMINGS: Option[] = [
   { id: SPECIFIED_TIME, description: 'Sent everyday at the time you choose' },
@@ -160,8 +170,76 @@ export const isDeliveryComplete = ({
   // The To field is marked required in the design, so a ticked Email with nowhere to send
   // it does not count as answered.
   (!channels.includes(EMAIL_CHANNEL) || emailTo.length > 0) &&
-  // Channel Name is required in the design (node 4850:101705) for the same reason.
+  // Channel ID is required in the design (node 4850:101705) for the same reason.
   (!channels.includes(SLACK_CHANNEL) || slackChannel.trim() !== '')
+
+/**
+ * The schedule read back as a sentence — what the blue alert under the cadence says.
+ *
+ * Every permutation gets one, and each says the same two things: when the file goes out, and
+ * which stretch of data it covers. The second half is the part that cannot be worked out from
+ * the controls above it — "Monthly, on the 1st, at 4:30 PM" does not tell you whether the 1st
+ * is the start of the window or the end of it — which is the whole reason the alert exists
+ * rather than being a restatement of three selects.
+ *
+ * `null` until the permutation is actually answered: a sentence with a blank where its time
+ * should be is worse than no sentence.
+ */
+export type ScheduleNote = string | null
+
+/** "4:30 PM" → "16:30". The coverage window is stated in 24-hour time, as the design has it. */
+const to24Hour = (time: string) => {
+  const parts = /^(\d{1,2}):(\d{2}) (AM|PM)$/.exec(time)
+  if (!parts) return time
+  const [, hour, minute, meridiem] = parts
+  const hours = (Number(hour) % 12) + (meridiem === 'PM' ? 12 : 0)
+  return `${String(hours).padStart(2, '0')}:${minute}`
+}
+
+/** The day a weekly window closes on — the one before it opens, so the week is whole. */
+const dayBefore = (day: string) => {
+  const days = DAYS_OF_WEEK.map(({ value }) => value)
+  const index = days.indexOf(day)
+  return index === -1 ? day : days[(index + days.length - 1) % days.length]
+}
+
+export const scheduleNoteFor = ({
+  frequency,
+  timing,
+  dayOfWeek,
+  dayOfMonth,
+  time,
+}: DeliveryAnswers): ScheduleNote => {
+  if (frequency === null || timing === null) return null
+
+  if (timing !== SPECIFIED_TIME) {
+    return (
+      'Reports are generated and sent once reconciliation processing is complete — no fixed ' +
+      'time. Delivery is typically within 15 minutes.'
+    )
+  }
+  if (time === '') return null
+
+  if (frequency === WEEKLY) {
+    if (dayOfWeek === null) return null
+    return `Your weekly report will be sent every ${dayOfWeek} at ${time}, covering ${dayOfWeek} to ${dayBefore(dayOfWeek)}.`
+  }
+
+  if (frequency === MONTHLY) {
+    if (dayOfMonth === null) return null
+    // Sent on the 1st, or on the last day, and the window is the month either way — which is
+    // the design's own wording. Any other date covers the month *ending* the day before it
+    // comes round again, and saying so is the only way that date means anything.
+    const when = dayOfMonth === LAST_DAY_OF_MONTH ? 'the last day of every month' : `the ${dayOfMonth} of every month`
+    const covers =
+      dayOfMonth === '1st' || dayOfMonth === LAST_DAY_OF_MONTH
+        ? '1st to last day of the month'
+        : `the ${dayOfMonth} of the previous month to the day before the ${dayOfMonth} of this one`
+    return `Your monthly report will be sent on ${when} at ${time}, covering ${covers}.`
+  }
+
+  return `Your daily report will be sent every day at ${time}, covering 00:00 to ${to24Hour(time)} (IST).`
+}
 
 /**
  * Step 3 — the columns the report will carry (node 4418:6965).
@@ -318,17 +396,20 @@ export const hasAnyFilter = ({ rules }: FiltersAnswers) => rules.length > 0
  * The conditions, in the design's own order (node 4520:12023 lays out all six).
  *
  * `icon` is the name of the glyph in the design's icon library, and it is carried here
- * rather than looked up from the label. The two moved independently once already — `is in`
- * became `contains` while keeping `brackets-check` — and a glyph keyed on copy is a glyph
- * that disappears the next time someone rewords a condition.
+ * rather than looked up from the label. The two have moved independently twice now — `is in`
+ * became `contains` and then `in`, keeping `brackets-check` throughout — and a glyph keyed on
+ * copy is a glyph that disappears the next time someone rewords a condition.
  */
 export const FILTER_CONDITIONS = [
   { id: 'equal to', icon: 'equal', takesValue: true },
   { id: 'not equal to', icon: 'equal-not', takesValue: true },
   { id: 'is null', icon: 'brackets', takesValue: false },
   { id: 'is not null', icon: 'brackets-ellipses', takesValue: false },
-  { id: 'contains', icon: 'brackets-check', takesValue: true },
-  { id: 'does not contain', icon: 'brackets-x', takesValue: true },
+  // `in` and `not in`, because the value beside them is a *set* — the Value control is a
+  // multi-select, so "Gateway contains Razorpay, PayU" reads as a substring test on a list it
+  // is not. Read as a sentence, "Gateway in Razorpay, PayU" is the rule these rows apply.
+  { id: 'in', icon: 'brackets-check', takesValue: true },
+  { id: 'not in', icon: 'brackets-x', takesValue: true },
 ] as const
 
 /**
