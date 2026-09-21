@@ -17,8 +17,8 @@ import {
 import { Asterisk, ChevronLeft, ChevronRight, Hash, Plus, X } from 'lucide-react'
 import {
   useCallback,
-  useEffect,
   useId,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -30,7 +30,7 @@ import { fieldTagTokens } from '../../theme'
 import { AddCustomColumnModal } from './AddCustomColumnModal'
 import { GroupByBar } from './GroupByBar'
 import type { FieldsLayoutVersion } from './fields-layout'
-import { activeGroupBy, FIELD_TAGS, isFieldSelected,
+import { activeGroupBy, FIELD_TAGS, IMPORTANT_FIELDS, isFieldSelected,
   isVocabularyField, newFieldColumn, type FieldColumn, type FieldsAnswers } from './answers'
 
 const { colors } = FOUNDATION_THEME
@@ -41,6 +41,42 @@ const { colors } = FOUNDATION_THEME
  */
 const px = (value: number | string | undefined) =>
   typeof value === 'number' ? `${value}px` : value
+
+/**
+ * One of the text actions at the end of the chip row.
+ *
+ * INLINE is Blend's link button — no padding or fill — and SECONDARY keeps it neutral
+ * (gray[600]) so it does not compete with the tags it acts on.
+ *
+ * The type overrides are what make this worth a component rather than two copies. TagV2 sm
+ * reads font.fontSize[12] / font.lineHeight[18] (tagV2.light.tokens.ts:162,175) where a small
+ * ButtonV2 would be 14px, and no ButtonV2 prop reaches its label — so the tokens are handed
+ * down as CSS variables and applied to the label element (`[data-id]`) instead. Weight needs
+ * nothing: both are already 500.
+ *
+ * The underline sits on the wrapper for the same reason (ButtonV2 omits className), and
+ * targets the label rather than the button because a flex item does not reliably inherit a
+ * parent's text-decoration. Keyboard focus gets it too, not just hover.
+ */
+const LinkAction = ({ text, onClick }: { text: string; onClick: () => void }) => (
+  <span
+    className="flex self-center [&_[data-id]]:!text-[length:var(--link-size)] [&_[data-id]]:!leading-[var(--link-leading)] [&_button:focus-visible_[data-id]]:underline [&_button:hover_[data-id]]:underline"
+    style={
+      {
+        '--link-size': px(FOUNDATION_THEME.font.fontSize[12]),
+        '--link-leading': px(FOUNDATION_THEME.font.lineHeight[18]),
+      } as CSSProperties
+    }
+  >
+    <ButtonV2
+      buttonType={ButtonV2Type.SECONDARY}
+      size={ButtonV2Size.SMALL}
+      subType={ButtonV2SubType.INLINE}
+      text={text}
+      onClick={onClick}
+    />
+  </span>
+)
 
 /**
  * The remove glyph on a lit tag — the same 12px `X` Blend draws on its own dismissible tags
@@ -78,6 +114,21 @@ const FIELD_HASH_SLOT = { slot: <Hash size={12} color={colors.gray[0]} /> }
  * this is a decision being held open, not a mistake being corrected. One value to flip.
  */
 const SHOW_FIELD_HASH = false
+
+/**
+ * Off for now. The footer's scroll arrows (see `tableFooter`) are hidden while the step is
+ * looked at without them.
+ *
+ * A flag rather than deleting the control, for the same reason as SHOW_FIELD_HASH above: the
+ * gap it fills is real — Blend's DataTable scrolls sideways and ships nothing to drive it,
+ * so with this off the only ways across a wide table are a trackpad swipe, a shift-wheel or
+ * tabbing through the headers, none of them visible. That is a decision being held open, not
+ * a mistake being corrected. One value to flip.
+ *
+ * The edge fades are deliberately NOT tied to this: they say there is more table, which stays
+ * true whether or not anything is offered to press.
+ */
+const SHOW_TABLE_SCROLL_FOOTER = false
 
 /**
  * The mark that says "this field is yours, not ours" — on every custom chip, lit or pale, so a
@@ -311,13 +362,9 @@ export function FieldsStep({
   const getScroller = () =>
     wrapperRef.current?.querySelector('table')?.parentElement ?? null
 
-  /** Ties version 3's arrows to the table they move, for assistive tech. */
-  const scrollerId = useId()
-
   /**
    * Which edges are currently cutting content off. Only those fade — a fade on an edge with
-   * nothing past it would promise a column that is not there — and version 3's arrows disable
-   * against the same state.
+   * nothing past it would promise a column that is not there.
    */
   const [clipped, setClipped] = useState({ left: false, right: false })
 
@@ -417,10 +464,36 @@ export function FieldsStep({
   }
 
   /**
-   * The arrows above the table. Steps by whole columns — one fewer than fit, so the column at the
-   * leading edge stays in view as context — and lands on a column boundary, so the table never
-   * rests with a header cut in half. The browser clamps the far ends. Smooth unless the user
-   * prefers reduced motion.
+   * The same, for several at once. Not a loop over `appendColumn`: that reads `columns` from
+   * this render, so every call in the loop would build its next array from the same stale
+   * list and only the last one would survive.
+   */
+  const appendColumns = (titles: readonly string[]) => {
+    scrollToEnd.current = true
+    setColumns([...columns, ...titles.map((title) => newFieldColumn(title))])
+  }
+
+  /**
+   * The important fields still missing from the table, in IMPORTANT_FIELDS order rather than
+   * the table's — the order they are added in is the order that list argues for.
+   *
+   * Only the empty state reads it, where by definition every one of them is missing, so today
+   * this is always the whole list. It stays a filter rather than IMPORTANT_FIELDS itself so
+   * that a second caller somewhere the table is not empty cannot quietly add a duplicate
+   * column.
+   */
+  const missingImportant = IMPORTANT_FIELDS.filter((tag) => !isFieldSelected(columns, tag))
+
+  /**
+   * Ties the footer's arrows to the table they move, for assistive tech.
+   */
+  const scrollerId = useId()
+
+  /**
+   * Steps by whole columns — one fewer than fit, so the column at the leading edge stays in
+   * view as context — and lands on a column boundary, so the table never rests with a header
+   * cut in half. The browser clamps the far ends. Smooth unless the user prefers reduced
+   * motion.
    */
   const scrollColumns = (direction: -1 | 1) => {
     const el = getScroller()
@@ -432,20 +505,26 @@ export function FieldsStep({
   }
 
   /**
-   * The scroll controls, top right of the table.
+   * blend-gap: a horizontal scroll control for DataTable. Blend ships none — `TableFooter`
+   * renders `DataTablePagination` and nothing else, its chevrons are Previous/Next *page*, and
+   * `DataTable/types.ts` has no scroll prop at all. The only scrollLeft writes in the component
+   * are internal (restoring position when a filter popover opens; jumping to the end when a
+   * column is appended while already at the end). So this is composed here.
    *
-   * Every layout, not just version 3 — Blend's DataTable scrolls sideways but ships no
-   * control for it (no scroll prop, and its container is not exposed), so past four or five
-   * columns the only ways across are a trackpad swipe, a shift-wheel, or tabbing through
-   * every header. None of those is visible, which is the problem: the fade at the clipped
-   * edge says there is more table, and then offers nothing to press.
+   * Beneath the table rather than above it, where Blend's own pagination arrows sit, so it
+   * reads as the table's footer. It cannot go *inside* DataTable's frame: the footer slot is
+   * pagination-only and Blend components take no className or style, so the bar is a sibling
+   * and gets the card's horizontal padding by hand to line its arrows up with the frame edge.
    *
-   * Disabled at either end rather than hidden, so the pair never jumps in and out as columns
-   * are added — when every column fits, both rest disabled, which is itself the answer to
-   * "is there more?".
+   * Drawn only when the table actually overflows. The previous version of this control lived
+   * above the table and stayed put with both arrows disabled, on the reasoning that a pair
+   * that never moves is easier to live with than one that appears and disappears. As a footer
+   * that inverts: a permanent bar under a table that fits is a strip of dead chrome under
+   * every short table, and `clipped` already distinguishes the two cases exactly — it is the
+   * same state the edge fades read, so the footer appears precisely when a fade does.
    */
-  const tableArrows = (
-    <div className="flex items-center justify-end gap-2">
+  const tableFooter = SHOW_TABLE_SCROLL_FOOTER && (clipped.left || clipped.right) && (
+    <div className="flex items-center justify-end gap-2 px-0.5">
       <ButtonV2
         buttonType={ButtonV2Type.SECONDARY}
         size={ButtonV2Size.SMALL}
@@ -473,8 +552,6 @@ export function FieldsStep({
     // Keyed so a version switch reorders the block rather than remounting the table — it
     // keeps its scroll position and any column mid-rename.
     <div key="table" className="flex w-full flex-col gap-2">
-      {/* Nothing to scroll with no columns, and the empty state below is its own frame. */}
-      {columns.length > 0 && tableArrows}
       <div
         id={scrollerId}
         ref={wrapperRef}
@@ -531,12 +608,46 @@ export function FieldsStep({
           // DataTable with no columns still draws its frame around nothing, so the empty
           // state is this step's own. Same height as the table plus its letter row.
           <div
-            className="flex w-full items-center justify-center"
+            className="flex w-full flex-col items-center justify-center gap-4"
             style={{ height: LETTER_ROW_HEIGHT + TABLE_HEIGHT, border: EMPTY_FRAME, borderRadius: FOUNDATION_THEME.border.radius[12] }}
           >
-            <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.md)} color={colors.gray[400]}>
-              No columns yet — pick a field below, or add a custom column.
-            </PrimitiveText>
+            {/* Title and subtitle as their own stack, so the 4px between them is not the 16px
+                that separates the whole message from the button. */}
+            <div className="flex flex-col items-center gap-1">
+              <PrimitiveText
+                as="p"
+                {...font(FOUNDATION_THEME.font.size.body.lg)}
+                color={colors.gray[700]}
+                fontWeight={FOUNDATION_THEME.font.weight[600]}
+              >
+                No columns selected
+              </PrimitiveText>
+              {/* gray[500], not the gray[400] the single line used to be: that was placeholder
+                  colour, which DESIGN.md reserves for placeholders and disabled text. As the
+                  supporting half of a titled empty state this is body copy. */}
+              <PrimitiveText
+                as="p"
+                {...font(FOUNDATION_THEME.font.size.body.md)}
+                color={colors.gray[500]}
+              >
+                Pick your fields from below, or add a custom column.
+              </PrimitiveText>
+            </div>
+            {/* The one shortcut out of the empty state, so the step offers a way forward
+                rather than only describing one. MEDIUM rather than the SMALL used by "Add
+                custom column" in the heading: this sits alone in a 266px frame with nothing
+                to size against, where that one sits in a row of step chrome.
+
+                No `missingImportant.length` guard — an empty table means every important
+                field is missing, so here the button always has something to do. The chip
+                row's link carries the guard instead, for the partly-filled case. */}
+            <ButtonV2
+              buttonType={ButtonV2Type.SECONDARY}
+              size={ButtonV2Size.MEDIUM}
+              text="Add important columns"
+              leftSlot={{ slot: <Plus size={14} /> }}
+              onClick={() => appendColumns(missingImportant)}
+            />
           </div>
         ) : (
           <DataTable
@@ -588,6 +699,7 @@ export function FieldsStep({
           />
         )}
       </div>
+      {tableFooter}
     </div>
   )
 
@@ -774,63 +886,65 @@ export function FieldsStep({
         )}
         {selectedChips.length > 0 ? unselectedChips.slice(1) : unselectedChips}
 
-        {/* Last in the row, so it reads as acting on every tag before it. INLINE is Blend's
-            link button — no padding or fill — and SECONDARY keeps it neutral (gray[600]) so it
-            doesn't compete with the tags. Only there when there is something to clear.
+        {/* Last in the row, so it reads as acting on every tag before it. See LinkAction
+            (top of file) for why it is not a plain ButtonV2.
 
-            The underline is on the wrapper because ButtonV2 omits className; it targets the
-            label (`[data-id]`) rather than the button, since a flex item doesn't reliably
-            inherit a parent's text-decoration. Keyboard focus gets it too.
+            Only drawn when there is something to clear: a visible control that is a no-op is
+            worse than an absent one — it invites the click and then does not answer it.
 
-            Type is the chips' own: TagV2 sm reads font.fontSize[12] / font.lineHeight[18]
-            (tagV2.light.tokens.ts:162,175), where a small ButtonV2 would be 14px. No ButtonV2
-            prop reaches its label's size, so the tokens are handed to the label as variables.
-            Weight needs nothing — both are already 500. */}
+            Adding the important columns is deliberately NOT offered here as a counterpart. It
+            belongs to the empty state (the secondary button above), which is the only moment
+            it is the obvious next move; once columns exist, the chips are how you add more. */}
         {/* Deselects everything, custom tags included — but custom tags stay in the row, pale,
             because customFields outlives the columns. */}
         {columns.length > 0 && (
-          <span
-            className="flex self-center [&_[data-id]]:!text-[length:var(--link-size)] [&_[data-id]]:!leading-[var(--link-leading)] [&_button:focus-visible_[data-id]]:underline [&_button:hover_[data-id]]:underline"
-            style={
-              {
-                '--link-size': px(FOUNDATION_THEME.font.fontSize[12]),
-                '--link-leading': px(FOUNDATION_THEME.font.lineHeight[18]),
-              } as CSSProperties
+          <LinkAction
+            text="Clear all"
+            onClick={() =>
+              // Renamed-only custom columns are folded into customFields first, so clearing
+              // leaves every custom tag in place.
+              onChange({
+                ...answers,
+                customFields: customTags,
+                columns: [],
+              })
             }
-          >
-            <ButtonV2
-              buttonType={ButtonV2Type.SECONDARY}
-              size={ButtonV2Size.SMALL}
-              subType={ButtonV2SubType.INLINE}
-              text="Clear all"
-              onClick={() =>
-                // Renamed-only custom columns are folded into customFields first, so clearing
-                // leaves every custom tag in place.
-                onChange({
-                  ...answers,
-                  customFields: customTags,
-                  columns: [],
-                })
-              }
-            />
-          </span>
+          />
         )}
       </div>
+    </div>
+    </ThemeProvider>
+  )
 
-      {/* The "Add custom column" button lives in the step heading (index.tsx) — except in
-          version 5, which draws it here, below the chips on the table's right edge. The modal
-          stays here either way, beside the answers it writes. */}
-      {version === 'v5' && (
-        <div className="flex w-full items-center justify-end">
-          <ButtonV2
-            buttonType={ButtonV2Type.SECONDARY}
-            size={ButtonV2Size.SMALL}
-            text="Add custom column"
-            leftSlot={{ slot: <Plus size={14} /> }}
-            onClick={() => onAddingColumnChange(true)}
-          />
-        </div>
-      )}
+  /**
+   * "Add custom column", outside the card rather than inside it.
+   *
+   * It is the one control here that does not act on the table's contents: every chip above
+   * adds or removes a column that exists, while this opens a dialog to invent one. Sitting
+   * inside the frame it read as another row of the vocabulary; below the frame it reads as an
+   * action on the whole card, which is what it is.
+   *
+   * Held to the flow's content measure and centred, exactly as the chip row is — so its
+   * right edge lands where it did before the move and the button has not shifted sideways,
+   * only out. `self-center` works the same way it does for the vocabulary: the parent is the
+   * card's own box, so a column-wide child centred in it shares the column's edges.
+   *
+   * The modal travels with it, still beside the answers it writes. `contents` keeps it out of
+   * the layout.
+   */
+  const addColumnButton = (
+    <div
+      key="add-column"
+      className="flex w-full items-center justify-end self-center"
+      style={{ maxWidth: 'var(--flow-content)' }}
+    >
+      <ButtonV2
+        buttonType={ButtonV2Type.SECONDARY}
+        size={ButtonV2Size.SMALL}
+        text="Add custom column"
+        leftSlot={{ slot: <Plus size={14} /> }}
+        onClick={() => onAddingColumnChange(true)}
+      />
       <div className="contents">
         <AddCustomColumnModal
           isOpen={addingColumn}
@@ -852,7 +966,6 @@ export function FieldsStep({
         />
       </div>
     </div>
-    </ThemeProvider>
   )
 
   /**
@@ -892,27 +1005,39 @@ export function FieldsStep({
         // viewport and push the page sideways. `max-width` beats `width`, so below MIN the
         // table takes the space there is and scrolls its own content instead.
         maxWidth: '100%',
-        rowGap: 'var(--fields-table-gap, 16px)',
-        // The table and its tags framed as one card. Radius 12 is the design language's card
-        // radius; border-box (Preflight) keeps the padding inside the width above.
-        border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
-        borderRadius: FOUNDATION_THEME.border.radius[12],
-        padding: FOUNDATION_THEME.unit[16],
-        // 8px more below the last row of chips, which otherwise reads tight against the frame.
-        paddingBottom: FOUNDATION_THEME.unit[24],
+        // Card to button. The dial that names this gap ("Fields To Add Column") still drives
+        // exactly the distance it is named for — the button just sits outside the frame now.
+        rowGap: 'var(--fields-add-gap, 16px)',
       }}
     >
-      {/* Versions 1 and 4 read table, then vocabulary. Versions 2 and 3 put the vocabulary
-          first, so the choice comes before its result. The gap between them is
-          --fields-table-gap. */}
-      {groupBar}
-      {version === 'v1' ||
-      version === 'v4' ||
-      version === 'v5' ||
-      version === 'v6' ||
-      version === 'v7'
-        ? [table, vocabulary]
-        : [vocabulary, table]}
+      {/* The table and its tags framed as one card. The width and grid placement stay on the
+          wrapper above, so the button below shares them and lines up with the frame. */}
+      <div
+        className="flex w-full flex-col items-end"
+        style={{
+          rowGap: 'var(--fields-table-gap, 16px)',
+          // Radius 12 is the design language's card radius; border-box (Preflight) keeps the
+          // padding inside the width above.
+          border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+          borderRadius: FOUNDATION_THEME.border.radius[12],
+          padding: FOUNDATION_THEME.unit[16],
+          // 8px more below the last row of chips, which otherwise reads tight against the frame.
+          paddingBottom: FOUNDATION_THEME.unit[24],
+        }}
+      >
+        {/* Versions 1 and 4 read table, then vocabulary. Versions 2 and 3 put the vocabulary
+            first, so the choice comes before its result. The gap between them is
+            --fields-table-gap. */}
+        {groupBar}
+        {version === 'v1' ||
+        version === 'v4' ||
+        version === 'v5' ||
+        version === 'v6' ||
+        version === 'v7'
+          ? [table, vocabulary]
+          : [vocabulary, table]}
+      </div>
+      {addColumnButton}
     </div>
   )
 }

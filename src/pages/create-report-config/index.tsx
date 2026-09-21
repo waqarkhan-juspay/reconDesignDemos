@@ -12,7 +12,6 @@ import {
   ThemeProvider,
   TopbarV2,
 } from '@juspay/blend-design-system'
-import { Plus } from 'lucide-react'
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import tenantLogo from '../../assets/icons/tenant-logo.svg'
@@ -25,6 +24,8 @@ import { ExitFlowModal } from './ExitFlowModal'
 import { SubmitConfigModal } from './SubmitConfigModal'
 import { FieldsStep } from './FieldsStep'
 import { FieldsLayoutDials, type FieldsLayout } from './fields-layout'
+import { FlowDials, type FlowVersion } from './flow-layout'
+import { GroupingStep } from './GroupingStep'
 import { FiltersStep } from './FiltersStep'
 import { ReviewStep } from './ReviewStep'
 import { SetupStep } from './SetupStep'
@@ -35,6 +36,7 @@ import {
   EMPTY_FILTERS,
   EMPTY_SETUP,
   hasAnyFilter,
+  hasAnyGrouping,
   isDeliveryComplete,
   isFieldsComplete,
   isSetupComplete,
@@ -69,7 +71,15 @@ const COLUMN = 'flow-grid'
  * The design draws the progress bar at 288px of 1440 on Setup, 576px on Delivery and 864px
  * on Fields: one, two and three fifths of these five.
  */
-const STEPS: {
+/**
+ * Identity for a step, so nothing downstream depends on its position. Flow version 2 inserts
+ * Grouping in the middle of this list (flow-layout.tsx), which shifts every index after it —
+ * the reason `step`, `confirmed` and the completeness checks below are all keyed on the id.
+ */
+export type StepId = 'setup' | 'delivery' | 'grouping' | 'fields' | 'filters' | 'review'
+
+const ALL_STEPS: {
+  id: StepId
   label: string
   title: string
   /** Optional standfirst under the title. */
@@ -85,6 +95,7 @@ const STEPS: {
   skipLabel?: string
 }[] = [
   {
+    id: 'setup',
     label: 'Setup',
     // Node 4542:17104.
     title: 'Set up your report',
@@ -92,18 +103,32 @@ const STEPS: {
       'Pick a report type, choose which records to include, and decide how the data is presented.',
   },
   {
+    id: 'delivery',
     label: 'Delivery',
     title: 'Delivery and scheduling',
     // Walks the step's own questions in order: the name, how often, then the channels.
     description: 'Name your report, set how often it runs, and choose where it gets delivered.',
   },
   {
+    id: 'grouping',
+    label: 'Grouping',
+    title: 'Group your report',
+    // Says what a grouping *does* rather than what it is: the answer the user is weighing is
+    // what one row of the delivered file ends up meaning.
+    description:
+      'Pick the fields to summarise by. Each one you pick becomes a column, and the report keeps one row per combination.',
+    tag: 'Optional',
+    skipLabel: 'Skip grouping',
+  },
+  {
+    id: 'fields',
     label: 'Fields',
     title: 'Customise your fields',
     // Rewritten in review, replacing node 4457:15485's two sentences.
     description: 'Arrange, rename or add a custom column field.',
   },
   {
+    id: 'filters',
     label: 'Filters',
     title: 'Choose which rows to filter out',
     description: 'Only the rows matching your conditions are written to the report',
@@ -111,6 +136,7 @@ const STEPS: {
     skipLabel: 'Skip filters',
   },
   {
+    id: 'review',
     label: 'Review',
     title: 'Review and submit',
     description: 'Take a moment to review your entire configuration file before submitting.',
@@ -192,9 +218,25 @@ function TopbarContent({ onExit }: { onExit: () => void }) {
  * Every step's answers live here rather than in the step, so Back is free: walking away and
  * returning finds the questions as they were, with their reveals already open.
  */
-function CreateReportConfig() {
+function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   const navigate = useNavigate()
-  const [step, setStep] = useState(0)
+
+  /**
+   * The steps this flow actually walks. Version 1 is the shipped five; version 2 keeps
+   * Grouping, which ALL_STEPS carries in its natural position (flow-layout.tsx).
+   */
+  const STEPS = flowVersion === 'v2' ? ALL_STEPS : ALL_STEPS.filter(({ id }) => id !== 'grouping')
+
+  /**
+   * Which step is showing, by id rather than index: switching flow version changes what
+   * index 2 means, and a stored index would silently move the user to a different step.
+   */
+  const [stepId, setStepId] = useState<StepId>('setup')
+  // A step that the current version does not have — i.e. Grouping, after switching back to
+  // version 1 while standing on it. Fields is where that question goes in version 1.
+  const step = Math.max(0, STEPS.findIndex(({ id }) => id === stepId))
+  const current = STEPS[step]
+  const setStep = (next: number) => setStepId(STEPS[next].id)
   /**
    * The steps the user has committed — walked up to and clicked the primary action on. This
    * is what the rail ticks off (StepRail.tsx).
@@ -203,7 +245,7 @@ function CreateReportConfig() {
    * committed steps are not necessarily a prefix of the flow: jump straight to Filters,
    * commit it, and Setup and Delivery are still untouched behind you.
    */
-  const [confirmed, setConfirmed] = useState<ReadonlySet<number>>(() => new Set())
+  const [confirmed, setConfirmed] = useState<ReadonlySet<StepId>>(() => new Set())
   const [setup, setSetup] = useState<SetupAnswers>(EMPTY_SETUP)
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
@@ -222,50 +264,61 @@ function CreateReportConfig() {
     navigate('/configurator')
   }
 
-  const { title, description, tag, skipLabel } = STEPS[step]
+  const { title, description, tag, skipLabel } = current
   const isLastStep = step === STEPS.length - 1
 
   /** Whether the submit dialog is up. Only ever set from the last step's primary action. */
   const [submitting, setSubmitting] = useState(false)
 
   /**
-   * Filters is the one step nothing has to be answered on, so its primary action is not
+   * Whether a step has actually been answered. Gates Continue below, and lets the rail take a
+   * tick back off a step whose answers have since been cleared — but the tick itself is
+   * earned by committing the step, not by this (StepRail.tsx).
+   *
+   * Grouping and Filters each count as answered once there is one level or one rule to carry
+   * forward, which is also what flips their primary action off "Skip". Review has no questions
+   * of its own, so it is never ticked: the flow ends by submitting it, not by completing it.
+   *
+   * A switch over the id rather than an array by position, so inserting Grouping into the
+   * middle of the flow cannot quietly hand one step another's answer.
+   */
+  const answeredFor = (id: StepId) => {
+    switch (id) {
+      case 'setup':
+        return isSetupComplete(setup)
+      case 'delivery':
+        return isDeliveryComplete(delivery)
+      case 'grouping':
+        return hasAnyGrouping(fields)
+      case 'fields':
+        return isFieldsComplete(fields)
+      case 'filters':
+        return hasAnyFilter(filters)
+      case 'review':
+        return false
+    }
+  }
+
+  /**
+   * Grouping and Filters are the steps nothing has to be answered on, so their primary action
+   * is not
    * quite the button the other steps get: it never disables, and while the step is still
    * untouched it says what clicking it will actually do.
    *
    * "Continue" over an optional step nobody has touched claims something was configured.
    * "Skip filters" is a promise about the click, and it stops being true the moment there
    * is a filter to carry forward — which is why the label flips back rather than staying a
-   * skip for the rest of the step.
+   * skip for the rest of the step. Grouping works the same way.
    */
   const optional = skipLabel !== undefined
-  const skipping = optional && !hasAnyFilter(filters)
-
-  /**
-   * Whether each step has actually been answered. Gates Continue below, and lets the rail
-   * take a tick back off a step whose answers have since been cleared — but the tick itself
-   * is earned by committing the step, not by this (StepRail.tsx).
-   *
-   * Filters counts as answered once there is a filter to carry forward, and Review has no
-   * questions of its own to answer, so it is never ticked: the flow ends by submitting it,
-   * not by completing it.
-   */
-  const stepAnswered = [
-    isSetupComplete(setup),
-    isDeliveryComplete(delivery),
-    isFieldsComplete(fields),
-    hasAnyFilter(filters),
-    false,
-  ]
+  const skipping = optional && !answeredFor(current.id)
 
   /**
    * The same steps read as a gate on Continue, which is a looser question: a step with
    * nothing to answer cannot hold the flow up, so it is complete by definition. That is the
    * one place this differs from `stepAnswered` above, and why the two are separate lists.
    */
-  const stepComplete = STEPS.map((_, index) => (index <= 2 ? stepAnswered[index] : true))
-
-  const complete = stepComplete[step]
+  const complete = skipLabel !== undefined || answeredFor(current.id)
 
   /**
    * One step's heading and body. A function rather than inline JSX so the Fields step can
@@ -276,7 +329,7 @@ function CreateReportConfig() {
   const renderStep = (layout?: FieldsLayout) => (
     // Setup follows node 4541:16282, which sets its sections 24px apart; the other steps
     // keep the 32px rhythm their own frames were drawn at.
-    <div key={step} className={`${COLUMN} flow-question ${step === 0 ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
+    <div key={current.id} className={`${COLUMN} flow-question ${current.id === 'setup' ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
       style={layout?.style}
       data-layout={layout?.wide ? 'wide' : undefined}
     >
@@ -331,23 +384,12 @@ function CreateReportConfig() {
           </div>
         )}
       </div>
-        {/* Version 5 of the Fields dials draws this button below the chips instead. */}
-        {step === 2 && layout?.version !== 'v5' && (
-          <div className="flex shrink-0">
-            <ButtonV2
-              buttonType={ButtonV2Type.SECONDARY}
-              size={ButtonV2Size.SMALL}
-              text="Add custom column"
-              leftSlot={{ slot: <Plus size={14} /> }}
-              onClick={() => setAddingColumn(true)}
-            />
-          </div>
-        )}
       </div>
 
-      {step === 0 && <SetupStep answers={setup} onChange={setSetup} />}
-      {step === 1 && <DeliveryStep answers={delivery} onChange={setDelivery} />}
-      {step === 2 && (
+      {current.id === 'setup' && <SetupStep answers={setup} onChange={setSetup} />}
+      {current.id === 'delivery' && <DeliveryStep answers={delivery} onChange={setDelivery} />}
+      {current.id === 'grouping' && <GroupingStep answers={fields} onChange={setFields} />}
+      {current.id === 'fields' && (
         <FieldsStep
           answers={fields}
           onChange={setFields}
@@ -356,8 +398,8 @@ function CreateReportConfig() {
           onAddingColumnChange={setAddingColumn}
         />
       )}
-      {step === 3 && <FiltersStep answers={filters} onChange={setFilters} />}
-      {step === 4 && (
+      {current.id === 'filters' && <FiltersStep answers={filters} onChange={setFilters} />}
+      {current.id === 'review' && (
         <ReviewStep setup={setup} delivery={delivery} fields={fields} filters={filters} />
       )}
     </div>
@@ -388,11 +430,11 @@ function CreateReportConfig() {
               gutter, which `--flow-rail-gutter` on the root above keeps clear for it. */}
           <nav className="flow-rail" aria-label="Report setup steps">
             <StepRail
-              steps={STEPS.map(({ label, skipLabel }, index) => ({
+              steps={STEPS.map(({ id, label, skipLabel }) => ({
                 label,
                 optional: skipLabel !== undefined,
-                answered: stepAnswered[index],
-                confirmed: confirmed.has(index),
+                answered: answeredFor(id),
+                confirmed: confirmed.has(id),
               }))}
               current={step}
               onNavigate={setStep}
@@ -404,7 +446,11 @@ function CreateReportConfig() {
                 cross-fading one set of questions into another. */}
             {/* Only the Fields step gets the layout dials. Mounting FieldsLayoutDials is what
                 registers its panel, and leaving the step unmounts it and takes the panel away. */}
-            {step === 2 ? <FieldsLayoutDials>{renderStep}</FieldsLayoutDials> : renderStep()}
+            {current.id === 'fields' ? (
+              <FieldsLayoutDials>{renderStep}</FieldsLayoutDials>
+            ) : (
+              renderStep()
+            )}
           </div>
 
           <div
@@ -469,7 +515,7 @@ function CreateReportConfig() {
                     // it: you answered those questions, and walking back to look at them
                     // does not unanswer them. Clearing a required answer does — that is
                     // `answered`'s job over in statusOf.
-                    setConfirmed((prev) => new Set(prev).add(step))
+                    setConfirmed((prev) => new Set(prev).add(current.id))
                     setStep(step + 1)
                   }}
                 />
@@ -497,6 +543,14 @@ function CreateReportConfig() {
       />
     </div>
   )
+}
+
+/**
+ * The dial panel wraps the whole flow rather than one step, because what it changes is the
+ * step list itself — see flow-layout.tsx.
+ */
+function CreateReportConfig() {
+  return <FlowDials>{(version) => <ReportFlow flowVersion={version} />}</FlowDials>
 }
 
 export default CreateReportConfig
