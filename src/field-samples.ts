@@ -27,7 +27,8 @@ const normalise = (value: string) => value.trim().toLowerCase()
 export const SAMPLE_ROW_COUNT = 3
 
 /**
- * The vocabulary, in FIELD_TAGS order (answers.ts).
+ * The vocabulary: the transaction fields in FIELD_TAGS order (answers.ts), then the four
+ * aggregates in a block of their own — see the comment beside them.
  *
  * The three rows tell one consistent story on purpose: one settled order, one refund, one
  * larger order, all for the same merchant across two days. So a reader who reads across a
@@ -66,9 +67,23 @@ const SAMPLES: Record<string, readonly [string, string, string]> = {
   'Txn Currency': ['INR', 'INR', 'INR'],
   'Txn Date': ['2026-09-15', '2026-09-15', '2026-09-16'],
   'Txn Type': ['ORDER', 'REFUND', 'ORDER'],
+
+  // The four aggregates, grouped at the end rather than scattered alphabetically through the
+  // list above, because what they share matters more than where their names sort: each one
+  // describes a whole report rather than one transaction, so their three rows are three
+  // *groups* (a report is grouped once a Group by rule is set) where every other field's are
+  // three transactions.
+  //
+  // Held to the same bar as the rest of the file all the same: total less failures over total
+  // gives the success rate on every row, and the amounts sit around the ~1,100 average that
+  // the Txn Amount column shows, so a reader who checks the arithmetic finds it holds.
+  'Failure Count': ['23', '51', '18'],
+  'Success Rate': ['98.21%', '94.70%', '99.12%'],
+  'Total Amount': ['1,412,480.00', '827,315.50', '2,290,640.75'],
+  'Total Transactions': ['1,284', '963', '2,047'],
 }
 
-/** Resolved once, so every lookup is not re-lowercasing twenty-two keys. */
+/** Resolved once, so every lookup is not re-lowercasing twenty-six keys. */
 const BY_NORMALISED_NAME = new Map(
   Object.entries(SAMPLES).map(([name, values]) => [normalise(name), values]),
 )

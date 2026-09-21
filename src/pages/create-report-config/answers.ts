@@ -282,16 +282,19 @@ export type FieldsAnswers = {
   groupBy?: string[]
 }
 
+/**
+ * Nothing selected. The step opens on its own empty state ("No columns yet — pick a field
+ * below…") and the table is built up from there.
+ *
+ * It used to open with five columns already in it, which answered the question the step is
+ * asking before anyone had read it, and left "Clear all" as the only route to a selection of
+ * your own. `isFieldsComplete` already required a non-empty list, so Next is correctly
+ * disabled until something is chosen — no extra guard was needed for this.
+ */
 export const EMPTY_FIELDS: FieldsAnswers = {
   customFields: [],
   groupBy: [],
-  columns: [
-    'Payment Entity Txn ID',
-    'Merchant ID',
-    'Gateway',
-    'Txn Amount',
-    'Txn Type',
-  ].map((title) => newFieldColumn(title)),
+  columns: [],
 }
 
 /**
@@ -300,10 +303,17 @@ export const EMPTY_FIELDS: FieldsAnswers = {
  * Transcribed verbatim, spelling included: "Merchant Id" and "Payment Entity Txn Id" differ
  * in case from the default column titles above, which is why selection is matched
  * case-insensitively rather than by string equality (see `isFieldSelected`).
+ *
+ * Four of these are not from that node — Failure Count, Success Rate, Total Amount and Total
+ * Transactions are report-level aggregates rather than columns off a transaction row, and are
+ * what "Add important columns" selects (IMPORTANT_FIELDS below). They sit in the list in the
+ * same alphabetical order as the rest so the vocabulary reads as one set, and they carry
+ * samples of their own in field-samples.ts so a preview of them is not a row of dashes.
  */
 export const FIELD_TAGS = [
   'Credit',
   'Debit',
+  'Failure Count',
   'Fee',
   'Gateway',
   'ID',
@@ -319,12 +329,34 @@ export const FIELD_TAGS = [
   'Settlement Amount',
   'Settlement Currency',
   'Settlement Date',
+  'Success Rate',
   'Tax',
+  'Total Amount',
+  'Total Transactions',
   'Txn Amount',
   'Txn Currency',
   'Txn Date',
   'Txn Type',
 ]
+
+/**
+ * What "Add important columns" puts in the table, in the order it adds them.
+ *
+ * Deliberately a list of its own rather than a flag on FIELD_TAGS: this is an opinion about
+ * where a report should start, and this is the only place it is written down. The order is
+ * the reading order of the result — the headline rate, the volume behind it, the money,
+ * then the operational detail.
+ *
+ * Every entry has to be a FIELD_TAGS name, and `satisfies` fails the build if one stops
+ * being one — renaming a tag without renaming it here would otherwise leave the button
+ * quietly adding a custom column instead of lighting the chip.
+ */
+export const IMPORTANT_FIELDS = [
+  'Success Rate',
+  'Total Transactions',
+  'Total Amount',
+  'Failure Count',
+] as const satisfies readonly (typeof FIELD_TAGS)[number][]
 
 /**
  * A tag is lit when a column carries its name — derived, never stored.
@@ -338,6 +370,13 @@ export const FIELD_TAGS = [
  * dark is just wrong.
  */
 const normalise = (value: string) => value.trim().toLowerCase()
+
+/**
+ * Whether two column titles name the same field. Exported because the Grouping step asks the
+ * same question of the same free-text titles, and two copies of this rule drifting apart is
+ * exactly how a chip ends up lit for a column that is not there.
+ */
+export const sameField = (a: string, b: string) => normalise(a) === normalise(b)
 
 export const isFieldSelected = (columns: FieldColumn[], tag: string) =>
   columns.some(({ title }) => normalise(title) === normalise(tag))
@@ -451,6 +490,9 @@ export const valuesFor = (column: string | null) =>
  */
 export const activeGroupBy = ({ columns, groupBy }: FieldsAnswers) =>
   (groupBy ?? []).filter((id) => columns.some((column) => column.id === id))
+
+/** Whether any grouping level is set — the Grouping step's equivalent of `hasAnyFilter`. */
+export const hasAnyGrouping = (answers: FieldsAnswers) => activeGroupBy(answers).length > 0
 
 /** A column with a blank name would produce a nameless header in the report. */
 export const isFieldsComplete = ({ columns }: FieldsAnswers) =>
