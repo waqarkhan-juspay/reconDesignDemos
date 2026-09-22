@@ -533,7 +533,8 @@ type TableRow = ReportConfigRow & {
  *
  * Tuples are [value, min, max, step]. The step is 4 so every value the dial can produce
  * still lands on the 4px spacing grid (DESIGN.md §7). Defaults are 24 except the toolbar
- * to table gap, tuned down to 16 so the toolbar sits tighter to the table it belongs to.
+ * to table gap, which is 8 — the toolbar's tabs choose what the table shows, so the two read
+ * as one block, and the 24px around everything else is what says where that block ends.
  */
 // A factory rather than five literals: it puts the range and the 4px step in one place,
 // and returns a mutable tuple, which is what DialKit's DialConfig wants — `as const` here
@@ -544,7 +545,7 @@ const SPACING_DIALS = {
   aboveTitle: dial(24),
   titleToTabs: dial(24),
   tabsToToolbar: dial(24),
-  toolbarToTable: dial(16),
+  toolbarToTable: dial(8),
   belowTable: dial(24),
 }
 
@@ -996,16 +997,20 @@ function Configurator() {
         }}
       >
         <div className="flex items-center justify-between">
-          {/* The track has to hug its tabs. BOXED paints a background on the tablist, and
-              TabsV2's root takes the full width of its flex parent — which left several
-              hundred pixels of empty grey running to the button. TabsV2 takes no className
-              (rule 2), so the width is capped on a wrapper we own. */}
+          {/* The pair has to hug its tabs. TabsV2's root takes the full width of its flex
+              parent, which would stretch the tablist — and with it the triggers' hover and
+              active targets — across several hundred pixels of dead space running to the
+              button. TabsV2 takes no className (rule 2), so the width is capped on a wrapper
+              we own. It mattered more under BOXED, which painted that space grey; it still
+              matters now that the space is merely invisible rather than absent. */}
           <div className="w-fit shrink-0">
             <TabsV2
-              // BOXED, not FLOATING: the switch sits on the same ground as the table it
-              // changes, so it needs a track of its own to read as a control rather than
-              // two loose words. FLOATING gives the active tab a fill and nothing else.
-              variant={TabsV2Variant.BOXED}
+              // FLOATING: no track, no radius on the list, and the only mark is a fill under
+              // the tab you are on (gray[100] active, gray[50] on hover) — so the switch
+              // reads as two words, one of them current, rather than as a segmented control
+              // sitting on its own grey ground. The table below is what it changes, and this
+              // keeps the eye on that rather than on the chrome that chose it.
+              variant={TabsV2Variant.FLOATING}
               size={TabsV2Size.LG}
               value={view}
               onValueChange={handleViewChange}

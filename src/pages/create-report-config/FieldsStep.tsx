@@ -985,7 +985,10 @@ export function FieldsStep({
    */
   if (version === 'v8') {
     return (
-      <div className="flex w-full flex-col">
+      /* `min-h-0`: this is the filling row of a `[data-fill]` grid (index.tsx), and a grid
+         item's default `min-height: auto` would refuse to shrink below its content — the
+         organiser's cap would then have nothing to bind against. */
+      <div className="flex min-h-0 w-full flex-col">
         <ColumnOrganiser
           answers={answers}
           onChange={onChange}

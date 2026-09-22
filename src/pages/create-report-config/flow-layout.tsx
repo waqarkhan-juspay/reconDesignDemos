@@ -1,4 +1,5 @@
 import { useDialKitController } from 'dialkit'
+import { SHOW_DIALKIT } from '../../dev-tools'
 import type { ReactNode } from 'react'
 
 /**
@@ -55,7 +56,15 @@ export function FlowDials({ children }: { children: (version: FlowVersion) => Re
     { id: PANEL_ID, persist: { key: PERSIST_KEY } },
   )
 
-  // Narrowed by hand: DialKit types a select as a plain string, and a stored value from a
-  // version that no longer exists should fall back to the default above.
+  /**
+   * Narrowed by hand: DialKit types a select as a plain string, and a stored value from a
+   * version that no longer exists should fall back to the default above.
+   *
+   * With the dials hidden the stored value is ignored outright — the same bargain
+   * fields-layout.tsx makes, and for the same reason. v2 became the default after this panel
+   * shipped, so a browser that has been here since is exactly the one still holding v1, and
+   * with no launcher on screen it could never be told otherwise.
+   */
+  if (!SHOW_DIALKIT) return children('v2')
   return children(values.version === 'v1' ? 'v1' : 'v2')
 }

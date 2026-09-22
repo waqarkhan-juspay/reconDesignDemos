@@ -20,7 +20,7 @@ import tenantLogo from '../assets/icons/tenant-logo.svg'
 import merchantOrb from '../assets/merchant-hyper-recon.png'
 import MaskIcon from '../components/MaskIcon'
 import { font } from '../primitives'
-import { CHROME_HOVER } from './chrome'
+import { CHROME_HOVER, ICON_SIZE } from './chrome'
 import { CONFIGURATOR_PATH, HOME_PATH, buildNavigationData } from './navigation'
 import { TopbarStatusIcons } from './topbar'
 
@@ -164,9 +164,16 @@ function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   return (
     <div className="flex w-full flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <FooterMenuItem icon={<Settings2 size={12} />} label="Settings" collapsed={collapsed} />
+        {/* ICON_SIZE, not a number of their own: these two sit in the same rail as the nav
+            rows above them, but they are our markup rather than Directory's, so nothing
+            forces a size on them and 12 simply made them the odd pair out. */}
         <FooterMenuItem
-          icon={<MaskIcon src={codeSnippetIcon} size={12} />}
+          icon={<Settings2 size={ICON_SIZE} />}
+          label="Settings"
+          collapsed={collapsed}
+        />
+        <FooterMenuItem
+          icon={<MaskIcon src={codeSnippetIcon} size={ICON_SIZE} />}
           label="For Developers"
           collapsed={collapsed}
         />

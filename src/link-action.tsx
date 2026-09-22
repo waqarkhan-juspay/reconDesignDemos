@@ -43,10 +43,17 @@ export const LinkAction = ({
   text: string
   onClick: () => void
   /**
-   * Drawn but refused, rather than removed, wherever the action would do nothing. The Fields
-   * step's lone "Clear all" hides instead — it sits at the end of a wrapping row where
-   * nothing moves when it goes. A *pair* of these cannot: removing the first slides the
-   * second along the moment you use it, which is the one moment the user is looking at it.
+   * Drawn but refused, rather than removed, wherever the action would do nothing.
+   *
+   * Which of the two a caller wants comes down to what follows the control, not to how many
+   * there are. Anything *leading* stays drawn and disabled — remove it and everything after
+   * slides into its place the moment you use it, which is the one moment the user is looking
+   * there. The organiser's "Select all" is that case.
+   *
+   * Anything *trailing* hides instead, because nothing moves when it goes: the Fields step's
+   * lone "Clear all", and the organiser's, which trails "Select all". Preferred where it is
+   * available — a visible control that is a no-op invites the click and then does not answer
+   * it, so `disabled` is the fallback for positions that cannot afford the reflow.
    */
   disabled?: boolean
 }) => (

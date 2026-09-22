@@ -35,6 +35,10 @@ const RENDERED = [
   'SelectorV2/SwitchV2',
   'TabsV2',
   'TagV2',
+  // V1, and the second exception rule 4 allows: MultiValueInputV2 renders V1 Tag for its
+  // value chips (MultiValueInputV2.tsx:246) and its `tags` prop carries no colour key, so
+  // the token tree is the only way to reach them. Nothing in this app renders Tag directly.
+  'Tags',
   'InputsV2/TextInputV2',
   'TopbarV2',
   'Drawer',
@@ -54,6 +58,14 @@ const TYPE_FALLBACK = {
   ResponsiveDrawerTokens: {
     type: "Record<'sm' | 'lg', DrawerTokensType>",
     imports: ['DrawerTokensType'],
+  },
+  // Tags publishes neither ResponsiveTagTokens nor TagTokensType from the package root, and
+  // the deep path into lib/ carries no declarations (TS2307). The slot on ComponentTokenType
+  // is the same type by construction — initComponentTokens resolves TAGS as
+  // `componentTokens.TAGS ?? getTagTokens(…)` — and it is exported, so it is read from there.
+  ResponsiveTagTokens: {
+    type: "NonNullable<ComponentTokenType['TAGS']>",
+    imports: ['ComponentTokenType'],
   },
 }
 

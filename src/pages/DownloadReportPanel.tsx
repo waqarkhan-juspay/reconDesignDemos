@@ -132,6 +132,30 @@ export const canDownload = (row: ConfigRowFacts | null, recipients: EmailRecipie
   !(CHANNELS[row?.channel ?? '']?.recipients ?? true) || recipients.to.length > 0
 
 /**
+ * What the snackbar says once Submit is pressed.
+ *
+ * Here rather than in ConfigDetailSheet because CHANNELS is here: a report does not
+ * necessarily go to an inbox, and a notice promising email for a config that posts to Slack
+ * would be worse than no notice at all. The email branch counts Cc and Bcc as well as To,
+ * since all three are addresses the file reaches.
+ *
+ * The fifteen minutes is the app's one claim about its own latency, so it is written once.
+ */
+export const deliveryNotice = (row: ConfigRowFacts | null, recipients: EmailRecipients) => {
+  const channel = CHANNELS[row?.channel ?? ''] ?? CHANNELS.Email
+  const addresses =
+    recipients.to.length + (recipients.cc?.length ?? 0) + (recipients.bcc?.length ?? 0)
+  return {
+    header: 'Report request received',
+    description: channel.recipients
+      ? `We are processing it now and will email it to the ${addresses} ${
+          addresses === 1 ? 'address' : 'addresses'
+        } you listed. This usually takes about 15 minutes.`
+      : `${channel.description} Processing usually takes about 15 minutes.`,
+  }
+}
+
+/**
  * One bordered box, drawn like the create flow's channel cards (DeliveryStep's ChannelCard):
  * a hairline at radius 8 on white, with 16px of side padding. Both sections here are cards
  * rather than bare stacks, so the two questions read as two things to answer rather than as
@@ -199,7 +223,7 @@ export function DownloadReportPanel({
   recipients: EmailRecipients
   onRecipientsChange: (next: EmailRecipients) => void
   /**
-   * Cancel and Send, rendered at the end of this screen's stack rather than in the sheet's
+   * Submit and Cancel, rendered at the end of this screen's stack rather than in the sheet's
    * DrawerFooter.
    *
    * A slot rather than callbacks: the sheet still owns what the two buttons *do* — closing

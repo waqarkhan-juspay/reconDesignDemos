@@ -8,6 +8,9 @@ import {
   TagV2Size,
   TagV2SubType,
   TagV2Type,
+  TooltipV2,
+  TooltipV2Align,
+  TooltipV2Side,
 } from '@juspay/blend-design-system'
 import { CopyPlus, GripVertical, PencilLine, X } from 'lucide-react'
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
@@ -63,6 +66,17 @@ const ACTION_BOX = 36
 const BADGE_WIDTH = { single: 20, double: 28 }
 const NAME_GAP = { single: 16, double: 8 }
 
+/**
+ * How much more readily the origin line gives up width than the column's name does.
+ *
+ * Flexbox has no priority order, only weights — shrinkage is shared out in proportion to
+ * each item's factor times its basis — so "shorten the note, not the name" is written as a
+ * factor large enough that the name's share of any realistic overflow rounds to nothing. It
+ * is not infinity: past the point where the note has vanished entirely the name does start
+ * to ellipsis, which is what keeps it off the row's own buttons.
+ */
+const ORIGIN_SHRINK = 999
+
 const NAME = font(FOUNDATION_THEME.font.size.body.md)
 const META = {
   ...font(FOUNDATION_THEME.font.size.body.sm),
@@ -115,6 +129,7 @@ export function OrganiserRow({
   column,
   letter,
   grouped,
+  custom,
   showAggregation,
   dragging,
   handleProps,
@@ -128,6 +143,9 @@ export function OrganiserRow({
   letter: string
   /** Whether the report groups by this column, which is what replaces its aggregation. */
   grouped: boolean
+  /** Whether the field under this column is one the user wrote rather than one the vocabulary
+      shipped with — the same fact the palette's chip says in orange. */
+  custom: boolean
   /**
    * Whether to draw the aggregation select at all. False until the report groups by
    * something: with one row per record there is nothing to roll up, and a COUNT beside every
@@ -144,6 +162,18 @@ export function OrganiserRow({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(column.title)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  /**
+   * The origin line's tooltip, and whether it has anything to say.
+   *
+   * Controlled rather than left to Radix, because a tooltip that repeats text you can already
+   * read is the same no-op affordance as a "Clear all" with nothing to clear: it costs a
+   * hover and answers with what is on screen. So the row agrees to open only when the span is
+   * actually clipped, which `scrollWidth > clientWidth` reports — measured on the hover
+   * itself, so it tracks the window being resized without an observer to keep in sync.
+   */
+  const originRef = useRef<HTMLSpanElement>(null)
+  const [showOrigin, setShowOrigin] = useState(false)
 
   useEffect(() => {
     if (!editing) return
@@ -173,9 +203,16 @@ export function OrganiserRow({
    * `source` records (answers.ts). Before that the name *is* the field and the line would be
    * a tautology; after it, it is the only thing left saying where the column's data comes
    * from. The curly quotes are the design's.
+   *
+   * Never on a custom column, whatever its `source` says. There the name *is* the field and
+   * stays so — renaming one renames the field itself, chip and grouping included (`rename`
+   * in ColumnOrganiser.tsx) — so there is no earlier name left to point back at. The only
+   * way the two can differ at all is a copy left on the old name while its twin was edited,
+   * and a `represents` line under a row the user just named is the tautology this line
+   * exists to avoid.
    */
   const origin = fieldOf(column)
-  const renamed = !sameField(origin, column.title)
+  const renamed = !custom && !sameField(origin, column.title)
 
   /** Past Z — see BADGE_WIDTH. Both halves of the row's left edge read this one flag. */
   const size = letter.length > 1 ? 'double' : 'single'
@@ -256,23 +293,56 @@ export function OrganiserRow({
             />
           ) : (
             <>
+              {/* The note gives ground first. It is the name that is the column, and the line
+                  beside it is a note *about* the column — so when the row runs out of width it
+                  is the note that shortens.
+
+                  Weighted shrink rather than `flex-shrink: 0` on the name, because the name
+                  has to yield eventually: a long enough one used to run on under the duplicate
+                  and ✕ buttons, which is the same thing the note was asked not to do. Flexbox
+                  distributes shrinkage by factor × basis, so ORIGIN_SHRINK against this 1
+                  means the note is effectively gone before the name loses its first pixel —
+                  a priority, expressed with the only lever flexbox gives for one. */}
               <PrimitiveText
                 as="span"
                 {...NAME}
                 color={colors.gray[900]}
-                style={{ whiteSpace: 'nowrap' }}
+                style={{
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  minWidth: 0,
+                  flexShrink: 1,
+                }}
               >
                 {column.title}
               </PrimitiveText>
               {renamed && (
-                <PrimitiveText
-                  as="span"
-                  {...META}
-                  color={colors.gray[500]}
-                  style={{ whiteSpace: 'nowrap' }}
+                /* A native span rather than a PrimitiveText, on purpose: TooltipV2 wraps any
+                   trigger that is not a host element in an `inline-flex` span of its own
+                   (TooltipV2.tsx:85-96), and that wrapper would become the flex item instead
+                   — leaving the ellipsis measuring itself against a box with no width to run
+                   out of. A host element is cloned in place, so the styles below stay on the
+                   element the layout actually sizes. META carries the token type; the
+                   truncation is Tailwind's, on markup this file owns. */
+                <TooltipV2
+                  content={`represents “${origin}”`}
+                  side={TooltipV2Side.TOP}
+                  align={TooltipV2Align.START}
+                  open={showOrigin}
+                  onOpenChange={(next) => {
+                    const el = originRef.current
+                    setShowOrigin(next && el !== null && el.scrollWidth > el.clientWidth)
+                  }}
                 >
-                  {`represents “${origin}”`}
-                </PrimitiveText>
+                  <span
+                    ref={originRef}
+                    className="min-w-0 truncate"
+                    style={{ ...META, color: colors.gray[500], flexShrink: ORIGIN_SHRINK }}
+                  >
+                    {`represents “${origin}”`}
+                  </span>
+                </TooltipV2>
               )}
               {/* Hidden until the row is hovered or something in it has focus — the rule is
                   in index.css, because opacity has to answer to `:hover` on the row rather
@@ -293,41 +363,75 @@ export function OrganiserRow({
       </div>
 
       <div className="flex shrink-0 items-center">
-        {grouped ? (
-          /* The grouped column has no aggregation to choose — it is the thing being grouped
-             by, so there is nothing to roll up. The design states that in the slot the select
-             would have taken, rather than leaving a gap the eye has to account for.
+        {/* Where the column came from, which is the one thing about a custom column that
+            cannot be read off the row: its name is whatever the user typed, so nothing else
+            here distinguishes it from the twenty-six the vocabulary shipped with.
 
-             The same subtle purple chip the Grouping step lit when the field was picked, so
-             the mark a user made one step ago is the mark they find here. Rendered without an
-             `onClick`, which is what makes TagV2 draw a Block instead of a PrimitiveButton
-             (TagV2.tsx:53) — this states a fact about the row, it is not a second control. */
+            It stacks with "Grouped by" rather than competing for the slot, because the two
+            answer different questions — where the field came from, and what the report does
+            with it — and a custom field that is grouped is both. Same size, same shape and
+            the same absent `onClick` as that pill; only the hue differs, and it is the
+            palette chip's orange so the mark is the one the user already met. */}
+        {custom && (
           <span className="pr-2">
             <TagV2
-              text="Grouped by"
+              text="Custom"
               size={TagV2Size.SM}
               subType={TagV2SubType.SQUARICAL}
-              color={TagV2Color.PURPLE}
+              color={TagV2Color.WARNING}
               type={TagV2Type.SUBTLE}
             />
           </span>
-        ) : (
-          showAggregation && (
-            <SingleSelectV2
-              placeholder="COUNT"
-              selected={aggregationOf(column)}
-              onSelect={(value) => onAggregate(value as Aggregation)}
-              items={[{ items: options.map((option) => ({ label: option, value: option })) }]}
-              size={SingleSelectV2Size.SM}
-              // The design's "noContainer": no border, no fill. `inline` on top of it drops
-              // the padding and the 32px floor as well, which is what leaves the label
-              // sitting on the row's own baseline beside the icons.
-              variant={SingleSelectV2Variant.NO_CONTAINER}
-              inline
-              menuDimensions={{ minWidth: 140 }}
-              aria-label={`Aggregation for ${column.title}`}
-            />
-          )
+        )}
+        {(grouped || showAggregation) && (
+          /* One slot, one keyline.
+
+             Whatever stands here — the pill or the select — ends 8px short of the action
+             buttons, so the pill's right edge and the chevron's right edge land on the same
+             vertical however the row is configured. The 8px is on this wrapper and not on
+             either child, which is what stops the two branches drifting: there is one number
+             and both read it.
+
+             Blend's `inline` select zeroes its own padding, so before this the trigger ran
+             flush into the duplicate button and that keyline cut the chevron through its
+             middle — the pill beside it stopped 8px earlier, and the two read as a column
+             that could not decide where it ended. */
+          <span className="pr-2">
+            {grouped ? (
+              /* The grouped column has no aggregation to choose — it is the thing being
+                 grouped by, so there is nothing to roll up. The design states that in the
+                 slot the select would have taken, rather than leaving a gap the eye has to
+                 account for.
+
+                 The same subtle purple chip the Grouping step lit when the field was picked,
+                 so the mark a user made one step ago is the mark they find here. Rendered
+                 without an `onClick`, which is what makes TagV2 draw a Block instead of a
+                 PrimitiveButton (TagV2.tsx:53) — this states a fact about the row, it is not
+                 a second control. */
+              <TagV2
+                text="Grouped by"
+                size={TagV2Size.SM}
+                subType={TagV2SubType.SQUARICAL}
+                color={TagV2Color.PURPLE}
+                type={TagV2Type.SUBTLE}
+              />
+            ) : (
+              <SingleSelectV2
+                placeholder="COUNT"
+                selected={aggregationOf(column)}
+                onSelect={(value) => onAggregate(value as Aggregation)}
+                items={[{ items: options.map((option) => ({ label: option, value: option })) }]}
+                size={SingleSelectV2Size.SM}
+                // The design's "noContainer": no border, no fill. `inline` on top of it drops
+                // the padding and the 32px floor as well, which is what leaves the label
+                // sitting on the row's own baseline beside the icons.
+                variant={SingleSelectV2Variant.NO_CONTAINER}
+                inline
+                menuDimensions={{ minWidth: 140 }}
+                aria-label={`Aggregation for ${column.title}`}
+              />
+            )}
+          </span>
         )}
         <RowAction
           label={`Duplicate ${column.title}`}

@@ -13,6 +13,7 @@ import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
 import { SINGLE_SELECT_V2_TOKENS } from './tokens/SingleSelectV2'
+import { TAGS_TOKENS } from './tokens/Tags'
 import { TAGV2_TOKENS } from './tokens/TagV2'
 
 /**
@@ -120,32 +121,116 @@ export const sectionTabsTokens: ComponentTokenType = {
 }
 
 type Sides = 'top' | 'right' | 'bottom' | 'left'
+/** Blend's own size keys — `ButtonV2Size` is `sm | md | lg` (buttonV2.types.ts:11). */
+type GhostSize = 'sm' | 'md' | 'lg'
 type GhostButtonToken = {
   backgroundColor: { secondary: { inline: Record<'default' | 'hover' | 'active' | 'disabled', unknown> } }
-  borderRadius: Record<'lg', { secondary: { inline: unknown } }>
-  padding: Record<Sides, Record<'lg', { secondary: { inline: unknown } }>>
+  borderRadius: Record<GhostSize, { secondary: { inline: unknown } }>
+  padding: Record<Sides, Record<GhostSize, { secondary: { inline: unknown } }>>
+}
+
+type ButtonState = Record<'default' | 'hover' | 'active' | 'disabled', unknown>
+type DangerButtonToken = {
+  backgroundColor: { danger: { default: ButtonState } }
+  border: { danger: { default: ButtonState } }
+  // The label's colour is under `text`, not at the top level: a breakpoint's own keys are
+  // backgroundColor / borderRadius / padding / border / shadow / text.
+  text: { color: { danger: { default: ButtonState } } }
 }
 
 /**
- * A ghost button: secondary + INLINE (no border, no fill at rest), given the padding of a
- * LARGE secondary button, a radius, and a gray[50] fill on hover — so it has a real hit area
- * and a surface that answers the pointer, while still reading as the quiet action.
+ * A danger *secondary* — the outlined shape of a secondary button, in red.
+ *
+ * blend-gap: ButtonV2 crosses variant with subType, and `danger` has only the three every
+ * variant has: `default` (a red gradient fill), `iconOnly` (the same), and `inline` (no
+ * fill and no border at all). The outlined middle weight that `secondary` gets does not
+ * exist for danger, and no combination of props reaches it — so the three paths that
+ * describe it are remapped on `danger.default` instead.
+ *
+ * The values mirror `secondary.default`'s own structure rather than inventing one: a white
+ * rest state, a tinted hover, a border a step darker than the fill, and a label at 600.
+ * Where secondary reads gray, this reads red.
+ *
+ * Scoped by a nested ThemeProvider around the one button that wants it (ExitFlowModal).
+ * `danger.default` is the ordinary red button everywhere else, and a global remap would
+ * quietly take the fill off all of them.
+ */
+export const dangerSecondaryButtonTokens: ComponentTokenType = {
+  ...componentTokens,
+  BUTTONV2: perBreakpoint(
+    BUTTONV2_TOKENS as unknown as Record<string, DangerButtonToken>,
+    (token) => ({
+      ...token,
+      backgroundColor: {
+        ...token.backgroundColor,
+        danger: {
+          ...token.backgroundColor.danger,
+          default: {
+            default: FOUNDATION_THEME.colors.gray[0],
+            hover: FOUNDATION_THEME.colors.red[50],
+            active: FOUNDATION_THEME.colors.red[100],
+            disabled: FOUNDATION_THEME.colors.gray[0],
+          },
+        },
+      },
+      border: {
+        ...token.border,
+        danger: {
+          ...token.border.danger,
+          default: {
+            default: `1px solid ${FOUNDATION_THEME.colors.red[200]}`,
+            hover: `1px solid ${FOUNDATION_THEME.colors.red[300]}`,
+            active: `1px solid ${FOUNDATION_THEME.colors.red[300]}`,
+            disabled: `1px solid ${FOUNDATION_THEME.colors.red[100]}`,
+          },
+        },
+      },
+      text: {
+        ...token.text,
+        color: {
+          ...token.text.color,
+          danger: {
+            ...token.text.color.danger,
+            default: {
+              default: FOUNDATION_THEME.colors.red[600],
+              hover: FOUNDATION_THEME.colors.red[700],
+              active: FOUNDATION_THEME.colors.red[700],
+              disabled: FOUNDATION_THEME.colors.red[300],
+            },
+          },
+        },
+      },
+    }),
+  ) as unknown as ComponentTokenType['BUTTONV2'],
+}
+
+/**
+ * A ghost button: secondary + INLINE (no border, no fill at rest), given a real padding box,
+ * a radius, and a gray[50] fill on hover — so it has a hit area and a surface that answers
+ * the pointer, while still reading as the quiet action.
  *
  * blend-gap: ButtonV2Type has no ghost (primary/secondary/danger/success only), and INLINE
- * zeroes every padding (buttonV2.light.tokens.ts), which left footer Exit a 23×20 target.
- * Only the LARGE size is touched and the tokens are scoped by a nested ThemeProvider, so
- * the inline buttons elsewhere (Cc, Bcc, Save as draft) keep their shape.
+ * zeroes every padding (buttonV2.light.tokens.ts), which leaves an inline button as tall as
+ * its own text and with nothing for a hover fill to sit in.
+ *
+ * `size` is the only size touched, and every caller scopes these by a nested ThemeProvider,
+ * so the inline buttons elsewhere (Cc, Bcc, Save as draft, LinkAction) keep their shape. The
+ * background is not size-keyed in Blend's tree — `backgroundColor.secondary.inline` is one
+ * slot for all three — which is the other half of why the scope has to be narrow.
  */
-export const ghostButtonTokens: ComponentTokenType = {
+const ghostButton = (
+  size: GhostSize,
+  { x, y, radius }: { x: string; y: string; radius: unknown },
+): ComponentTokenType => ({
   ...componentTokens,
   BUTTONV2: perBreakpoint(
     BUTTONV2_TOKENS as unknown as Record<string, GhostButtonToken>,
     (token) => {
       const pad = (side: Sides, value: string) => ({
         ...token.padding[side],
-        lg: {
-          ...token.padding[side].lg,
-          secondary: { ...token.padding[side].lg.secondary, inline: value },
+        [size]: {
+          ...token.padding[side][size],
+          secondary: { ...token.padding[side][size].secondary, inline: value },
         },
       })
       return {
@@ -164,24 +249,47 @@ export const ghostButtonTokens: ComponentTokenType = {
         },
         borderRadius: {
           ...token.borderRadius,
-          lg: {
-            ...token.borderRadius.lg,
-            secondary: { ...token.borderRadius.lg.secondary, inline: FOUNDATION_THEME.border.radius[10] },
+          [size]: {
+            ...token.borderRadius[size],
+            secondary: { ...token.borderRadius[size].secondary, inline: radius },
           },
         },
-        // The secondary LARGE button's padding (9px / 16px on lg) plus its 1px border, so
-        // Exit is exactly as tall as the Back button beside the primary action.
         padding: {
           ...token.padding,
-          top: pad('top', '10px'),
-          bottom: pad('bottom', '10px'),
-          left: pad('left', '16px'),
-          right: pad('right', '16px'),
+          top: pad('top', y),
+          bottom: pad('bottom', y),
+          left: pad('left', x),
+          right: pad('right', x),
         },
       }
     },
   ) as unknown as ComponentTokenType['BUTTONV2'],
-}
+})
+
+/**
+ * The flow footer's Exit — the secondary LARGE button's padding (9px / 16px on lg) plus its
+ * 1px border, so Exit is exactly as tall as the Back button beside the primary action.
+ */
+export const ghostButtonTokens = ghostButton('lg', {
+  x: '16px',
+  y: '10px',
+  radius: FOUNDATION_THEME.border.radius[10],
+})
+
+/**
+ * The organiser header's "Add custom column" — the same ghost, sized for a header rather than
+ * a footer.
+ *
+ * 8px/4px is deliberately smaller than the LARGE ghost's 16px/10px: this one sits on a line
+ * with a heading rather than in a row of buttons, so the fill is there to acknowledge the
+ * pointer, not to draw a control. The header gives back the 8px it takes on the right
+ * (ColumnOrganiser.tsx), so the label stays on the keyline the rows below it use.
+ */
+export const headerGhostButtonTokens = ghostButton('sm', {
+  x: '8px',
+  y: '4px',
+  radius: FOUNDATION_THEME.border.radius[6],
+})
 
 type ButtonTextColors = {
   text: {
@@ -223,12 +331,66 @@ export const neutralLinkTokens: ComponentTokenType = {
   ) as unknown as ComponentTokenType['BUTTONV2'],
 }
 
-type TagBorderToken = {
-  border: { noFill: { neutral: unknown }; subtle: { neutral: unknown } }
+type TagChromeToken = {
+  backgroundColor: { subtle: { neutral: unknown; warning: unknown; purple: unknown } }
+  border: {
+    noFill: { neutral: unknown; warning: unknown; purple: unknown }
+    subtle: { neutral: unknown; warning: unknown; purple: unknown }
+  }
 }
 
 /** The design's chip hairline — `tag/borderColor/subtle/neutral`, #ECEFF3. */
 const TAG_HAIRLINE = `1px solid ${FOUNDATION_THEME.colors.gray[150]}`
+
+type TagPaletteToken = (typeof TAGS_TOKENS)['sm']
+
+/**
+ * The recipient chips in the Delivery step's email field (RecipientsInput.tsx).
+ *
+ * `TAGS`, not `TAGV2`: MultiValueInputV2 renders the V1 Tag for its values
+ * (MultiValueInputV2.tsx:246). Nothing else in this app draws a V1 Tag, but this is scoped
+ * to the field anyway — a global remap of a colour slot is the kind of thing that surprises
+ * the next component to use it.
+ *
+ * Two edits.
+ *
+ * **Colour.** `tags` carries `{ value, size, shape, variant }` and no colour key, so Tag
+ * falls through to its own default of PRIMARY and the chips come out blue. Neutral is what
+ * an address that has merely been entered should read as — it is a value, not a status. With
+ * no prop to pass, the way there is to point the `primary` slot at `neutral`'s own values
+ * rather than restate them, so the two cannot drift if Blend moves its greys.
+ *
+ * **Height.** `xs` padding goes from `2px 6px` to `0 6px`. The field's content box is 21px
+ * (a 35px MD input, less 6px of padding either side and its two borders) and the chip was
+ * 30px, so the input grew by 9px the moment an address went in. The chip's floor is its own
+ * 18px line plus 2px of border, so zero vertical padding is what it takes to fit — 20px, and
+ * the field holds its height. The horizontal 6px is untouched.
+ *
+ * That alone is not enough: Tag's remove button carries an inline `min-height: 24px`
+ * (MultiValueInputV2.tsx:281) that no token reaches. See `.recipients-field` in index.css.
+ */
+export const recipientTagTokens: ComponentTokenType = {
+  ...componentTokens,
+  TAGS: perBreakpoint(TAGS_TOKENS as unknown as Record<string, TagPaletteToken>, (token) => ({
+    ...token,
+    padding: { ...token.padding, xs: `0 ${FOUNDATION_THEME.unit[6]}` },
+    backgroundColor: {
+      ...token.backgroundColor,
+      subtle: { ...token.backgroundColor.subtle, primary: token.backgroundColor.subtle.neutral },
+    },
+    border: {
+      ...token.border,
+      subtle: { ...token.border.subtle, primary: token.border.subtle.neutral },
+    },
+    text: {
+      ...token.text,
+      color: {
+        ...token.text.color,
+        subtle: { ...token.text.color.subtle, primary: token.text.color.subtle.neutral },
+      },
+    },
+  })) as unknown as ComponentTokenType['TAGS'],
+}
 
 /**
  * The field vocabulary's chips — version 6's, and the column organiser's palette — with the
@@ -246,9 +408,18 @@ const TAG_HAIRLINE = `1px solid ${FOUNDATION_THEME.colors.gray[150]}`
  * #ECEFF3 hairline with its fill switched off, so in the design the two states differ by
  * their fill and their glyph and by nothing else.
  *
- * It reaches exactly that one chip: nothing under these tokens draws NO_FILL in a non-neutral
- * colour, and the Fields step's older round chips — the flow's only other NO_FILL — render
- * unwrapped (FieldsStep.tsx:862) and keep Blend's border.
+ * Two more colours draw under these tokens now, and both are undone the same way. A field the
+ * user wrote is WARNING and a field the report groups by is PURPLE (ColumnOrganiser.tsx), and
+ * Blend paints each of those across the entire chip: orange[500] all the way round an
+ * unfilled one, orange[50]/purple[50] under a filled one. That reads as three kinds of chip
+ * rather than one chip saying three things — and the wash also swallows the gray[50] that is
+ * the only mark of a chosen field, so a grouped chip on purple[50] (#FAF5FF) sat there
+ * looking unchosen beside its neighbours. Both fall back to the neutral fill and the neutral
+ * hairline. What is left carrying the colour is the word itself — orange[500] unfilled and
+ * orange[600] filled, purple[600] for grouped — which is the part being read.
+ *
+ * The Fields step's older round chips — the flow's only other NO_FILL — render unwrapped
+ * (FieldsStep.tsx:862) and keep Blend's border.
  *
  * Scoped by a nested ThemeProvider rather than set globally, for the same reason as
  * sectionTabsTokens: SUBTLE/NEUTRAL is also the Filters step's "Optional" chip, and that one
@@ -259,13 +430,31 @@ const TAG_HAIRLINE = `1px solid ${FOUNDATION_THEME.colors.gray[150]}`
 export const fieldTagTokens: ComponentTokenType = {
   ...componentTokens,
   TAGV2: perBreakpoint(
-    TAGV2_TOKENS as unknown as Record<string, TagBorderToken>,
+    TAGV2_TOKENS as unknown as Record<string, TagChromeToken>,
     (token) => ({
       ...token,
+      backgroundColor: {
+        ...token.backgroundColor,
+        subtle: {
+          ...token.backgroundColor.subtle,
+          warning: token.backgroundColor.subtle.neutral,
+          purple: token.backgroundColor.subtle.neutral,
+        },
+      },
       border: {
         ...token.border,
-        noFill: { ...token.border.noFill, neutral: TAG_HAIRLINE },
-        subtle: { ...token.border.subtle, neutral: TAG_HAIRLINE },
+        noFill: {
+          ...token.border.noFill,
+          neutral: TAG_HAIRLINE,
+          warning: TAG_HAIRLINE,
+          purple: TAG_HAIRLINE,
+        },
+        subtle: {
+          ...token.border.subtle,
+          neutral: TAG_HAIRLINE,
+          warning: TAG_HAIRLINE,
+          purple: TAG_HAIRLINE,
+        },
       },
     }),
   ) as unknown as ComponentTokenType['TAGV2'],
@@ -310,6 +499,24 @@ export const columnOrganiserTokens: ComponentTokenType = {
       },
     }),
   ) as unknown as ComponentTokenType['SINGLE_SELECT_V2'],
+}
+
+/**
+ * The organiser's right-hand list — the palette's tokens with Blend's tag colours put back.
+ *
+ * `fieldTagTokens` sends WARNING and PURPLE to the neutral fill because a palette chip is one
+ * of twenty-nine, and down a column that long a coloured wash stops being a mark and becomes
+ * the weather. A row's pill is the opposite case. There is one of it, it sits alone in the
+ * slot the aggregation select would have taken, and it is naming the treatment the row is
+ * under rather than being an item in a list — so the wash is doing the work there, and
+ * "Grouped by" keeps its purple, "Custom" its orange.
+ *
+ * Only TAGV2 goes back. The select's gray[400] trigger stays, because the rows are where that
+ * select lives.
+ */
+export const organiserRowTokens: ComponentTokenType = {
+  ...columnOrganiserTokens,
+  TAGV2: TAGV2_TOKENS as unknown as ComponentTokenType['TAGV2'],
 }
 
 /**

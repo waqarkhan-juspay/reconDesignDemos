@@ -198,7 +198,20 @@ const RAIL_GUTTER = { '--flow-rail-gutter': '160px' } as CSSProperties
  */
 function TopbarContent({ onExit }: { onExit: () => void }) {
   return (
-    <div className="flex w-full items-center gap-2">
+    /*
+     * The same `.flow-grid` the steps below use, so the title lands on the content column's
+     * own left edge rather than near it — one definition of where that edge is, not two.
+     *
+     * `-mx-8` cancels TopbarV2's own 32px of horizontal padding (topbarV2 tokens) so this
+     * grid resolves against the full window width, exactly as the content grid does. Without
+     * it the two agree only while both gutters are above their floor: below 1344px the bar's
+     * grid hits its floor 64px of window earlier than the content's, and the title would sit
+     * 32px right of the heading under it at every width below that.
+     *
+     * `flow-topbar-grid` raises this grid's left floor to the back button's own width — see
+     * index.css for what that trades away on a narrow window.
+     */
+    <div className="flow-grid flow-topbar-grid -mx-8 w-auto items-center">
       {/* One of the flow's two exits — the footer's "Exit" is the other — and the only one
           that says where it goes. It routes through onExit: this discards every answer so
           far, and a labelled button that did it silently would be the worse of the two.
@@ -209,16 +222,27 @@ function TopbarContent({ onExit }: { onExit: () => void }) {
           blend-gap: ButtonV2 sets `cursor: default` (ButtonV2/utils.ts) with no prop or token
           to change it, so the pointer comes from a wrapper this file owns — same as the
           footer's Exit. */}
-      <span className="flex [&_button]:cursor-pointer">
+      <span className="flow-topbar-back flex pl-8 [&_button]:cursor-pointer">
         <ButtonV2
           buttonType={ButtonV2Type.SECONDARY}
           subType={ButtonV2SubType.INLINE}
           size={ButtonV2Size.MEDIUM}
-          text="Return to Configurator"
+          text="Return to Report Config"
           leftSlot={{ slot: <ArrowLeft size={16} /> }}
           onClick={onExit}
         />
       </span>
+
+      {/* What you are in, named once. The steps below each say what *this* step asks; none
+          of them says what the whole thing is for, and the bar had nothing but a way out. */}
+      <PrimitiveText
+        as="h1"
+        {...font(FOUNDATION_THEME.font.size.body.lg)}
+        color={colors.gray[700]}
+        fontWeight={FOUNDATION_THEME.font.weight[600]}
+      >
+        New report configuration
+      </PrimitiveText>
     </div>
   )
 }
@@ -394,6 +418,12 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
     <div key={current.id} className={`${COLUMN} flow-question ${current.id === 'setup' ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
       style={layout?.style}
       data-layout={layout?.wide ? 'wide' : undefined}
+      /* The column organiser is the one step body that should fit the window rather than
+         grow past it — it carries two lists of its own, and a page scroll that moves the
+         chrome away from them is the wrong scroll. `data-fill` makes this grid exactly as
+         tall as the pane it scrolls in (index.css), which is what gives the organiser a
+         definite height to cap itself against. Every other step stays content-height. */
+      data-fill={current.id === 'fields' && layout?.version === 'v8' ? '' : undefined}
     >
       {/* Every step's heading sits on the content column's left edge, Fields
           included. Node 4457:15485 draws that heading flush with its table's left

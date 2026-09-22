@@ -10,8 +10,7 @@ import { BookOpen, House, MessageSquareCheck, User, Wrench } from 'lucide-react'
 import announcementIcon from '../assets/icons/announcement-01.svg'
 import globeIcon from '../assets/icons/globe-01.svg'
 import MaskIcon from '../components/MaskIcon'
-
-const ICON_SIZE = 12
+import { ICON_SIZE } from './chrome'
 
 /**
  * Home has its own path rather than sitting at the root, because the root is a redirect to

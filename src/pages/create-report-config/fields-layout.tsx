@@ -1,4 +1,5 @@
 import { useDialKitController } from 'dialkit'
+import { SHOW_DIALKIT } from '../../dev-tools'
 import type { CSSProperties, ReactNode } from 'react'
 
 /**
@@ -76,7 +77,12 @@ const ALL_VERSION_OPTIONS: { value: FieldsLayoutVersion; label: string }[] = [
  */
 const VISIBLE_VERSIONS: FieldsLayoutVersion[] = ['v6', 'v8']
 
-const DEFAULT_VERSION: FieldsLayoutVersion = 'v6'
+/**
+ * The column organiser — "Version 2" in the panel below. Moved off v6 on 2026-09-22: with the
+ * dials hidden (src/dev-tools.ts) the default is the only version anyone can reach, and the
+ * organiser is the one this step is now about.
+ */
+const DEFAULT_VERSION: FieldsLayoutVersion = 'v8'
 
 /**
  * Display names that override the labels above, so the dial numbers what it actually offers.
@@ -152,11 +158,21 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
   const { values } = dials
   const { spacing } = values
 
-  // Narrowed by hand: DialKit types a select as a plain string, and a stored value the panel
-  // no longer offers should fall back to the default layout.
-  const version = (VISIBLE_VERSIONS as string[]).includes(values.version)
-    ? (values.version as FieldsLayoutVersion)
-    : DEFAULT_VERSION
+  /**
+   * Narrowed by hand: DialKit types a select as a plain string, and a stored value the panel
+   * no longer offers should fall back to the default layout.
+   *
+   * With the dials hidden the stored value is ignored outright, not just narrowed. Persistence
+   * outlives the UI that wrote it: a browser that ever picked a version keeps it, and with no
+   * launcher on screen there would be nothing left to change it back with — the page would
+   * simply draw the wrong layout for that one person, for good. The panel is still registered
+   * (the hook above runs either way), so flipping SHOW_DIALKIT back restores the saved value.
+   */
+  const version = !SHOW_DIALKIT
+    ? DEFAULT_VERSION
+    : (VISIBLE_VERSIONS as string[]).includes(values.version)
+      ? (values.version as FieldsLayoutVersion)
+      : DEFAULT_VERSION
 
   return children({
     version,
