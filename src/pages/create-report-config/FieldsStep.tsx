@@ -25,58 +25,19 @@ import {
   type CSSProperties,
 } from 'react'
 import { SAMPLE_ROW_COUNT, sampleFor } from '../../field-samples'
+import { SLOT_ICON } from '../../icons'
+import { LinkAction } from '../../link-action'
 import { PrimitiveText, font } from '../../primitives'
 import { fieldTagTokens } from '../../theme'
 import { AddCustomColumnModal } from './AddCustomColumnModal'
+import { ColumnOrganiser } from './ColumnOrganiser'
 import { GroupByBar } from './GroupByBar'
 import type { FieldsLayoutVersion } from './fields-layout'
-import { activeGroupBy, FIELD_TAGS, IMPORTANT_FIELDS, isFieldSelected,
-  isVocabularyField, newFieldColumn, type FieldColumn, type FieldsAnswers } from './answers'
+import { activeGroupBy, FIELD_TAGS, IMPORTANT_FIELDS, fieldOf, isFieldSelected,
+  isVocabularyField, newFieldColumn, sameField, withoutField, type FieldColumn,
+  type FieldsAnswers } from './answers'
 
 const { colors } = FOUNDATION_THEME
-
-/**
- * Blend's type tokens are unitless numbers; CSS variables need the unit. Typed loosely
- * because Blend types them as CSSObject values, which include undefined.
- */
-const px = (value: number | string | undefined) =>
-  typeof value === 'number' ? `${value}px` : value
-
-/**
- * One of the text actions at the end of the chip row.
- *
- * INLINE is Blend's link button — no padding or fill — and SECONDARY keeps it neutral
- * (gray[600]) so it does not compete with the tags it acts on.
- *
- * The type overrides are what make this worth a component rather than two copies. TagV2 sm
- * reads font.fontSize[12] / font.lineHeight[18] (tagV2.light.tokens.ts:162,175) where a small
- * ButtonV2 would be 14px, and no ButtonV2 prop reaches its label — so the tokens are handed
- * down as CSS variables and applied to the label element (`[data-id]`) instead. Weight needs
- * nothing: both are already 500.
- *
- * The underline sits on the wrapper for the same reason (ButtonV2 omits className), and
- * targets the label rather than the button because a flex item does not reliably inherit a
- * parent's text-decoration. Keyboard focus gets it too, not just hover.
- */
-const LinkAction = ({ text, onClick }: { text: string; onClick: () => void }) => (
-  <span
-    className="flex self-center [&_[data-id]]:!text-[length:var(--link-size)] [&_[data-id]]:!leading-[var(--link-leading)] [&_button:focus-visible_[data-id]]:underline [&_button:hover_[data-id]]:underline"
-    style={
-      {
-        '--link-size': px(FOUNDATION_THEME.font.fontSize[12]),
-        '--link-leading': px(FOUNDATION_THEME.font.lineHeight[18]),
-      } as CSSProperties
-    }
-  >
-    <ButtonV2
-      buttonType={ButtonV2Type.SECONDARY}
-      size={ButtonV2Size.SMALL}
-      subType={ButtonV2SubType.INLINE}
-      text={text}
-      onClick={onClick}
-    />
-  </span>
-)
 
 /**
  * The remove glyph on a lit tag — the same 12px `X` Blend draws on its own dismissible tags
@@ -85,7 +46,7 @@ const LinkAction = ({ text, onClick }: { text: string; onClick: () => void }) =>
  * gray[0], not inherited: ATTENTIVE/NEUTRAL paints its label gray[0] on a gray[950] chip
  * (tagV2.light.tokens.ts), so a currentColor glyph would be near-black on near-black.
  */
-const REMOVE_TAG_SLOT = { slot: <X size={12} color={colors.gray[0]} /> }
+const REMOVE_TAG_SLOT = { slot: <X {...SLOT_ICON} color={colors.gray[0]} /> }
 
 /**
  * Version 6's chips — node 4861:105311, which draws two states and nothing between them.
@@ -103,7 +64,7 @@ const REMOVE_TAG_SLOT = { slot: <X size={12} color={colors.gray[0]} /> }
  * Both glyphs are gray[0] for the reason REMOVE_TAG_SLOT already gives: they sit on gray[950].
  * `tag/slot/size/md` is 12, which is the size Blend's own md slot expects.
  */
-const FIELD_HASH_SLOT = { slot: <Hash size={12} color={colors.gray[0]} /> }
+const FIELD_HASH_SLOT = { slot: <Hash {...SLOT_ICON} color={colors.gray[0]} /> }
 
 /**
  * Off for now. The paragraph above already flags the cost — a chip that changes width when
@@ -144,15 +105,8 @@ const SHOW_TABLE_SCROLL_FOOTER = false
  * label, so the mark reads as an annotation rather than as part of the name.
  */
 const customFieldSlot = (selected: boolean) => ({
-  slot: <Asterisk size={12} color={selected ? colors.gray[0] : colors.gray[400]} />,
+  slot: <Asterisk {...SLOT_ICON} color={selected ? colors.gray[0] : colors.gray[400]} />,
 })
-
-/**
- * Field names are free text the user can rename, so two of them are the same name when they
- * are the same name ignoring case and surrounding space — the rule `isFieldSelected` already
- * applies (answers.ts), repeated here because that module keeps its own copy private.
- */
-const sameField = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
 /** The chip props that differ between the shipped chips and version 6's. */
 const TAG_SHAPE = {
@@ -245,11 +199,18 @@ const NO_GROUPS: readonly string[] = []
  * `columns` itself is never reordered by this — it is the answer, and the grouping is a
  * second fact about it.
  */
-function orderColumns(columns: FieldColumn[], groupedIds: readonly string[]) {
-  if (groupedIds.length === 0) return columns
+function orderColumns(columns: FieldColumn[], groupedFields: readonly string[]) {
+  if (groupedFields.length === 0) return columns
+  const isGrouped = (column: FieldColumn) =>
+    groupedFields.some((field) => sameField(field, fieldOf(column)))
   return [
-    ...groupedIds.flatMap((id) => columns.filter((column) => column.id === id)),
-    ...columns.filter((column) => !groupedIds.includes(column.id)),
+    // By field, in grouping order — `groupBy` holds fields now (answers.ts). `flatMap` over
+    // the grouping rather than a filter over the columns, because the order that matters
+    // here is the grouping's, not the table's.
+    ...groupedFields.flatMap((field) =>
+      columns.filter((column) => sameField(fieldOf(column), field)),
+    ),
+    ...columns.filter((column) => !isGrouped(column)),
   ]
 }
 
@@ -265,12 +226,19 @@ function orderColumns(columns: FieldColumn[], groupedIds: readonly string[]) {
 export function FieldsStep({
   answers,
   onChange,
+  aggregated = false,
   version = 'v1',
   addingColumn,
   onAddingColumnChange,
 }: {
   answers: FieldsAnswers
   onChange: (next: FieldsAnswers) => void
+  /**
+   * Whether the report groups its records — Setup's "Grouped records" (index.tsx). Only the
+   * column organiser reads it, and only to decide whether a column can be given an
+   * aggregation at all; see ColumnOrganiser.
+   */
+  aggregated?: boolean
   /** Which arrangement to draw — see FieldsLayoutDials. Defaults to the original. */
   version?: FieldsLayoutVersion
   /**
@@ -440,7 +408,9 @@ export function FieldsStep({
       observer.disconnect()
     }
     // columns.length: going to and from zero columns mounts and unmounts the table.
-  }, [syncTable, columns.length])
+    // version: so does switching to v8, which draws no card — without this the listener and
+    // the observer would stay bound to a detached scroller.
+  }, [syncTable, columns.length, version])
 
   /**
    * Set when a column is appended, read once the new column has actually rendered.
@@ -608,7 +578,9 @@ export function FieldsStep({
                     // A grouped column's letter is tinted to match its chip in the bar above,
                     // so the rule and the columns it moved read as one thing.
                     color={
-                      groupBy.includes(column.id) ? colors.primary[600] : colors.gray[400]
+                      groupBy.some((field) => sameField(field, fieldOf(column)))
+                        ? colors.primary[600]
+                        : colors.gray[400]
                     }
                   >
                     {columnLetter(index)}
@@ -718,19 +690,22 @@ export function FieldsStep({
   )
 
   /**
-   * The custom vocabulary: every field made with "Add custom column", plus any column renamed
-   * to something no tag stands for (it has no stored field, so it is picked up from `columns`).
+   * The custom vocabulary: every field made with "Add custom column", plus any column standing
+   * for a field no tag covers (it has no stored field, so it is picked up from `columns`).
    * One tag per name — matched the same case-insensitive way as the vocabulary.
+   *
+   * Keyed on `fieldOf`, not on the title. A column renamed to "Gross Volume" is still the Txn
+   * Amount field and still has Txn Amount's chip; reading its title here would mint a second,
+   * pale "Gross Volume" chip beside it — a control for a field that does not exist, sitting
+   * next to the lit one that actually owns the column.
    */
   const customTags = [
     ...answers.customFields,
     ...columns
-      .filter(({ title }) => !isVocabularyField(title))
-      .map(({ title, defaultValue }) => ({ title, defaultValue })),
+      .filter((column) => !isVocabularyField(fieldOf(column)))
+      .map((column) => ({ title: fieldOf(column), defaultValue: column.defaultValue })),
   ].filter(
-    (field, index, all) =>
-      all.findIndex((other) => other.title.trim().toLowerCase() === field.title.trim().toLowerCase()) ===
-      index,
+    (field, index, all) => all.findIndex((other) => sameField(other.title, field.title)) === index,
   )
 
   /**
@@ -766,9 +741,7 @@ export function FieldsStep({
                 )
                   ? answers.customFields
                   : [...answers.customFields, field],
-                columns: columns.filter(
-                  ({ title }) => title.trim().toLowerCase() !== field.title.trim().toLowerCase(),
-                ),
+                columns: withoutField(columns, field.title),
               })
             : appendColumn(field.title, field.defaultValue)
         }
@@ -801,7 +774,7 @@ export function FieldsStep({
         rightSlot={selected ? REMOVE_TAG_SLOT : undefined}
         onClick={() =>
           selected
-            ? setColumns(columns.filter(({ title }) => !sameField(title, tag)))
+            ? setColumns(withoutField(columns, tag))
             : appendColumn(tag)
         }
       />
@@ -824,17 +797,17 @@ export function FieldsStep({
    * Duplicates are dropped by name: two columns may legitimately carry one title (the table
    * keys on `id`), but two identical chips would be two controls for one thing.
    */
-  const selectedTitles = columns
-    .map(({ title }) => title)
-    .filter((title, index, all) => all.findIndex((other) => sameField(other, title)) === index)
+  const selectedFields = columns
+    .map(fieldOf)
+    .filter((field, index, all) => all.findIndex((other) => sameField(other, field)) === index)
 
-  const selectedChips = selectedTitles.map((title) => {
-    const custom = customTags.find((field) => sameField(field.title, title))
+  const selectedChips = selectedFields.map((field) => {
+    const custom = customTags.find((entry) => sameField(entry.title, field))
     if (custom) return customTag(custom)
-    // The canonical spelling, not the column's: a column renamed to "merchant id" is still the
-    // Merchant Id field (that is what `isVocabularyField` decides), and its chip is the one
-    // FIELD_TAGS draws — otherwise the same chip would change its own label when renamed.
-    return vocabularyTag(FIELD_TAGS.find((tag) => sameField(tag, title)) ?? title)
+    // The canonical spelling, not the column's. `fieldOf` already reads the name the column
+    // was created under rather than its current title, so a renamed column still draws the
+    // chip it came from — this only restores FIELD_TAGS' own casing.
+    return vocabularyTag(FIELD_TAGS.find((tag) => sameField(tag, field)) ?? field)
   })
 
   /** Everything not in the table, in the order it is offered: vocabulary first, then custom. */
@@ -901,7 +874,7 @@ export function FieldsStep({
         {selectedChips.length > 0 ? unselectedChips.slice(1) : unselectedChips}
 
         {/* Last in the row, so it reads as acting on every tag before it. See LinkAction
-            (top of file) for why it is not a plain ButtonV2.
+            (src/link-action.tsx) for why it is not a plain ButtonV2.
 
             Only drawn when there is something to clear: a visible control that is a no-op is
             worse than an absent one — it invites the click and then does not answer it.
@@ -997,11 +970,48 @@ export function FieldsStep({
   ) : null
 
   const wide =
-    version === 'v3' ||
-    version === 'v4' ||
-    version === 'v5' ||
-    version === 'v6' ||
-    version === 'v7'
+    version === 'v3' || version === 'v4' || version === 'v5' || version === 'v6' || version === 'v7'
+
+  /**
+   * v8 replaces the whole step body with the column organiser (node 4911:111609), and is the
+   * one version that returns before the wrapper below: that wrapper exists to give the table
+   * a window wider than the content column, and the organiser is drawn to the column's own
+   * 960px measure. `.flow-grid > *` already places it there (index.css), so it needs nothing
+   * around it.
+   *
+   * Everything above is still built — `table`, `vocabulary`, `groupBar` and `addColumnButton`
+   * are const bindings, not renders — so none of it costs anything here, and the earlier
+   * versions keep working untouched.
+   */
+  if (version === 'v8') {
+    return (
+      <div className="flex w-full flex-col">
+        <ColumnOrganiser
+          answers={answers}
+          onChange={onChange}
+          aggregated={aggregated}
+          onAddCustomColumn={() => onAddingColumnChange(true)}
+        />
+        {/* The modal travels with the button that opens it in every other version; here the
+            button is the organiser's, so the modal is mounted beside it instead. */}
+        <AddCustomColumnModal
+          isOpen={addingColumn}
+          onClose={() => onAddingColumnChange(false)}
+          onAdd={({ title, defaultValue }) =>
+            onChange({
+              ...answers,
+              customFields:
+                isVocabularyField(title) ||
+                customTags.some((field) => sameField(field.title, title))
+                  ? answers.customFields
+                  : [...answers.customFields, { title, defaultValue }],
+              columns: [...columns, newFieldColumn(title, defaultValue)],
+            })
+          }
+        />
+      </div>
+    )
+  }
 
   return (
     // In versions 1 and 2, `flow-full` puts this in the flow grid's wide track (index.css): the

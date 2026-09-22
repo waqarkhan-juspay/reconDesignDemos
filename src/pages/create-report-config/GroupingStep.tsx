@@ -6,11 +6,14 @@ import {
   TagV2SubType,
   TagV2Type,
 } from '@juspay/blend-design-system'
-import { X } from 'lucide-react'
+import { Plus, X } from 'lucide-react'
+import type { CSSProperties } from 'react'
+import { SLOT_ICON } from '../../icons'
 import { PrimitiveText, font } from '../../primitives'
 import {
   GROUPABLE_FIELDS,
   newFieldColumn,
+  fieldOf,
   sameField,
   type FieldsAnswers,
 } from './answers'
@@ -18,22 +21,52 @@ import {
 const { colors } = FOUNDATION_THEME
 
 /**
- * The remove glyph on a lit chip — the same 12px `X` the Fields step uses, drawn gray[0]
- * because ATTENTIVE/NEUTRAL paints its label on a near-black chip and a currentColor glyph
- * would be invisible against it.
+ * The remove glyph on a picked chip — the same 12px `X` the Fields step uses, drawn purple[600]
+ * to match the label beside it. SUBTLE/PURPLE colours its text purple[600]
+ * (tagV2.light.tokens.ts), so a gray glyph would be the one cold thing inside a warm chip.
  */
-const REMOVE_TAG_SLOT = { slot: <X size={12} color={colors.gray[0]} /> }
+const REMOVE_TAG_SLOT = { slot: <X {...SLOT_ICON} color={colors.purple[600]} /> }
 
 /**
- * The chip shape, matching the Fields step's v6 chips (TAG_SHAPE.v6) — squarical, md, and
- * subtle rather than outlined when off. The two steps draw the same vocabulary, so they are
- * kept on the same chip; v6 is the only shape the Fields step offers now (fields-layout.tsx).
+ * The other half of that pair: `+` on a field the report does not group by yet, gray[500]
+ * against the chip's own gray[50], which is the same plus the column organiser's palette
+ * draws (ColumnOrganiser's ADD_SLOT). Both lists are the same vocabulary asked the same way
+ * — click to add — so they say it with the same glyph.
+ */
+const ADD_TAG_SLOT = { slot: <Plus {...SLOT_ICON} color={colors.gray[500]} /> }
+
+/**
+ * The chip shape, matching the Fields step's v6 chips (TAG_SHAPE.v6) — squarical and md. The
+ * two steps draw the same vocabulary, so they are kept on the same chip.
+ *
+ * SUBTLE in both states, and the colour is the whole of the difference: neutral while a field
+ * is merely offered, purple once the report groups by it. Purple rather than a darker neutral
+ * because this mark has to survive the trip to the next step — the Fields step repeats it on
+ * the chip and on the row (ColumnOrganiser, OrganiserRow), which is how a grouped record stays
+ * recognisable after you have stopped looking at the step that made it one. A second shade of
+ * grey could not carry that; it would read as "selected", which every chip over there already
+ * is.
  */
 const SHAPE = {
   size: TagV2Size.MD,
   subType: TagV2SubType.SQUARICAL,
-  offType: TagV2Type.SUBTLE,
+  type: TagV2Type.SUBTLE,
 } as const
+
+/**
+ * The floor every chip in the column is at least this wide — see `.grouping-palette` in
+ * index.css, which is where it has to be applied because TagV2 accepts no width.
+ *
+ * Sized against the whole field vocabulary rather than the eight or nine dimensions this
+ * step happens to offer today (FIELD_TAGS, answers.ts). Its longest name, Recon Secondary
+ * Sub Status, sets the measure at 182px of label; a chip adds 20px of padding, 2px of border
+ * and 18px for the gap and the right slot, which lands on 222 and rounds up the 4px grid to
+ * 224. GROUPABLE_FIELDS is a subset that has already grown once, and a floor that has to be
+ * re-measured every time a dimension is added is a floor nobody will re-measure.
+ *
+ * A custom field longer than that simply grows past it; this is a floor, not a column width.
+ */
+const CHIP_MIN_WIDTH = 224
 
 /**
  * Flow version 2's Grouping step — the field vocabulary asked as its own question, before the
@@ -55,10 +88,12 @@ const SHAPE = {
  *
  * ## Order
  *
- * Grouping is ordered — Gateway then Txn Type is a different report from the reverse — so the
- * picked chips lead the row in grouping order rather than sitting in place, and the sentence
- * underneath reads the order back. `groupBy` is the only record of it; there is no separate
- * selection-order state to fall out of step with it.
+ * Grouping is ordered — Gateway then Txn Type is a different report from the reverse — but the
+ * chips are alphabetical and stay where they are when picked, so every field has one fixed
+ * place in the column to find it and to click it a second time. That leaves the sentence
+ * underneath as the whole statement of the order, which is what it was written to be: it
+ * reads the rule back as the shape of a row in the delivered file. `groupBy` is still the
+ * only record of it; there is no separate selection-order state to fall out of step with it.
  */
 export function GroupingStep({
   answers,
@@ -70,12 +105,17 @@ export function GroupingStep({
   const { columns } = answers
   const groupBy = answers.groupBy ?? []
 
-  /** The grouping, as titles, in grouping order. Ids with no column left are dropped. */
-  const groupedTitles = groupBy.flatMap(
-    (id) => columns.find((column) => column.id === id)?.title ?? [],
-  )
+  /**
+   * The grouping, in grouping order — the user's answer, read straight off `groupBy`.
+   *
+   * `groupBy` holds fields rather than column ids (answers.ts), so this is already what the
+   * chips need, and it is what makes the answer stick: a field whose column is deleted on
+   * the Fields step stays picked here, and the column organiser lights it purple again the
+   * moment the column comes back.
+   */
+  const groupedFields = groupBy
 
-  const isGrouped = (tag: string) => groupedTitles.some((title) => sameField(title, tag))
+  const isGrouped = (tag: string) => groupedFields.some((field) => sameField(field, tag))
 
   /**
    * Adds a level. The column is reused when the field is already in the table — appending a
@@ -83,16 +123,14 @@ export function GroupingStep({
    * the Fields step with a chip it cannot fully deselect.
    */
   const group = (tag: string) => {
-    const existing = columns.find(({ title }) => sameField(title, tag))
-    if (existing) {
-      onChange({ ...answers, groupBy: [...groupBy, existing.id] })
-      return
-    }
-    const column = newFieldColumn(tag)
+    const existing = columns.find((column) => sameField(fieldOf(column), tag))
     onChange({
       ...answers,
-      columns: [...columns, column],
-      groupBy: [...groupBy, column.id],
+      // The column is reused when the field is already in the table — appending a second
+      // column with the same name would give the report two identical headers and leave the
+      // Fields step with a chip it cannot fully deselect.
+      columns: existing ? columns : [...columns, newFieldColumn(tag)],
+      groupBy: [...groupBy, tag],
     })
   }
 
@@ -100,10 +138,7 @@ export function GroupingStep({
   const ungroup = (tag: string) =>
     onChange({
       ...answers,
-      groupBy: groupBy.filter((id) => {
-        const column = columns.find((other) => other.id === id)
-        return !column || !sameField(column.title, tag)
-      }),
+      groupBy: groupBy.filter((field) => !sameField(field, tag)),
     })
 
   const chip = (tag: string) => {
@@ -114,11 +149,11 @@ export function GroupingStep({
         text={tag}
         size={SHAPE.size}
         subType={SHAPE.subType}
-        color={TagV2Color.NEUTRAL}
-        type={grouped ? TagV2Type.ATTENTIVE : SHAPE.offType}
+        color={grouped ? TagV2Color.PURPLE : TagV2Color.NEUTRAL}
+        type={SHAPE.type}
         aria-pressed={grouped}
         title={grouped ? `Stop grouping by ${tag}` : `Group the report by ${tag}`}
-        rightSlot={grouped ? REMOVE_TAG_SLOT : undefined}
+        rightSlot={grouped ? REMOVE_TAG_SLOT : ADD_TAG_SLOT}
         onClick={() => (grouped ? ungroup(tag) : group(tag))}
       />
     )
@@ -138,32 +173,25 @@ export function GroupingStep({
     ...answers.customFields
       .map(({ title }) => title)
       .filter((title) => !GROUPABLE_FIELDS.some((tag) => sameField(tag, title))),
-  ]
+    // Alphabetical across the whole list rather than the design-system fields first and the
+    // user's own appended after: a custom field is a field, and a name the user typed is the
+    // one they are most likely to be looking for. Case-insensitively, matching `sameField` —
+    // a chip typed in lower case belongs beside its neighbours, not in a block after Z.
+  ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
 
-  const picked = groupedTitles
-  const offered = vocabulary.filter((tag) => !isGrouped(tag))
+  const picked = groupedFields
 
   return (
     <div className="flex w-full flex-col gap-6">
-      <div className="flex w-full flex-wrap items-start gap-x-3 gap-y-3">
-        {picked.map(chip)}
-
-        {/* The rule and the first offered chip wrap as one unit, so the rule can never end a
-            line on its own and divide nothing. Only drawn with something on both sides. */}
-        {picked.length > 0 && offered.length > 0 && (
-          <span className="flex items-center gap-x-3">
-            {/* blend-gap: Blend 0.0.37 ships no divider component, so this is a 1px rule on a
-                token colour. */}
-            <span
-              role="separator"
-              aria-orientation="vertical"
-              className="h-4 w-px"
-              style={{ backgroundColor: colors.gray[300] }}
-            />
-            {chip(offered[0])}
-          </span>
-        )}
-        {(picked.length > 0 ? offered.slice(1) : offered).map(chip)}
+      {/* One column, aligned to the container's left edge, in one alphabetical order that a
+          pick does not disturb. `items-start` keeps each chip at its own width inside the
+          column — the floor below is a minimum, not a stretch — and the width itself is
+          handed to index.css, which keeps no values of its own. */}
+      <div
+        className="grouping-palette flex w-full flex-col items-start gap-2"
+        style={{ '--grouping-chip-min': `${CHIP_MIN_WIDTH}px` } as CSSProperties}
+      >
+        {vocabulary.map(chip)}
       </div>
 
       {/* Reads the rule back as the thing the user actually cares about — the shape of a row

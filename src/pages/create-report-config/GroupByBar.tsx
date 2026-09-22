@@ -18,8 +18,9 @@ import {
   type MenuV2ItemType,
 } from '@juspay/blend-design-system'
 import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { SLOT_ICON } from '../../icons'
 import { PrimitiveText, font } from '../../primitives'
-import type { FieldColumn } from './answers'
+import { fieldOf, sameField, type FieldColumn } from './answers'
 
 const { colors } = FOUNDATION_THEME
 
@@ -27,7 +28,7 @@ const { colors } = FOUNDATION_THEME
 const MAX_LEVELS = 4
 
 /** The chevron on a grouping chip — it opens a menu, and the glyph is what says so. */
-const OPENS_MENU_SLOT = { slot: <ChevronDown size={12} color={colors.primary[600]} /> }
+const OPENS_MENU_SLOT = { slot: <ChevronDown {...SLOT_ICON} color={colors.primary[600]} /> }
 
 /** Moves the entry at `from` to `to`, leaving the rest in order. */
 const move = (ids: readonly string[], from: number, to: number) => {
@@ -70,25 +71,33 @@ export function GroupByBar({
   onChange,
 }: {
   columns: FieldColumn[]
-  /** Already pruned to columns that exist — see `activeGroupBy`. Outermost first. */
+  /**
+   * The grouped *fields*, outermost first, already pruned to ones the table carries a column
+   * for — see `activeGroupBy`. Fields rather than column ids because a column that leaves
+   * and comes back is a new column (answers.ts).
+   */
   groupBy: readonly string[]
   onChange: (next: string[]) => void
 }) {
-  const byId = new Map(columns.map((column) => [column.id, column]))
-  const grouped = groupBy.flatMap((id) => byId.get(id) ?? [])
-  const available = columns.filter((column) => !groupBy.includes(column.id))
+  const isGrouped = (column: FieldColumn) =>
+    groupBy.some((field) => sameField(field, fieldOf(column)))
+  const grouped = groupBy.flatMap((field) =>
+    columns.filter((column) => sameField(fieldOf(column), field)),
+  )
+  const available = columns.filter((column) => !isGrouped(column))
   const full = groupBy.length >= MAX_LEVELS
 
-  /** Every column not already a level, as menu rows running `pick`. */
-  const columnItems = (pick: (id: string) => void): MenuV2ItemType[] =>
+  /** Every column not already a level, as menu rows running `pick` with its field. */
+  const columnItems = (pick: (field: string) => void): MenuV2ItemType[] =>
     available.map((column) => ({
+      // The menu row's own key stays the column id — it identifies the row, not the level.
       id: column.id,
       label: { text: column.title },
-      onClick: () => pick(column.id),
+      onClick: () => pick(fieldOf(column)),
     }))
 
   const addItems: MenuV2GroupType[] = [
-    { items: columnItems((id) => onChange([...groupBy, id])) },
+    { items: columnItems((field) => onChange([...groupBy, field])) },
   ]
 
   const levelItems = (index: number): MenuV2GroupType[] => [
@@ -117,8 +126,8 @@ export function GroupByBar({
             items: [
               {
                 label: { text: 'Change field' },
-                subMenu: columnItems((id) =>
-                  onChange(groupBy.map((current, at) => (at === index ? id : current))),
+                subMenu: columnItems((field) =>
+                  onChange(groupBy.map((current, at) => (at === index ? field : current))),
                 ),
                 enableSubMenuSearch: available.length > 8,
                 subMenuSearchPlaceholder: 'Find a column',

@@ -36,6 +36,10 @@ export const SAMPLE_ROW_COUNT = 3
  * side by side — which is the whole difference between a preview and a placeholder.
  */
 const SAMPLES: Record<string, readonly [string, string, string]> = {
+  // The bank's reference for the credit — the other half of every match in this file, which
+  // is why even the mismatched row has one: it was matched, and then disagreed on amount.
+  // Sequential across the two rows that settled together, and apart for the one that did not.
+  'Bank Reference Number': ['UTR0092841773', 'UTR0092841774', 'UTR0092847106'],
   Credit: ['1,100.00', '0.00', '2,450.75'],
   Debit: ['0.00', '860.50', '0.00'],
   Fee: ['12.98', '10.15', '28.92'],
@@ -48,6 +52,10 @@ const SAMPLES: Record<string, readonly [string, string, string]> = {
   // varying merchant id here would misrepresent what the delivered file contains.
   'Merchant Id': ['Demo Merchant', 'Demo Merchant', 'Demo Merchant'],
   'Payment Entity Txn Id': ['19933239749', '19933239812', '19933240067'],
+  // Upper case, like Gateway and Txn Type beside it: these are the source file's own values,
+  // not prose. Three different instruments, because a column where every row said UPI would
+  // not show that this is the field a report gets cut by.
+  'Payment Method': ['UPI', 'CARD', 'NETBANKING'],
   'Recon Id': ['RCN0004821', 'RCN0004822', 'RCN0004823'],
   'Recon Secondary Status': ['Settled', 'Pending', 'Settled'],
   'Recon Secondary Sub Status': ['Bank confirmed', 'Awaiting bank file', 'Bank confirmed'],
@@ -56,6 +64,10 @@ const SAMPLES: Record<string, readonly [string, string, string]> = {
   'Recon Status': ['MATCHED', 'MISMATCHED', 'MATCHED'],
   'Recon Sub Status': ['Exact match', 'Amount mismatch', 'Exact match'],
   'Reconciled At': ['2026-09-15 11:02:14', '2026-09-15 11:04:38', '2026-09-16 09:17:05'],
+  // The same figures as Debit, and necessarily so: the middle row is the refund, and the
+  // money that left is the money that was refunded. Zero on the two order rows rather than a
+  // blank, because a refund column on an order row is a real 0.00 and not a missing value.
+  'Refund Amount': ['0.00', '860.50', '0.00'],
   // Txn amount less fee and tax, so a reader checking the arithmetic across a row finds it
   // holds. The mismatched row is the exception, which is why it is the mismatched one.
   'Settlement Amount': ['1,084.68', '848.52', '2,416.62'],

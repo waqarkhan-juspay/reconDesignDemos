@@ -202,15 +202,26 @@ export function ConfigSummaryChipRow({
  * A chip naming one column or one filter.
  *
  * NEUTRAL/SUBTLE and squarical, matching the field chips the Fields step already uses, so a
- * column named here and the same column named there are visibly the same object.
+ * column named here and the same column named there are visibly the same object — which is
+ * also why `color` is the one thing a caller can move. PURPLE/SUBTLE is the flow's mark for
+ * a grouped field, worn by the chip on the Grouping step and by both the chip and the row in
+ * the column organiser; a purple chip here is the same field still wearing it.
+ *
+ * `title` rather than more text, for a fact the chip is not primarily about: which grouping
+ * level it is. TagV2 forwards it to the rendered element, so it arrives as a tooltip.
  */
-export const summaryChip = (text: string, key?: string) => (
+export const summaryChip = (
+  text: string,
+  key?: string,
+  { color = TagV2Color.NEUTRAL, title }: { color?: TagV2Color; title?: string } = {},
+) => (
   <TagV2
     key={key ?? text}
     text={text}
     size={TagV2Size.SM}
     subType={TagV2SubType.SQUARICAL}
-    color={TagV2Color.NEUTRAL}
+    color={color}
     type={TagV2Type.SUBTLE}
+    title={title}
   />
 )

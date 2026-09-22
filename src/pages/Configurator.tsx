@@ -1,6 +1,7 @@
 import {
   ButtonV2,
   ButtonV2Size,
+  ButtonV2SubType,
   ButtonV2Type,
   ColumnType,
   DataTable,
@@ -26,13 +27,14 @@ import {
   type SortConfig,
 } from '@juspay/blend-design-system'
 import { useDialKit } from 'dialkit'
-import { useCallback, useMemo, useState, type CSSProperties } from 'react'
+import { Trash2 } from 'lucide-react'
+import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { ConfigDetailSheet } from './ConfigDetailSheet'
 import { MiddleTruncate } from '../middle-truncate'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
-import { REPORT_CATEGORY_IDS, type Categorised, type ReportCategory } from '../report-config'
+import type { Categorised } from '../report-config'
 import { sectionTabsTokens } from '../theme'
 
 const { colors } = FOUNDATION_THEME
@@ -50,12 +52,19 @@ const SECTION_TABS = [
 ]
 
 /**
- * The filter tabs sitting above the table: the categories themselves, plus an unfiltered
- * "All". The tab label *is* the category, so nothing has to be mapped back — and the list
- * is derived from src/report-config.ts, so a category cannot exist without a tab.
+ * The two tabs above the table. They choose which *set of rows* the table is showing —
+ * the configs that exist, or the ones still being written.
+ *
+ * This replaces a category filter (All / Reconciliation / File Summary). Filtering by
+ * category did not need a tab of its own: the Category column is a SELECT column
+ * (SELECT_FILTER_FIELDS below), so its header menu offers the same choice, in the place a
+ * reader already looks to narrow a column. A draft is not a narrower view of the same
+ * rows — it is a different set, with a different vocabulary in Status and a different
+ * control in Actions — which is the thing a tab is actually for.
  */
-const ALL = 'All'
-const FILTER_TABS: (typeof ALL | ReportCategory)[] = [ALL, ...REPORT_CATEGORY_IDS]
+const ALL_REPORTS = 'All Reports'
+const DRAFTS = 'Drafts'
+const VIEW_TABS = [ALL_REPORTS, DRAFTS]
 
 const toValue = (label: string) => label.toLowerCase().replace(/\s+/g, '-')
 
@@ -111,6 +120,41 @@ const SELECT_FILTER_FIELDS = ['categorySource', 'sourceType', 'paymentEntity', '
 
 /** Let content decide the width — see the note above. */
 const HUG = { minWidth: '0px', maxWidth: 'none' } as const
+
+/**
+ * What a cell shows when the question behind it has not been answered yet — every blank in
+ * the Drafts view (DRAFT_ROWS).
+ *
+ * An em dash rather than an empty cell, at gray[400], which DESIGN.md §7 reserves for
+ * placeholders: an empty cell reads as a value that failed to load, where a placeholder dash
+ * reads as "not answered", which is what it is. The same choice, and the same character,
+ * field-samples.ts makes for a column with no sample.
+ */
+const Unanswered = () => (
+  <PrimitiveText
+    as="span"
+    {...font(FOUNDATION_THEME.font.size.body.md)}
+    color={colors.gray[400]}
+  >
+    —
+  </PrimitiveText>
+)
+
+/**
+ * Wraps a cell renderer so an empty value draws `Unanswered` instead.
+ *
+ * Applied to every column a draft can leave blank rather than branching on the view inside
+ * each one: a finished config never has an empty cell, so one closure is correct in both
+ * views — which matters more than it looks, because DataTable only adopts a *new* renderCell
+ * when the column count changes (see the note on `columns`). A renderer that had to know
+ * which tab was showing would be the one thing this file cannot hand it.
+ */
+const blankable =
+  (render: (value: unknown) => ReactNode = (value) => String(value)) =>
+  (value: unknown) => {
+    const text = value === null || value === undefined ? '' : String(value)
+    return text.trim() === '' ? <Unanswered /> : render(value)
+  }
 
 /**
  * Nine rows transcribed from the design's populated table (node 4410:25166), plus a tenth
@@ -228,12 +272,106 @@ const rows: ReportConfigRow[] = [
 ]
 
 /**
+ * The step a draft stopped on, which is where Resume picks it up.
+ *
+ * Named steps rather than "3 of 6", because the flow's own step count is conditional now —
+ * a grouped report walks six and a transaction-level one walks five (create-report-config/
+ * flow-layout.tsx), so a fraction would mean different things on different rows.
+ */
+const DRAFT_STEPS = ['Setup', 'Delivery', 'Grouping', 'Fields', 'Filters', 'Review'] as const
+type DraftStep = (typeof DRAFT_STEPS)[number]
+
+type DraftRow = ReportConfigRow & { step: DraftStep }
+
+/**
+ * Drafts — configs that were started and left, each one stopped somewhere different.
+ *
+ * Every value here is one the create flow had actually collected by the time the user left,
+ * and every blank is a question they had not reached. That is the whole content of the view:
+ * a draft *is* a partly answered form, so the empty cells are not missing data, they are the
+ * data. `—` is drawn for them at placeholder grey — see `blankable` in the columns below.
+ *
+ * Which columns a draft can ever fill follows from what the flow asks:
+ *
+ * - **Category / Source / Type** — Setup's first two questions, so every draft past the
+ *   first screen has them.
+ * - **Frequency and Channel** — Delivery's, so a draft that stopped on Setup has neither.
+ * - **Configuration Name** — asked in the submit dialog at the very end
+ *   (SubmitConfigModal.tsx), so only a draft that reached it carries one. That is why three
+ *   of these four are untitled: it is not an oversight in the fixture, it is where the flow
+ *   asks the question.
+ * - **Payment Entity** — never asked by the flow at all. Blank on every draft, and it stays
+ *   in the table because that blank is worth seeing: it is the column this flow cannot yet
+ *   produce.
+ */
+const DRAFT_ROWS: DraftRow[] = [
+  {
+    id: 'draft-1',
+    configurationName: '',
+    categorySource: 'Reconciliation',
+    sourceType: 'Mismatched',
+    paymentEntity: '',
+    frequency: '',
+    channel: '',
+    createdDate: '21st Sep 2026',
+    step: 'Setup',
+  },
+  {
+    id: 'draft-2',
+    configurationName: '',
+    categorySource: 'File Summary',
+    sourceType: 'Transaction',
+    paymentEntity: '',
+    frequency: 'Daily · 09:00 IST',
+    channel: 'Email',
+    createdDate: '18th Sep 2026',
+    step: 'Fields',
+  },
+  {
+    id: 'draft-3',
+    configurationName: '',
+    categorySource: 'Reconciliation',
+    sourceType: 'Overall',
+    paymentEntity: '',
+    frequency: 'Weekly · Mon · 10:00 IST',
+    channel: 'Slack',
+    createdDate: '11th Sep 2026',
+    step: 'Filters',
+  },
+  {
+    // The one that got as far as the submit dialog, typed a name and closed it — which is
+    // the only way a draft has a name at all.
+    id: 'draft-4',
+    configurationName: 'PayU Weekly Recon Summary',
+    categorySource: 'Reconciliation',
+    sourceType: 'Matched',
+    paymentEntity: '',
+    frequency: 'Weekly · Fri · 18:30 IST',
+    channel: 'Email',
+    createdDate: '2nd Sep 2026',
+    step: 'Review',
+  },
+]
+
+/**
  * Filter options, derived from the rows rather than written out.
  *
  * Blend derives them from the `data` prop when a column supplies none — but `data` is the
  * page slice, so the offered values would shrink to whatever page you happen to be on.
  * Taking them from the full set instead means the list is the vocabulary, not the viewport.
  */
+/**
+ * How a draft is named out loud — in a delete confirmation, or to a screen reader.
+ *
+ * Most drafts have no name at all (see DRAFT_ROWS), so there has to be something to call
+ * them that is not an empty string. The row's own words rather than an index: "this
+ * Reconciliation draft" is what the user would say about it.
+ */
+const draftLabel = (row: Record<string, unknown>) => {
+  const name = String(row.configurationName ?? '').trim()
+  return name === '' ? `this ${String(row.categorySource)} draft` : `“${name}”`
+}
+
 const filterOptionsFor = (field: keyof ReportConfigRow): FilterOption[] =>
   [...new Set(rows.map((row) => String(row[field])))]
     .sort((a, b) => a.localeCompare(b))
@@ -249,6 +387,12 @@ const filterOptionsFor = (field: keyof ReportConfigRow): FilterOption[] =>
 const STATUS_FILTER_OPTIONS: FilterOption[] = [
   { id: 'status-active', label: 'Active', value: 'Active' },
   { id: 'status-inactive', label: 'Inactive', value: 'Inactive' },
+  // One column, two vocabularies, and only ever one of them on screen: a finished config is
+  // Active or Inactive, and a draft's status is how far it got. Both are listed because the
+  // header menu is built from the column, not from the view — and a draft set worth filtering
+  // by step is the more useful half of that, since "everything abandoned at Delivery" is a
+  // real question and "which drafts are drafts" is not.
+  ...DRAFT_STEPS.map((step) => ({ id: `status-${step}`, label: step, value: step })),
 ]
 
 /**
@@ -366,10 +510,16 @@ const matchesFilter = (row: TableRow, filter: ColumnFilter) => {
   return true
 }
 
-/** A row as the table sees it: the source row plus the two derived cells. */
+/** A row as the table sees it: the source row plus the derived cells. */
 type TableRow = ReportConfigRow & {
   enabled: boolean
   status: { text: string }
+  /**
+   * Which set this row came from. Carried on the row rather than read from state by the
+   * cells, for the reason spelled out on `columns`: a renderCell closure is captured once
+   * and `row` is the only thing in it that is guaranteed current.
+   */
+  isDraft: boolean
   [key: string]: unknown
 }
 
@@ -410,8 +560,8 @@ const TABLE_MOTION = {
 function Configurator() {
   const navigate = useNavigate()
   const [section, setSection] = useState(toValue(SECTION_TABS[0]))
-  const [filter, setFilter] = useState<string>(ALL)
-  const activeCategory = filter === ALL ? null : filter
+  const [view, setView] = useState<string>(ALL_REPORTS)
+  const showingDrafts = view === DRAFTS
 
   /**
    * Sorting, column filters and pagination all live here rather than inside DataTable.
@@ -431,17 +581,15 @@ function Configurator() {
    * Anything that changes which rows exist sends you back to page one — page 3 of a set
    * that now has four rows is an empty table, and an empty table reads as a bug.
    */
-  const handleFilterTabChange = (next: string) => {
-    setFilter(next)
+  const handleViewChange = (next: string) => {
+    setView(next)
     setPage(1)
-    // A category tab hides the Category column, and a filter set on a hidden column is a
-    // filter with no menu to clear it from — the table would narrow for a reason nothing on
-    // screen explains. The tab is the stronger statement of the same thing, so it wins.
-    if (next !== ALL) {
-      setColumnFilters((filters) =>
-        filters.filter((filter) => filter.field !== 'categorySource'),
-      )
-    }
+    // Every column filter goes, because the two views do not share a vocabulary. Status is
+    // the clearest case — Active does not exist among drafts — so a filter carried across
+    // would empty the table for a reason nothing on screen explains, and the menu holding it
+    // would be one the user had to remember to go back and clear. The tab is a change of
+    // subject, and a filter is an answer to the previous one.
+    setColumnFilters([])
   }
 
   const handleFilterChange = useCallback((filters: ColumnFilter[]) => {
@@ -488,6 +636,38 @@ function Configurator() {
   const detailRow = rows.find((row) => row.id === detailId) ?? null
 
   /**
+   * Drafts the user has deleted, and the draft waiting on that confirmation.
+   *
+   * Confirmed rather than applied on the click, for the same reason disabling a config is:
+   * it is the destructive direction. More so, in fact — a disabled config can be switched
+   * back on, and a deleted draft is the only copy of a form somebody had partly filled in.
+   * A page that stops to ask before turning a report off and deletes a draft on one click
+   * would have its two confirmations the wrong way round.
+   */
+  const [deletedDrafts, setDeletedDrafts] = useState<ReadonlySet<string>>(() => new Set())
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const pendingDraft = DRAFT_ROWS.find((row) => row.id === pendingDeleteId) ?? null
+
+  const closeDelete = () => setPendingDeleteId(null)
+  const confirmDelete = () => {
+    if (pendingDeleteId) {
+      setDeletedDrafts((previous) => new Set(previous).add(pendingDeleteId))
+    }
+    closeDelete()
+  }
+
+  /**
+   * Picks a draft back up.
+   *
+   * The create flow holds its answers in component state and has no draft store yet — see
+   * the note on `leaveFlow` in create-report-config/index.tsx, which is where "Save as
+   * draft" would write one. So this opens the flow at the start rather than at `row.step`.
+   * This is the call site that will pass the draft's id the day that store exists; the step
+   * is already on the row, which is the half of it that does not need the store.
+   */
+  const resumeDraft = useCallback(() => navigate('/configurator/create'), [navigate])
+
+  /**
    * DataTable fires `onRowClick` from the `<tr>` (TableBody/index.tsx:766), so every click
    * inside a row reaches it — the Actions toggle included. That cell stops its own clicks
    * below, so this only ever has to handle a click on a value.
@@ -527,24 +707,38 @@ function Configurator() {
    * it from here — see the note on `columns` below.
    */
   const matchingRows = useMemo(() => {
-    const projected: TableRow[] = rows.map((row) => {
-      const isEnabled = enabled[row.id] ?? true
-      return {
-        ...row,
-        enabled: isEnabled,
-        // A TAG column's value must be TagData — an object carrying `text`. That text
-        // is what the Status filter matches on; the chip comes from renderCell.
-        status: { text: isEnabled ? 'Active' : 'Inactive' },
-      }
-    })
+    const projected: TableRow[] = showingDrafts
+      ? DRAFT_ROWS.filter((row) => !deletedDrafts.has(row.id)).map((row) => ({
+          ...row,
+          isDraft: true,
+          // A draft has nothing to enable: it is not running, and the switch its Actions
+          // cell would otherwise draw is replaced by Resume and Delete.
+          enabled: false,
+          // The step it stopped on, in the slot Active/Inactive takes for a finished config
+          // — a draft's status is how far it got. "Draft" would fill the column with the
+          // word already written on the tab above it, which is the same width for less, and
+          // the argument the Category column used to lose on a category tab.
+          status: { text: row.step },
+        }))
+      : rows.map((row) => {
+          const isEnabled = enabled[row.id] ?? true
+          return {
+            ...row,
+            isDraft: false,
+            enabled: isEnabled,
+            // A TAG column's value must be TagData — an object carrying `text`. That text
+            // is what the Status filter matches on; the chip comes from renderCell.
+            status: { text: isEnabled ? 'Active' : 'Inactive' },
+          }
+        })
 
-    // Order matters, and it is the order a reader would expect: the tab narrows the set,
-    // the column filters narrow it further, and only then is what survives sorted. Sorting
-    // first would be the same answer at more cost, but filtering after paging would not —
-    // it would filter one page and call it the result.
-    const filtered = projected
-      .filter((row) => activeCategory === null || row.categorySource === activeCategory)
-      .filter((row) => columnFilters.every((filter) => matchesFilter(row, filter)))
+    // Order matters, and it is the order a reader would expect: the tab chooses the set,
+    // the column filters narrow it, and only then is what survives sorted. Sorting first
+    // would be the same answer at more cost, but filtering after paging would not — it
+    // would filter one page and call it the result.
+    const filtered = projected.filter((row) =>
+      columnFilters.every((filter) => matchesFilter(row, filter)),
+    )
 
     if (!sort) return filtered
 
@@ -553,7 +747,7 @@ function Configurator() {
     // TS lib target and an in-place sort on a value derived from state is a habit worth
     // not having.
     return [...filtered].sort((a, b) => direction * compareBy(sort.field, a, b))
-  }, [enabled, activeCategory, columnFilters, sort])
+  }, [enabled, showingDrafts, deletedDrafts, columnFilters, sort])
 
   /**
    * The page is clamped rather than corrected in state: a filter that shrinks the set
@@ -577,10 +771,12 @@ function Configurator() {
    * memo per *toggle* would therefore be silently ignored, leaving a one-way switch.
    *
    * So the cell reads its state from `row`, which is always current because `data` is a
-   * prop, and writes through `setEnabled`, which React guarantees is stable. That is what
-   * makes `activeCategory` a safe dependency: a tab change alters the column *count*, which
-   * the resync effect does act on (`hasChanges` compares lengths first), and the closures it
-   * adopts along the way are interchangeable with the ones they replace.
+   * prop, and writes through the setters, which React guarantees are stable.
+   *
+   * The same rule is why switching to Drafts does not rebuild this. Both views draw the same
+   * nine columns, so the count never changes and a rebuilt closure would be ignored — the
+   * cells branch on `row.isDraft` instead, which arrives with the data and is therefore
+   * always the view actually on screen.
    */
   const columns = useMemo<ColumnDefinition<Record<string, unknown>>[]>(
     () =>
@@ -588,22 +784,7 @@ function Configurator() {
       // they all share, written once; each branch then adds only what makes it different.
       // Kept as three returns rather than a spread of partials because ColumnDefinition is
       // a union discriminated on `type` — a widened `type` stops it narrowing at all.
-      COLUMNS.filter(
-        /*
-         * On a category tab the Category column says the same word in every row — it is the
-         * tab, restated once per row, spending a column's width to tell you what you just
-         * clicked. So it is dropped there, and kept on "All", where it is the one thing
-         * telling the two kinds of report apart.
-         *
-         * Dropped from the list rather than hidden with `isVisible: false`, because
-         * DataTable treats them identically and removal is the smaller statement: its resync
-         * effect rebuilds `visibleColumns` from whatever survives and splices a returning
-         * column back at its original index (DataTable.tsx:215-274), so switching back to
-         * All puts Category between Configuration Name and Source / Type rather than on the
-         * end. No remount, so the header's sort and filter menus keep their state.
-         */
-        ({ field }) => activeCategory === null || field !== 'categorySource',
-      ).map(({ field, header }) => {
+      COLUMNS.map(({ field, header }) => {
         const base = { field, header, ...HUG }
 
         if (field === 'status') {
@@ -620,6 +801,20 @@ function Configurator() {
             filterType: FilterType.SELECT,
             filterOptions: STATUS_FILTER_OPTIONS,
             renderCell: (_value, row) => {
+              // Orange for a draft, which is neither of the other two: green says it is
+              // running and grey says it was switched off, and a form somebody is part way
+              // through is unfinished rather than either. Orange is the palette's word for
+              // that (DESIGN.md §7), and it is the one colour the other two do not use.
+              if (row.isDraft === true) {
+                return (
+                  <TagV2
+                    text={String(row.step)}
+                    color={TagV2Color.WARNING}
+                    type={TagV2Type.SUBTLE}
+                    size={TagV2Size.SM}
+                  />
+                )
+              }
               const isEnabled = row.enabled !== false
               return (
                 <TagV2
@@ -653,10 +848,34 @@ function Configurator() {
                 <div
                   className="contents"
                   onClick={(event) => event.stopPropagation()}
-                  // Keyboard reaches the switch directly, so this wrapper takes no focus and
-                  // needs no key handler — the click it stops is a pointer click only.
+                  // Keyboard reaches the controls directly, so this wrapper takes no focus
+                  // and needs no key handler — the click it stops is a pointer click only.
                   role="presentation"
                 >
+                {row.isDraft === true ? (
+                  /* Resume leads, because it is what the row is for: a draft exists to be
+                     finished, and deleting one is the exception. SECONDARY rather than
+                     PRIMARY for the same reason the page has one primary button — "Create
+                     report config" — and it is not repeated ten times down a table. */
+                  <div className="flex items-center gap-2">
+                    <ButtonV2
+                      buttonType={ButtonV2Type.SECONDARY}
+                      size={ButtonV2Size.SMALL}
+                      text="Resume"
+                      onClick={resumeDraft}
+                    />
+                    <ButtonV2
+                      buttonType={ButtonV2Type.SECONDARY}
+                      subType={ButtonV2SubType.ICON_ONLY}
+                      size={ButtonV2Size.SMALL}
+                      // Named, because three of the four drafts are untitled and "Delete"
+                      // on its own would give a screen reader four identical buttons.
+                      aria-label={`Delete ${draftLabel(row)}`}
+                      leftSlot={{ slot: <Trash2 size={14} /> }}
+                      onClick={() => setPendingDeleteId(id)}
+                    />
+                  </div>
+                ) : (
                 <SwitchV2
                   checked={checked}
                   size={SelectorV2Size.MD}
@@ -672,6 +891,7 @@ function Configurator() {
                     }
                   }}
                 />
+                )}
                 </div>
               )
             },
@@ -687,6 +907,7 @@ function Configurator() {
             type: ColumnType.SELECT,
             filterType: FilterType.SELECT,
             filterOptions: filterOptionsFor(field as keyof ReportConfigRow),
+            renderCell: blankable(),
           }
         }
 
@@ -707,13 +928,15 @@ function Configurator() {
             // `width: 100%; min-width: 0; overflow: hidden`, which is exactly the box a
             // shrinking flex row needs.
             type: ColumnType.TEXT,
-            renderCell: (value) => <MiddleTruncate text={String(value)} />,
+            // Blank on an untitled draft, which is most of them — the name is not asked
+            // until the submit dialog. See DRAFT_ROWS.
+            renderCell: blankable((value) => <MiddleTruncate text={String(value)} />),
           }
         }
 
-        return { ...base, type: ColumnType.TEXT }
+        return { ...base, type: ColumnType.TEXT, renderCell: blankable() }
       }),
-    [activeCategory],
+    [resumeDraft],
   )
 
   return (
@@ -773,22 +996,22 @@ function Configurator() {
         }}
       >
         <div className="flex items-center justify-between">
-          {/* The track has to hug its three tabs. BOXED paints a background on the tablist,
-              and TabsV2's root takes the full width of its flex parent — which left 588px
-              of empty grey running from "File Summary" to the button. TabsV2 takes no
-              className (rule 2), so the width is capped on a wrapper we own. */}
+          {/* The track has to hug its tabs. BOXED paints a background on the tablist, and
+              TabsV2's root takes the full width of its flex parent — which left several
+              hundred pixels of empty grey running to the button. TabsV2 takes no className
+              (rule 2), so the width is capped on a wrapper we own. */}
           <div className="w-fit shrink-0">
             <TabsV2
-              // BOXED, not FLOATING: the filter sits on the same ground as the table it
-              // filters, so it needs a track of its own to read as a control rather than
-              // three loose words. FLOATING gives the active tab a fill and nothing else.
+              // BOXED, not FLOATING: the switch sits on the same ground as the table it
+              // changes, so it needs a track of its own to read as a control rather than
+              // two loose words. FLOATING gives the active tab a fill and nothing else.
               variant={TabsV2Variant.BOXED}
               size={TabsV2Size.LG}
-              value={filter}
-              onValueChange={handleFilterTabChange}
+              value={view}
+              onValueChange={handleViewChange}
             >
               <TabsV2List>
-                {FILTER_TABS.map((label) => (
+                {VIEW_TABS.map((label) => (
                   <TabsV2Trigger key={label} value={label}>
                     {label}
                   </TabsV2Trigger>
@@ -833,9 +1056,13 @@ function Configurator() {
             serverSideFiltering
             onFilterChange={handleFilterChange}
             onSortChange={handleSortChange}
-            // Opens the detail sheet. DataTable also gives a clickable row `cursor: pointer`
-            // off this prop alone (TableBody/index.tsx:739), so the affordance comes with it.
-            onRowClick={openDetail}
+            // Opens the detail sheet — and only for a config that exists. A draft has no
+            // delivery, no schedule and no file name for the sheet to read back, so on that
+            // view the row is not a link to anything and Resume is the way in. DataTable
+            // gives a clickable row `cursor: pointer` off this prop alone
+            // (TableBody/index.tsx:739), so passing nothing removes the affordance with the
+            // behaviour rather than leaving a row that looks clickable and is not.
+            onRowClick={showingDrafts ? undefined : openDetail}
             // The footer describes the set the parent sliced, not `data.length`, which is
             // only ever the current page — otherwise ten of forty rows would read as "10".
             pagination={{
@@ -910,6 +1137,39 @@ function Configurator() {
           You will stop receiving this report.{' '}
           {pendingRow ? disableConsequence(pendingRow) : ''} Although, you can turn this back
           on any time.
+        </PrimitiveText>
+      </ModalV2>
+
+      {/* The draft's own confirmation. Same shape as the one above and deliberately so — the
+          two destructive actions on this page should ask the same way — but the copy is the
+          opposite reassurance: turning a config off says you can turn it back on, and this
+          one has to say that you cannot. */}
+      <ModalV2
+        isOpen={pendingDraft !== null}
+        onClose={closeDelete}
+        title={`Delete ${pendingDraft ? draftLabel(pendingDraft) : 'this draft'}?`}
+        showCloseButton
+        closeOnBackdropClick
+        dimensions={{ width: 480 }}
+        primaryAction={{
+          text: 'Yes, delete it',
+          buttonType: ButtonV2Type.DANGER,
+          onClick: confirmDelete,
+        }}
+        secondaryAction={{
+          text: 'Cancel',
+          buttonType: ButtonV2Type.SECONDARY,
+          onClick: closeDelete,
+        }}
+      >
+        <PrimitiveText
+          as="p"
+          {...font(FOUNDATION_THEME.font.size.body.md)}
+          color={colors.gray[700]}
+        >
+          Nothing is running yet, so nothing stops — a draft has never been submitted. What
+          goes is the answers behind it, up to {pendingDraft?.step ?? ''}, and that cannot be
+          undone.
         </PrimitiveText>
       </ModalV2>
     </div>

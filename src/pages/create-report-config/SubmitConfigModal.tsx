@@ -9,7 +9,7 @@ import {
   SingleSelectV2Variant,
   TextInputV2,
 } from '@juspay/blend-design-system'
-import { useState, type FormEvent, type ReactNode } from 'react'
+import { useState, type FormEvent } from 'react'
 import { PrimitiveText, font } from '../../primitives'
 
 const { colors } = FOUNDATION_THEME
@@ -71,49 +71,16 @@ export const slugify = (name: string) =>
     .replace(/^_|_$/g, '')
 
 /**
- * A titled group of fields, and the hairline that separates one from the next.
+ * The hairline between the form's two halves.
  *
- * blend-gap: Blend 0.0.37 ships no form-section or divider component. CardV2 is the nearest
- * thing, but an outlined card around the file group would put the gray preview box inside a
- * second surface, and only one of the two groups is card-shaped — so both are composed here
- * from tokens instead, and the two stay symmetrical.
+ * blend-gap: Blend 0.0.37 ships no divider component. CardV2 is the nearest thing, but an
+ * outlined card around the file group would put the gray preview box inside a second
+ * surface — so this is a 1px rule on a token colour instead.
  *
- * A real <section> and <h3> rather than styled divs: the grouping is the point, and a screen
- * reader that only hears four labels in a row has not been told it.
+ * It carries the whole division now that neither group has a heading, and the gap either
+ * side of it is the other half of that job. `aria-hidden` because a rule is not a landmark:
+ * what a screen reader gets is the four field labels, in order, which is what they are.
  */
-function FieldSection({
-  title,
-  description,
-  children,
-}: {
-  title: string
-  description: string
-  children: ReactNode
-}) {
-  return (
-    <section className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        {/* body.md, not body.sm: the scale's sm is 12px, which would set the group heading
-            *smaller* than the 14px field labels underneath it and invert the hierarchy. At
-            14px the step up is weight and colour instead. */}
-        <PrimitiveText
-          as="h3"
-          {...font(FOUNDATION_THEME.font.size.body.md)}
-          color={colors.gray[900]}
-          fontWeight={FOUNDATION_THEME.font.weight[600]}
-        >
-          {title}
-        </PrimitiveText>
-        <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.sm)} color={colors.gray[500]}>
-          {description}
-        </PrimitiveText>
-      </div>
-      <div className="flex flex-col gap-4">{children}</div>
-    </section>
-  )
-}
-
-/** Decorative: the headings above already say where one group ends and the next begins. */
 function SectionRule() {
   return (
     <div aria-hidden className="h-px w-full" style={{ backgroundColor: colors.gray[200] }} />
@@ -191,34 +158,36 @@ export function SubmitConfigModal({
         onClick: close,
       }}
     >
-      {/* Two groups, because the modal asks two different questions that happen to both be
-          names: what this config is called *in the app*, and what the file is called when it
-          *leaves* it. Run flat, the four controls read as one four-part naming chore and the
-          File name looks like a second attempt at the first field. */}
+      {/* The modal asks two different questions that happen to both be names: what this
+          config is called *in the app*, and what the file is called when it *leaves* it. Run
+          flat, the controls read as one naming chore and the delivered file's name looks
+          like a second attempt at the first field — so the rule, and the word "Delivered" in
+          that label, keep them apart.
+
+          The first group carries no heading of its own. One field, whose own label already
+          says "Configuration Name", under a dialog already titled "Name and submit": a
+          "Configuration" heading over it was the same word a third time, and a heading with
+          one control under it is a group of one. The second earns its heading — two controls,
+          and a sentence that is true of both of them rather than of either. */}
       <form className="flex flex-col gap-5" onSubmit={submit}>
-        <FieldSection
-          title="Configuration"
-          description="The name this report is saved and listed under."
-        >
-          <TextInputV2
-            label="Configuration Name"
-            required
-            placeholder="ex: Daily Recon Report"
-            size={InputSizeV2.MD}
-            value={configName}
-            autoFocus
-            onChange={(event) => setConfigName(event.target.value)}
-          />
-        </FieldSection>
+        <TextInputV2
+          label="Configuration Name"
+          required
+          placeholder="ex: Daily Recon Report"
+          size={InputSizeV2.MD}
+          value={configName}
+          autoFocus
+          onChange={(event) => setConfigName(event.target.value)}
+        />
 
         <SectionRule />
 
-        <FieldSection
-          title="Delivered file"
-          description="What each run is called when it arrives. Filled in from the name above until you change it."
-        >
+        <div className="flex flex-col gap-4">
           <TextInputV2
-            label="File name"
+            // "Delivered", not just "File name": the group heading that used to carry that
+            // word is gone, so the label is the only thing left saying *which* file this
+            // names — the one that arrives, rather than anything about the config itself.
+            label="Delivered File Name"
             placeholder="ex: daily_settlement_report"
             size={InputSizeV2.MD}
             value={fileName}
@@ -227,10 +196,18 @@ export function SubmitConfigModal({
 
           <SingleSelectV2
             label="Date format"
-            // The date is appended, not substituted, so the label says where it lands — a user
-            // who reads only the label still knows what the file will be called.
-            subLabel="Appended to the file name, so each run is a separate file."
-            required
+            // No sublabel. Where the date lands, and that each run is therefore a separate
+            // file, is the one thing the preview box below already answers — in this config's
+            // own name, with today's date in it, updating as the option changes. A sentence
+            // saying the same thing in general terms directly above a worked example of it is
+            // the example read twice, and the weaker of the two readings.
+            //
+            // No asterisk. It was claiming a requirement the form does not have and could
+            // not have: `canSubmit` gates on the two names only, the select opens already
+            // holding DD-MM-YYYY, and "No date in the file name" is a real option rather
+            // than an empty row — so there is no state in which this is unanswered and
+            // nothing an asterisk could ever stop. A required mark that never blocks is the
+            // kind that teaches people to stop reading the ones that do.
             triggerDimensions={{ width: '100%' }}
             placeholder="Select a date format"
             size={SingleSelectV2Size.MD}
@@ -263,7 +240,7 @@ export function SubmitConfigModal({
               {preview}
             </PrimitiveText>
           </div>
-        </FieldSection>
+        </div>
 
         {/* Lets Enter submit — a form with no submit control ignores Enter in some browsers. */}
         <button type="submit" hidden />

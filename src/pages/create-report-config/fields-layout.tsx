@@ -15,8 +15,12 @@ import type { CSSProperties, ReactNode } from 'react'
  *        on a selected one.
  * `v7` — v6 plus the grouping rule: an ordered "Group by" bar above the table, drawn from the
  *        columns already chosen, with the grouped columns pinned to the table's left edge.
+ * `v8` — the column organiser (node 4911:111609). The table, the chip row and the step's own
+ *        "Add custom column" are gone; in their place, two panes sharing one frame — the
+ *        vocabulary as a searchable column on the left, the chosen columns as reorderable
+ *        cards on the right. See ColumnOrganiser.tsx.
  */
-export type FieldsLayoutVersion = 'v1' | 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7'
+export type FieldsLayoutVersion = 'v1' | 'v2' | 'v3' | 'v4' | 'v5' | 'v6' | 'v7' | 'v8'
 
 export type FieldsLayout = {
   version: FieldsLayoutVersion
@@ -60,6 +64,7 @@ const ALL_VERSION_OPTIONS: { value: FieldsLayoutVersion; label: string }[] = [
   { value: 'v5', label: 'Version 5 — v4, add button below chips' },
   { value: 'v6', label: 'Version 6 — v4, redrawn field chips' },
   { value: 'v7', label: 'Version 7 — v6, plus Group by' },
+  { value: 'v8', label: 'Version 8 — column organiser' },
 ]
 
 /**
@@ -69,21 +74,31 @@ const ALL_VERSION_OPTIONS: { value: FieldsLayoutVersion; label: string }[] = [
  * It also clamps the stored value below, so a browser holding a now-hidden version from an
  * earlier session draws the default rather than a layout the panel can no longer show.
  */
-const VISIBLE_VERSIONS: FieldsLayoutVersion[] = ['v6']
+const VISIBLE_VERSIONS: FieldsLayoutVersion[] = ['v6', 'v8']
 
 const DEFAULT_VERSION: FieldsLayoutVersion = 'v6'
 
 /**
- * Display names that override the labels above. v6 is the only version on offer, so it reads
- * as "Version 1" rather than carrying a number from a list nobody can see. The id stays `v6`
- * — FieldsStep still switches on it, and the real v1 is a different layout. Delete an entry
- * to go back to the version's own label.
+ * Display names that override the labels above, so the dial numbers what it actually offers.
+ * Six of the eight versions are hidden, so v6 and v8 read as "Version 1" and "Version 2"
+ * rather than carrying numbers from a list nobody can see. The ids stay `v6`/`v8` — FieldsStep
+ * still switches on them, and the real v1/v2 are different layouts. Delete an entry to go back
+ * to the version's own label.
  */
 const LABEL_OVERRIDES: Partial<Record<FieldsLayoutVersion, string>> = {
   v6: 'Version 1',
+  v8: 'Version 2',
 }
 
-/** The versions drawn on the wide 1200px measure — see index.css. */
+/**
+ * The versions drawn on the wide 1200px measure — see index.css.
+ *
+ * v8 is deliberately NOT one of them. The wide measure exists for the table, which is the one
+ * thing in this flow that does not fit the content column; the organiser does fit, and node
+ * 4911:111609 draws it at exactly 960 — x 240 to 1200 on a 1440 frame, which is the flow's
+ * standard measure. So v8 is the first version of this step to sit on the same column as
+ * every other step in the flow, which is what the design asks for.
+ */
 const WIDE_VERSIONS: FieldsLayoutVersion[] = ['v3', 'v4', 'v5', 'v6', 'v7']
 
 /**
