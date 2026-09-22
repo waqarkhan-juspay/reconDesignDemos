@@ -20,7 +20,7 @@ import {
 import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { PrimitiveText, font } from '../../primitives'
-import { neutralLinkTokens } from '../../theme'
+import { neutralLinkTokens, recipientTagTokens } from '../../theme'
 import { isEmailAddress } from './answers'
 
 const { colors } = FOUNDATION_THEME
@@ -103,7 +103,11 @@ export function RecipientsInput({
       // PopoverV2 otherwise caps itself at 400px, narrower than the two-column Email card.
       maxWidth={width}
       trigger={
-        <div ref={hostRef} className="min-w-0">
+        <div ref={hostRef} className="recipients-field min-w-0">
+          {/* Scoped, not global: the remap below points Tag's `primary` colour slot at
+              `neutral`, which is only the right answer for a chip that has no colour prop
+              to say otherwise. */}
+          <ThemeProvider componentTokens={recipientTagTokens}>
           <MultiValueInputV2
             label={label}
             required={required}
@@ -129,8 +133,13 @@ export function RecipientsInput({
               }
               setDraft(next)
             }}
-            // Figma "Multi Value Input Field / web" (4848:47012): SUBTLE · XS · SQUARICAL, and
-            // Tag's own default colour, PRIMARY — MultiValueInputV2 exposes no colour key.
+            // Figma "Multi Value Input Field / web" (4848:47012): SUBTLE · XS · SQUARICAL.
+            //
+            // Colour is absent here because the prop has no key for it — Tag falls through to
+            // its own PRIMARY. `recipientTagTokens` (src/theme.ts) points the primary slot at
+            // neutral's values and takes the chip's vertical padding off, which is what keeps
+            // it inside the field instead of growing it; see `.recipients-field` in index.css
+            // for the half of that no token reaches.
             tags={{
               value: recipients,
               size: TagSize.XS,
@@ -142,6 +151,7 @@ export function RecipientsInput({
             error={invalid}
             errorMessage={invalid ? 'Enter a valid email address' : undefined}
           />
+          </ThemeProvider>
         </div>
       }
     >

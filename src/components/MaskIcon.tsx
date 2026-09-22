@@ -1,7 +1,8 @@
 type MaskIconProps = {
   /** URL of an SVG exported from Figma. */
   src: string
-  size?: number
+  /** A number of px, or a CSS length — so a Blend `unit` token can be handed straight in. */
+  size?: number | string
   /** Any CSS color; defaults to the inherited text color. */
   color?: string
 }

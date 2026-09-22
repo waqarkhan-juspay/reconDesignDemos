@@ -37,6 +37,8 @@ import {
   DrawerTitle,
   ColumnType,
   FOUNDATION_THEME,
+  SnackbarV2Variant,
+  addSnackbarV2,
   TagV2,
   TagV2Color,
   TagV2Size,
@@ -45,7 +47,7 @@ import {
   ThemeProvider,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { ArrowLeft, History, Mail, Pencil, X } from 'lucide-react'
+import { ArrowLeft, X } from 'lucide-react'
 import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
@@ -70,6 +72,7 @@ import {
   DownloadReportPanel,
   canDownload,
   defaultRange,
+  deliveryNotice,
   NO_RECIPIENTS,
 } from './DownloadReportPanel'
 import { detailSheetTokens } from '../theme'
@@ -195,6 +198,15 @@ export function ConfigDetailSheet({
   const [range, setRange] = useState(defaultRange)
   const [recipients, setRecipients] = useState(NO_RECIPIENTS)
 
+  /**
+   * Whether the Email report screen has been answered well enough to act on — an email
+   * channel with nobody in To cannot be sent, and any other channel has nothing to ask for.
+   *
+   * Named once here rather than called twice in the JSX below, because it now decides two
+   * things about the same button: whether it is enabled, and whether it is the primary.
+   */
+  const submittable = canDownload(row, recipients)
+
   /** Back to the detail, discarding the request — it was a one-off, not a saved setting. */
   const closeDownload = () => {
     setDownloadFor(null)
@@ -215,9 +227,13 @@ export function ConfigDetailSheet({
   /**
    * Hand over a CSV of the preview rows, under whichever name the caller is promising.
    *
-   * The name is the caller's because the two screens resolve the config's template against
-   * different dates: the Email report panel against the range it asked for, a delivery against
-   * the day it ran. The bytes are the same either way — this demo has one file.
+   * One caller now: the Deliveries screen, where each row is a file that has already been
+   * sent and the name it went out under is a fact rather than a guess. The Email report
+   * screen used to call this too, and does not any more — Submit requests a delivery, so
+   * there is nothing for it to hand over yet.
+   *
+   * The name stays the caller's rather than being derived here, because a delivery is named
+   * for the day it ran and only the row knows that.
    */
   const download = (fileName: string) => {
     if (!row) return
@@ -234,18 +250,6 @@ export function ConfigDetailSheet({
     link.download = fileName
     link.click()
     URL.revokeObjectURL(url)
-  }
-
-  /**
-   * What the Email report panel's own button hands `download`: the config's template resolved
-   * against the range it asked for, which is what an actual delivery would be named. The end
-   * of the range, not today — the file is *of* those days.
-   */
-  const downloadName = (target: ConfigRowFacts) => {
-    const stamp = (range.endDate ?? range.startDate)
-      .toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      .replace(/\//g, '-')
-    return `${fileNameFor(target).replace('{date:%d-%m-%Y}', stamp)}.csv`
   }
 
   /**
@@ -393,13 +397,23 @@ export function ConfigDetailSheet({
                   onRangeChange={setRange}
                   recipients={recipients}
                   onRecipientsChange={setRecipients}
-                  /* Cancel as well as the back arrow, because the two are not the same
+                  /* Both at the trailing edge, Cancel then Submit — the order a dialog puts
+                     them in, with the confirming button last where the eye finishes.
+
+                     Cancel as well as the back arrow, because the two are not the same
                      gesture: the arrow is "I have finished looking at this", the button is
                      the answer to the form's question. Both land back on the detail.
 
-                     Email Report is SECONDARY like every other button in this sheet, so what
-                     marks it as the action is its position and its disabled state, not a
-                     fill. */
+                     Submit earns its fill rather than being handed one. Until the form is
+                     answerable it is a disabled SECONDARY — present, so you can see what
+                     completing the form gets you, but making no claim. The moment
+                     `canDownload` turns true it becomes the PRIMARY, and the colour arriving
+                     *is* the message that the form is now complete. A fill that had been
+                     there all along could not say that.
+
+                     No icon: the envelope named the channel back when the label did too, and
+                     the channel's own mark is already on the card above this row. Beside
+                     "Submit" it would be decorating a word it does not explain. */
                   actions={
                     <>
                       <ButtonV2
@@ -409,13 +423,32 @@ export function ConfigDetailSheet({
                         onClick={closeDownload}
                       />
                       <ButtonV2
-                        buttonType={ButtonV2Type.SECONDARY}
+                        buttonType={
+                          submittable ? ButtonV2Type.PRIMARY : ButtonV2Type.SECONDARY
+                        }
                         size={ButtonV2Size.MEDIUM}
-                        text="Email Report"
-                        leftSlot={{ slot: <Mail size={16} /> }}
-                        disabled={!canDownload(row, recipients)}
+                        text="Submit"
+                        disabled={!submittable}
                         onClick={() => {
-                          if (row) download(downloadName(row))
+                          /* Nothing is handed over here. Submit *requests* a report — the
+                             notice below is the whole of what happens now, and the file
+                             arrives by the channel the config names, minutes later. Handing
+                             the browser a CSV on the same click said the opposite of the
+                             sentence next to it.
+
+                             The panel closes on this click too, so the notice is the only
+                             thing left saying the request was taken — it outlives the screen
+                             that raised it, which is the whole reason it is a snackbar and
+                             not a line in the panel. SUCCESS because the request landed;
+                             what it promises has not happened yet, and the copy says so.
+
+                             6s rather than Blend's default 4: two sentences, one of which is
+                             a number the reader is meant to keep. */
+                          addSnackbarV2({
+                            ...deliveryNotice(row, recipients),
+                            variant: SnackbarV2Variant.SUCCESS,
+                            duration: 6000,
+                          })
                           closeDownload()
                         }}
                       />
@@ -514,11 +547,10 @@ export function ConfigDetailSheet({
               where three icons at the top of a reference panel would have to be guessed at
               or hovered.
 
-              Every one of them is SECONDARY. A primary is a recommendation, and this panel
-              does not have one to make: you opened it to look something up, and History,
-              Email Report and Edit are three equally reasonable things to do next. Order still
-              carries the weight — Blend's own flex-end puts the trailing button where a
-              dialog's confirm sits, so the two that only read data lead.
+              The row has one weight per job. Download Report is the only one that produces
+              something you keep, so it is the PRIMARY; History and Edit both leave you inside
+              the app looking at more of it, so they stay SECONDARY. Three outlined buttons
+              asked you to choose between three equal things, which was never true of them.
 
               The Email report screen has no footer at all. Its two buttons are the end of a
               form rather than chrome over a reference panel, so they scroll with the
@@ -540,39 +572,54 @@ export function ConfigDetailSheet({
                   onClick={goBack}
                 />
               ) : (
-                <>
-              <ButtonV2
-                buttonType={ButtonV2Type.SECONDARY}
-                size={ButtonV2Size.MEDIUM}
-                text="History"
-                leftSlot={{ slot: <History size={16} /> }}
-                onClick={() => setHistoryFor(row?.id ?? null)}
-              />
-              {/* "Email Report" rather than "Download": the panel this opens asks which
-                  days and who gets it, and refuses an email channel with nobody in To
-                  (canDownload). Mail is the glyph the app already uses for the Email
-                  delivery channel, in DELIVERY_CHANNELS and in the panel itself. */}
-              <ButtonV2
-                buttonType={ButtonV2Type.SECONDARY}
-                size={ButtonV2Size.MEDIUM}
-                text="Email Report"
-                leftSlot={{ slot: <Mail size={16} /> }}
-                onClick={() => setDownloadFor(row?.id ?? null)}
-              />
-              <ButtonV2
-                buttonType={ButtonV2Type.SECONDARY}
-                size={ButtonV2Size.MEDIUM}
-                text="Edit"
-                leftSlot={{ slot: <Pencil size={16} /> }}
-                // Closing first, so the page behind is not left with a sheet over it mid-route
-                // change — vaul's exit animation and a route swap racing each other is exactly
-                // the intermittent failure rule 14 warns about.
-                onClick={() => {
-                  onClose()
-                  navigate('/configurator/create')
-                }}
-              />
-                </>
+                /* A row of my own, full width, so the footer's own flex-end has a single
+                   child to align and stops deciding the distribution. DrawerFooter sets
+                   justifyContent="flex-end" *before* it spreads props (DrawerBase.tsx:709)
+                   and DrawerFooterProps has no slot to override it, so the alternative was a
+                   CSS rule outspecifying a styled-components class that wins on source order
+                   (rule 12) — a wrapper I own is the cheaper answer. gap-3 is the same 12px
+                   Blend was already putting between the buttons. */
+                /* blend-gap: ButtonV2 sets `cursor: default` on every enabled button
+                   (ButtonV2/utils.ts:269) with no prop or token that reaches it, so the
+                   pointer is set from this wrapper — the same escape hatch the create flow's
+                   footer uses. */
+                <div className="flex w-full items-center justify-between [&_button]:cursor-pointer">
+                  {/* It still opens the Email report screen, which asks for a date range and
+                      who receives it. The label on the way in changed; the screen behind it
+                      did not. */}
+                  <ButtonV2
+                    buttonType={ButtonV2Type.PRIMARY}
+                    size={ButtonV2Size.MEDIUM}
+                    text="Download Report"
+                    onClick={() => setDownloadFor(row?.id ?? null)}
+                  />
+                  {/* Outlined secondaries, and 12px apart — Blend's own DrawerFooter gap,
+                      kept now that the row draws its own.
+
+                      No icons, though: a glyph is worth its width when it labels the only
+                      thing in reach, and beside the primary's fill these two were spending it
+                      competing for the eye. The words already say it. */}
+                  <div className="flex items-center gap-3">
+                    <ButtonV2
+                      buttonType={ButtonV2Type.SECONDARY}
+                      size={ButtonV2Size.MEDIUM}
+                      text="History"
+                      onClick={() => setHistoryFor(row?.id ?? null)}
+                    />
+                    <ButtonV2
+                      buttonType={ButtonV2Type.SECONDARY}
+                      size={ButtonV2Size.MEDIUM}
+                      text="Edit"
+                      // Closing first, so the page behind is not left with a sheet over it
+                      // mid-route change — vaul's exit animation and a route swap racing each
+                      // other is exactly the intermittent failure rule 14 warns about.
+                      onClick={() => {
+                        onClose()
+                        navigate('/configurator/create')
+                      }}
+                    />
+                  </div>
+                </div>
               )}
             </DrawerFooter>
             )}

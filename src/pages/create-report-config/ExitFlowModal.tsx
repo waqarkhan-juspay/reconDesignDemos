@@ -6,8 +6,10 @@ import {
   ButtonV2Type,
   FOUNDATION_THEME,
   ModalV2,
+  ThemeProvider,
 } from '@juspay/blend-design-system'
 import { PrimitiveText, font } from '../../primitives'
+import { dangerSecondaryButtonTokens } from '../../theme'
 import { MODALV2_TOKENS } from '../../tokens/generated'
 
 /**
@@ -46,14 +48,24 @@ function useModalTokens() {
  * The one way out of the create flow — shared by the topbar logo and the footer's Exit, so
  * both doors ask the same question.
  *
- * Three answers, three weights: Discard is the destructive one and takes the red button;
- * Cancel is the safe default and takes the secondary; Save as draft is the quiet middle
- * path, a ghost. Blend has no ghost type — secondary + INLINE is the borderless, fill-less
- * button this flow already uses for Exit, so the two read as the same kind of action.
+ * Three answers, three weights, loudest on the right.
+ *
+ * **Save as draft** takes the primary. It is the only answer that loses nothing, so it is
+ * the one to make easiest to reach.
+ *
+ * **Discard and exit** sits beside it as a danger secondary: outlined and red, not filled
+ * and red. It should still say destructive — but a solid red button drawn louder than the
+ * safe one beside it is an invitation, and the ✕, the backdrop and Cancel are all already
+ * exits. Blend has no such weight (see `dangerSecondaryButtonTokens`, src/theme.ts).
+ *
+ * **Cancel** is quietest and sits apart on the left. Blend has no tertiary: `ButtonV2Type`
+ * is primary / secondary / danger / success and nothing else, so the quietest thing it can
+ * draw is secondary + INLINE — the borderless, fill-less button this flow already uses for
+ * Exit, which makes the two read as the same kind of action.
  *
  * ModalV2's own actions stop at two (`primaryAction`/`secondaryAction`), hence
- * `customFooter`. The draft sits apart on the left: it is the only answer that is not
- * "stay" or "leave", and it should not sit between them.
+ * `customFooter`. Cancel is the one that sits outside the pair: "stay" is a different kind
+ * of answer from the two that leave, and it should not sit between them.
  */
 export function ExitFlowModal({
   isOpen,
@@ -100,23 +112,27 @@ export function ExitFlowModal({
             buttonType={ButtonV2Type.SECONDARY}
             subType={ButtonV2SubType.INLINE}
             size={ButtonV2Size.MEDIUM}
-            text="Save as draft"
-            onClick={onSaveDraft}
+            text="Cancel"
+            onClick={onCancel}
           />
           {/* The same token that spaces Blend's own secondary/primary pair, because that is
-              exactly what this is — the third button is what sits outside it. */}
+              exactly what this is — Cancel is what sits outside it. */}
           <div className="flex items-center" style={{ gap: modal.footer.gap }}>
+            {/* Scoped: the remap turns `danger.default` into an outlined button, and every
+                other red button in the app should keep its fill. */}
+            <ThemeProvider componentTokens={dangerSecondaryButtonTokens}>
+              <ButtonV2
+                buttonType={ButtonV2Type.DANGER}
+                size={ButtonV2Size.MEDIUM}
+                text="Discard and exit"
+                onClick={onDiscard}
+              />
+            </ThemeProvider>
             <ButtonV2
-              buttonType={ButtonV2Type.SECONDARY}
+              buttonType={ButtonV2Type.PRIMARY}
               size={ButtonV2Size.MEDIUM}
-              text="Cancel"
-              onClick={onCancel}
-            />
-            <ButtonV2
-              buttonType={ButtonV2Type.DANGER}
-              size={ButtonV2Size.MEDIUM}
-              text="Discard and exit"
-              onClick={onDiscard}
+              text="Save as draft"
+              onClick={onSaveDraft}
             />
           </div>
         </div>

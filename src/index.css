@@ -71,6 +71,28 @@
 }
 
 /*
+ * The page's own surface.
+ *
+ * Nothing was painting it. Blend ships no reset (rule 12), Tailwind's Preflight sets no body
+ * background, and html, body and #root all computed to `rgba(0, 0, 0, 0)` — so every page in
+ * the app was showing the browser's default canvas rather than a colour this app had chosen.
+ * That default is white today and is not promised to stay white: a UA or an OS in forced-dark
+ * paints it dark, and the whole app would inherit a background it never asked for.
+ *
+ * On `body` and not `html`: CSS propagates the body's background to the canvas, so it covers
+ * the viewport whatever height body ends up with — which matters because nothing here sets
+ * one.
+ *
+ * The colour arrives as `--app-surface` from src/main.tsx, which reads `gray[0]`. No fallback,
+ * for the reason `.config-sheet-close` has none: a token that stops being handed in should
+ * fail visibly rather than resolve to a hex literal this stylesheet had kept a copy of
+ * (rule 1). The cost is one frame before main.tsx runs, where the canvas is still the UA's.
+ */
+body {
+  background-color: var(--app-surface);
+}
+
+/*
  * The family has to be set here because Blend never applies it: outside those two Highcharts
  * references every component inherits the family from the document, and Tailwind's Preflight
  * was setting that to its own system stack.
@@ -285,10 +307,35 @@ html {
    * narrows rather than sliding under the rail. Anything else using `.flow-grid` never sets
    * the property and keeps the old symmetric 24px.
    */
+  /*
+   * The left track's floor, as a knob rather than a literal, so the topbar can raise it to
+   * its own content without restating the three columns below. Everything else keeps the
+   * rail's gutter.
+   */
+  --flow-gutter-min: var(--flow-rail-gutter, 24px);
+
   grid-template-columns:
-    [full-start] minmax(var(--flow-rail-gutter, 24px), 1fr)
+    [full-start] minmax(var(--flow-gutter-min), 1fr)
     [content-start] min(var(--flow-content), 100% - var(--flow-rail-gutter, 24px) - 24px)
     [content-end] minmax(24px, 1fr) [full-end];
+}
+
+/*
+ * The create flow's topbar (index.tsx's TopbarContent), which shares the content grid so its
+ * title lands on the same left edge as each step's heading.
+ *
+ * Its left track floors at its own content instead of at the rail's 160px, because what sits
+ * there is a labelled button, not the rail: "Return to Report Config" measures 169px plus a
+ * 32px inset, and in a 160px track it wrapped onto a second line inside a 48px bar.
+ *
+ * The trade is deliberate. While the window has room the `1fr` share wins, the column stays
+ * centred and the title lines up exactly. Below roughly 1390px the button's width becomes
+ * the floor and the title drifts right of the heading rather than colliding with the button.
+ * Alignment is the thing worth having when there is room for it; not overlapping is the
+ * thing worth having when there is not.
+ */
+.flow-topbar-grid {
+  --flow-gutter-min: max-content;
 }
 
 /*
@@ -324,6 +371,42 @@ html {
 /* Every child sits in the measured column unless it says otherwise. */
 .flow-grid > * {
   grid-column: content;
+}
+
+/*
+ * The create flow's back button, in the grid's left gutter rather than on the content column
+ * (index.tsx's TopbarContent).
+ *
+ * It is the one thing in the bar that is not about the report: it belongs to the window, so
+ * it sits where the step rail sits, and the title beside it takes the content column and
+ * lines up with each step's heading.
+ *
+ * The track it sits in floors at its own width (`.flow-topbar-grid` above), so the button is
+ * never squeezed narrower than its label. `justify-self: start` keeps it on the left as the
+ * track grows past it.
+ */
+.flow-grid > .flow-topbar-back {
+  grid-column: full-start / content-start;
+  justify-self: start;
+}
+
+/*
+ * A step whose body should fit the window instead of growing past it — the column organiser,
+ * and nothing else so far (index.tsx sets the attribute).
+ *
+ * `height`, not `min-height`: the point is a *definite* height for the body to cap itself
+ * against, and `min-height` leaves it indefinite, which makes a percentage max-height inside
+ * resolve to none. 100% is the flow's content pane, which is `flex-1` inside an `h-screen`
+ * column — so this is the viewport minus the topbar and the footer, i.e. the space that is
+ * actually on screen, rather than the whole viewport a `100dvh` cap would have measured.
+ *
+ * `minmax(0, 1fr)` rather than `1fr` for the body row: a `1fr` track floors at its content's
+ * min-content height, so a long list would push the row taller than the grid and scroll the
+ * page anyway — the same trap `min-h-0` answers in flexbox.
+ */
+.flow-grid[data-fill] {
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 /*
@@ -553,11 +636,100 @@ html {
 }
 
 /*
+ * Every modal's ✕ (ModalV2Header.tsx:121-138).
+ *
+ * blend-gap: ModalV2 draws the button itself — a ButtonV2 with `subType=INLINE`, which
+ * zeroes the padding — so the target ends up exactly the 16px of the glyph, with no prop or
+ * token reaching either the padding or the cursor. Nothing in this repo owns a wrapper
+ * around it: the header is Blend's, inside Blend's portal.
+ *
+ * 28px to match `.config-sheet-close` above, so the app has one answer for "how big is a
+ * close button" rather than one per overlay. The glyph stays 16px; the button is the thing
+ * you hit.
+ *
+ * Padding out and an equal negative margin back, so the margin box is still 16px and the
+ * header's flex row is untouched — the ✕ does not move by a pixel, it only gets easier to
+ * land on. Attribute selector because `aria-label="Close modal"` is Blend's own, hard-coded
+ * at ModalV2Header.tsx:137 and in mobileModalV2.tsx; it beats the styled-components class
+ * on specificity, which is what lets `cursor` win against a stylesheet injected after this
+ * one (rule 12).
+ */
+button[aria-label='Close modal'] {
+  padding: 6px;
+  margin: -6px;
+  cursor: pointer;
+}
+
+/*
+ * The recipient chips' remove button (src/pages/create-report-config/RecipientsInput.tsx).
+ *
+ * blend-gap: MultiValueInputV2 hardcodes `minWidth: '24px', minHeight: '24px'` in an inline
+ * style on this button (MultiValueInputV2.tsx:271-282) with no prop and no token reaching
+ * it. 24px is taller than the chip's own 18px line, so the button — not the text, and not
+ * the padding `recipientTagTokens` already zeroed — is what made the chip 30px and grew the
+ * field by 9px the moment an address went in.
+ *
+ * `!important` because the value is inline, which is the one place a stylesheet cannot win
+ * on specificity alone. Scoped to this field so it cannot reach another MultiValueInputV2.
+ *
+ * 18px matches the chip's line, so the button no longer sets the height: the chip is its
+ * 18px line plus 2px of border, and the field holds its 35px. That is under the 24px a
+ * standalone control should be — acceptable here only because the whole chip is 20px by
+ * design (Figma 4848:47012) and the row is a dense inline list inside a field, not a
+ * primary target.
+ */
+.recipients-field [data-tag] button {
+  min-width: 18px !important;
+  min-height: 18px !important;
+}
+
+/*
  * ── The column organiser (src/pages/create-report-config/ColumnOrganiser.tsx) ───────────
  *
- * Four rules. Each is here because Blend offers no prop for what it does, or because the
+ * Five rules. Each is here because Blend offers no prop for what it does, or because the
  * state it answers to is a CSS state rather than one React should be holding.
  */
+
+/*
+ * The scrolling half of each pane — the palette's chips, and the organiser's columns.
+ *
+ * `scrollbar-gutter: stable` is here for the search, not for the scrollbar: filtering the
+ * list short enough to fit would otherwise reclaim the track's width and shift every chip
+ * sideways as you type. It reserves nothing where the platform draws scrollbars as an
+ * overlay (macOS by default), which is also where there is nothing to reserve.
+ *
+ * The standard properties are the ones that apply. Chrome stopped honouring the
+ * `::-webkit-scrollbar` pseudo-elements on any element that sets `scrollbar-width` or
+ * `scrollbar-color`, so the block below is Firefox's and old WebKit's, and the pair above
+ * is what Chrome actually reads — verified in the pane: `scrollbar-width` computes to
+ * `thin` and the thumb takes gray[300].
+ *
+ * The colour comes from --organiser-scrollbar, set on the box in ColumnOrganiser.tsx from
+ * gray[300] — this file keeps no values of its own (rule 1).
+ */
+.organiser-scroll {
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--organiser-scrollbar) transparent;
+}
+
+.organiser-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+
+.organiser-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.organiser-scroll::-webkit-scrollbar-thumb {
+  /* Inset with a transparent border rather than a narrower bar, so the thumb keeps a margin
+     from the pane's edge without the track collapsing under it. */
+  background-color: var(--organiser-scrollbar);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  border-radius: 8px;
+}
 
 /*
  * Palette chips run the full width of their column.
@@ -662,7 +834,26 @@ html {
   background-color: var(--organiser-hover);
 }
 
+/*
+ * The search field's clear control.
+ *
+ * Colour alone, with no hover pill: the row buttons' background pad would be a 24px box
+ * inside a 22px content area, and a filled shape inside a field reads as a second control
+ * rather than as part of the input's furniture. Both values come from the box
+ * (ColumnOrganiser.tsx) — this file keeps none of its own (rule 1).
+ */
+.organiser-clear {
+  color: var(--organiser-clear);
+  transition: color var(--organiser-micro) var(--organiser-ease);
+}
+
+.organiser-clear:hover,
+.organiser-clear:focus-visible {
+  color: var(--organiser-clear-hover);
+}
+
 @media (prefers-reduced-motion: reduce) {
+  .organiser-clear,
   .organiser-edit,
   .organiser-action {
     transition: none;
