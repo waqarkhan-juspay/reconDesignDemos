@@ -191,12 +191,28 @@ export function DownloadReportPanel({
   onRangeChange,
   recipients,
   onRecipientsChange,
+  actions,
 }: {
   row: ConfigRowFacts | null
   range: DateRange
   onRangeChange: (next: DateRange) => void
   recipients: EmailRecipients
   onRecipientsChange: (next: EmailRecipients) => void
+  /**
+   * Cancel and Send, rendered at the end of this screen's stack rather than in the sheet's
+   * DrawerFooter.
+   *
+   * A slot rather than callbacks: the sheet still owns what the two buttons *do* — closing
+   * this screen, and sending the file — and all this screen decides is where they sit. It
+   * keeps the whole footer/no-footer choice in one file (ConfigDetailSheet), instead of
+   * splitting one decision across two.
+   *
+   * They belong here because the other two screens' footers are chrome over a body that
+   * scrolls under them, and this one's buttons are the end of a form: the last thing after
+   * the range and the recipients, reached by scrolling to the end of the questions rather
+   * than parked below them.
+   */
+  actions?: ReactNode
 }) {
   const channel = CHANNELS[row?.channel ?? ''] ?? CHANNELS.Email
 
@@ -230,6 +246,12 @@ export function DownloadReportPanel({
           <EmailRecipientFields value={recipients} onChange={onRecipientsChange} />
         )}
       </PanelCard>
+
+      {/* flex-end and 12px, which is what Blend's DrawerFooter laid these out with — the
+          buttons moved out of the chrome, not out of the design. No rule above them: the
+          16px the stack already keeps between cards is the same gap, and a line here would
+          be drawing a footer back in by hand. */}
+      {actions && <div className="flex items-center justify-end gap-3">{actions}</div>}
     </div>
   )
 }

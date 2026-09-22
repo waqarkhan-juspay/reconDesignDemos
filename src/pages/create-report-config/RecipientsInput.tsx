@@ -153,7 +153,7 @@ export function RecipientsInput({
         tabIndex={-1}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => add(draft)}
-        className="flex w-full min-w-0 cursor-pointer items-center gap-3 px-3 py-2.5"
+        className="flex w-full min-w-0 cursor-pointer items-center gap-3 px-3 py-3"
         style={{
           backgroundColor: colors.gray[50],
           borderRadius: FOUNDATION_THEME.border.radius[8],

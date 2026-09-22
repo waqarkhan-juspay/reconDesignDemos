@@ -12,10 +12,9 @@ import {
   ThemeProvider,
   TopbarV2,
 } from '@juspay/blend-design-system'
+import { ArrowLeft } from 'lucide-react'
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
-import tenantLogo from '../../assets/icons/tenant-logo.svg'
-import { TopbarStatusIcons } from '../../layout/topbar'
 import { FEEDBACK_EASING, FEEDBACK_MS, PAGE_EASING, PAGE_MS } from '../../motion'
 import { PrimitiveText, font } from '../../primitives'
 import { ghostButtonTokens } from '../../theme'
@@ -106,8 +105,8 @@ const ALL_STEPS: {
     id: 'delivery',
     label: 'Delivery',
     title: 'Delivery and scheduling',
-    // Walks the step's own questions in order: the name, how often, then the channels.
-    description: 'Name your report, set how often it runs, and choose where it gets delivered.',
+    // Walks the step's own questions in order: how often, then the channels.
+    description: 'Set how often the report runs, and choose where it gets delivered.',
   },
   {
     id: 'grouping',
@@ -117,7 +116,6 @@ const ALL_STEPS: {
     // what one row of the delivered file ends up meaning.
     description:
       'Pick the fields to summarise by. Each one you pick becomes a column, and the report keeps one row per combination.',
-    tag: 'Optional',
     skipLabel: 'Skip grouping',
   },
   {
@@ -144,11 +142,15 @@ const ALL_STEPS: {
 ]
 
 /**
- * The primary action on the final step. Longer than the step's own label on purpose — the
- * design names the button for what it does to the config (node 4530:10456), not for the
- * step it sits on.
+ * The primary action on the final step. Longer than the step's own label on purpose — it is
+ * named for what it does to the config, not for the step it sits on.
+ *
+ * "Proceed for Submission" rather than the design's "Submit for approval" (node 4530:10456):
+ * the click does not submit anything, it opens SubmitConfigModal for the two names the
+ * config still needs. A button that says "Submit" and then asks a question has misread its
+ * own consequence.
  */
-const SUBMIT_LABEL = 'Submit for approval'
+const SUBMIT_LABEL = 'Proceed for Submission'
 
 
 /**
@@ -184,24 +186,39 @@ const MOTION = {
 const RAIL_GUTTER = { '--flow-rail-gutter': '160px' } as CSSProperties
 
 /**
- * The bar holds nothing but the flow's two ends now: the logo you leave by, and the app's
- * status icons. Where a step breadcrumb used to sit in the middle, the vertical StepRail
- * beside the content says the same thing with room for state per step (node 4853:101733).
+ * The bar holds one thing: the way back. Where a step breadcrumb used to sit in the middle,
+ * the vertical StepRail beside the content says the same thing with room for state per step
+ * (node 4853:101733).
+ *
+ * No logo and no status icons, unlike AppShell's bar. This is a takeover (see ReportFlow
+ * below) — the flow is one decision at a time, and app chrome is an offer of somewhere else
+ * to be. A way *back* is the exception: an exit you chose is not a distraction, and a
+ * takeover with no visible way out is a trap. One labelled exit says it better than an
+ * unlabelled logo that did the same thing without admitting it.
  */
 function TopbarContent({ onExit }: { onExit: () => void }) {
   return (
-    <div className="flex w-full items-center justify-between">
-      {/* The logo is one of the flow's two exits (the footer's Exit is the other). Both open
-          the same confirmation rather than leaving outright — see ExitFlowModal. */}
-      <button
-        type="button"
-        onClick={onExit}
-        aria-label="Exit report setup"
-        className="flex size-8 cursor-pointer items-center justify-center overflow-clip rounded-[6.4px] border-none bg-transparent p-0"
-      >
-        <img src={tenantLogo} alt="" className="block size-[18px]" />
-      </button>
-      <TopbarStatusIcons />
+    <div className="flex w-full items-center gap-2">
+      {/* One of the flow's two exits — the footer's "Exit" is the other — and the only one
+          that says where it goes. It routes through onExit: this discards every answer so
+          far, and a labelled button that did it silently would be the worse of the two.
+
+          The arrow inherits currentColor rather than being tinted (rule 11): in a button slot
+          the glyph and the label are one thing.
+
+          blend-gap: ButtonV2 sets `cursor: default` (ButtonV2/utils.ts) with no prop or token
+          to change it, so the pointer comes from a wrapper this file owns — same as the
+          footer's Exit. */}
+      <span className="flex [&_button]:cursor-pointer">
+        <ButtonV2
+          buttonType={ButtonV2Type.SECONDARY}
+          subType={ButtonV2SubType.INLINE}
+          size={ButtonV2Size.MEDIUM}
+          text="Return to Configurator"
+          leftSlot={{ slot: <ArrowLeft size={16} /> }}
+          onClick={onExit}
+        />
+      </span>
     </div>
   )
 }
@@ -317,8 +334,12 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * The same steps read as a gate on Continue, which is a looser question: a step with
    * nothing to answer cannot hold the flow up, so it is complete by definition. That is the
    * one place this differs from `stepAnswered` above, and why the two are separate lists.
+   *
+   * Review is that case too, and needs saying explicitly: `answeredFor` returns false for it
+   * so the rail never ticks the step you are standing on, and without `isLastStep` here that
+   * false would also disable Submit — permanently, since nothing on Review can flip it.
    */
-  const complete = skipLabel !== undefined || answeredFor(current.id)
+  const complete = skipLabel !== undefined || isLastStep || answeredFor(current.id)
 
   /**
    * One step's heading and body. A function rather than inline JSX so the Fields step can
@@ -532,12 +553,11 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
         onDiscard={leaveFlow}
       />
 
-      {/* Submit asks for the file name, then leaves — which is why its primary reads "Submit
-          and Exit" rather than "Submit". There is nothing behind this modal to come back to:
-          the config is made, and the flow's job is done. */}
+      {/* Submit asks for the config and file names, then leaves — which is why its primary
+          reads "Submit and Exit" rather than "Submit". There is nothing behind this modal to
+          come back to: the config is made, and the flow's job is done. */}
       <SubmitConfigModal
         isOpen={submitting}
-        configName={delivery.name}
         onClose={() => setSubmitting(false)}
         onSubmit={() => navigate('/configurator')}
       />

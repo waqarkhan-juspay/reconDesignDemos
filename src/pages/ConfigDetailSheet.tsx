@@ -45,7 +45,7 @@ import {
   ThemeProvider,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { ArrowLeft, Download, History, Pencil, X } from 'lucide-react'
+import { ArrowLeft, History, Mail, Pencil, X } from 'lucide-react'
 import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
@@ -99,9 +99,11 @@ const SHEET_WIDTH = 600
  * stays on FOUNDATION_THEME and src/motion.ts (rules 1 and 14) and the stylesheet keeps no
  * second copy of a token.
  *
- * The footer's hairline is the one line this sheet draws. Everywhere else space does the
- * grouping; here it cannot, because the body scrolls *under* the footer and a gap that moves
- * with the content says nothing about where the chrome begins.
+ * The header's and the footer's hairlines are the only two lines this sheet draws, and they
+ * are the same line for the same reason: the body scrolls *under* both, so a gap cannot say
+ * where the chrome ends and the content begins — it moves with the content. Everywhere
+ * inside the body, space does the grouping — which is also why the Email report screen, whose
+ * buttons scroll with its cards, draws only the header's.
  */
 const SHEET_VARS = {
   // Already px-suffixed strings in the foundation (border.tokens.ts), unlike the type scale.
@@ -186,7 +188,7 @@ export function ConfigDetailSheet({
    *
    * The screen is stored as the open row's id rather than a boolean, for the same reason
    * `historyFor` is: opening a different config drops you back on its detail rather than
-   * leaving you on a Download panel that has quietly changed which report it is about.
+   * leaving you on an Email report panel that has quietly changed which report it is about.
    */
   const [downloadFor, setDownloadFor] = useState<string | null>(null)
   const downloading = row !== null && downloadFor === row.id
@@ -214,7 +216,7 @@ export function ConfigDetailSheet({
    * Hand over a CSV of the preview rows, under whichever name the caller is promising.
    *
    * The name is the caller's because the two screens resolve the config's template against
-   * different dates: the Download panel against the range it asked for, a delivery against
+   * different dates: the Email report panel against the range it asked for, a delivery against
    * the day it ran. The bytes are the same either way — this demo has one file.
    */
   const download = (fileName: string) => {
@@ -235,7 +237,7 @@ export function ConfigDetailSheet({
   }
 
   /**
-   * What the Download panel's own button hands `download`: the config's template resolved
+   * What the Email report panel's own button hands `download`: the config's template resolved
    * against the range it asked for, which is what an actual delivery would be named. The end
    * of the range, not today — the file is *of* those days.
    */
@@ -316,8 +318,12 @@ export function ConfigDetailSheet({
           >
             {/* Blend's DrawerHeader draws the padding and the background; the row inside it is
               ours, because the design puts the close button on the header's right and Blend
-              offers no slot for one. */}
-            <DrawerHeader>
+              offers no slot for one.
+
+              The class carries only the bottom rule — Blend's header tokens have no border
+              slot, the same gap DrawerFooter has, and `className` is the opening both of them
+              leave. Colour comes from --sheet-border, so the two hairlines cannot drift. */}
+            <DrawerHeader className="config-sheet-header">
               {/* The ✕ leads, and the title follows it on the same line.
 
                 On the left because this sheet slides in from the right: the control that
@@ -331,7 +337,7 @@ export function ConfigDetailSheet({
                   same 16px glyph ModalV2 uses, on a token hover surface. DrawerClose is the
                   button; `asChild` is not used, so this is one element, not two. */}
                 {/* On a second screen the same slot holds a back arrow instead: the control
-                    in the corner should undo the last thing you did, and on the Download or
+                    in the corner should undo the last thing you did, and on the Email report or
                     Deliveries screen that is arriving here, not opening the sheet. A plain
                     button, not a DrawerClose — this one does not dismiss the drawer. */}
                 {downloading || showHistory ? (
@@ -364,7 +370,7 @@ export function ConfigDetailSheet({
                     fontWeight={FOUNDATION_THEME.font.weight[600]}
                   >
                     {downloading
-                      ? 'Download report'
+                      ? 'Email report'
                       : showHistory
                         ? 'Report deliveries'
                         : (row?.configurationName ?? '')}
@@ -376,8 +382,10 @@ export function ConfigDetailSheet({
             {/* `direction` is what gives the body the drawer's own bottom radius on the correct
               corner (getDrawerBorderRadius) — without it a right-hand sheet rounds the
               bottom-left, which is the corner against the page. `hasFooter` drops that radius
-              again now the footer is the element sitting on it. */}
-            <DrawerBody direction="right" hasFooter>
+              again whenever the footer is the element sitting on it — every screen but the
+              Email report one, where the body runs to the bottom of the sheet and wants the
+              corner back. */}
+            <DrawerBody direction="right" hasFooter={!downloading}>
               {downloading ? (
                 <DownloadReportPanel
                   row={row}
@@ -385,6 +393,34 @@ export function ConfigDetailSheet({
                   onRangeChange={setRange}
                   recipients={recipients}
                   onRecipientsChange={setRecipients}
+                  /* Cancel as well as the back arrow, because the two are not the same
+                     gesture: the arrow is "I have finished looking at this", the button is
+                     the answer to the form's question. Both land back on the detail.
+
+                     Email Report is SECONDARY like every other button in this sheet, so what
+                     marks it as the action is its position and its disabled state, not a
+                     fill. */
+                  actions={
+                    <>
+                      <ButtonV2
+                        buttonType={ButtonV2Type.SECONDARY}
+                        size={ButtonV2Size.MEDIUM}
+                        text="Cancel"
+                        onClick={closeDownload}
+                      />
+                      <ButtonV2
+                        buttonType={ButtonV2Type.SECONDARY}
+                        size={ButtonV2Size.MEDIUM}
+                        text="Email Report"
+                        leftSlot={{ slot: <Mail size={16} /> }}
+                        disabled={!canDownload(row, recipients)}
+                        onClick={() => {
+                          if (row) download(downloadName(row))
+                          closeDownload()
+                        }}
+                      />
+                    </>
+                  }
                 />
               ) : showHistory ? (
                 <DeliveryHistoryPanel
@@ -470,48 +506,30 @@ export function ConfigDetailSheet({
               )}
             </DrawerBody>
 
-            {/* The actions live in a footer rather than beside the title, for two reasons.
-              Blend's DrawerFooter is chrome: it sits outside the scrolling body, so the three
-              controls stay reachable however far down the preview you have read — which is
-              better-layout's rule about never parking an action past a scroll edge. And a
-              labelled button says what it does, where three icons at the top of a reference
-              panel would have to be guessed at or hovered.
+            {/* On the detail and Deliveries screens the actions live in a footer rather than
+              beside the title, for two reasons. Blend's DrawerFooter is chrome: it sits
+              outside the scrolling body, so the three controls stay reachable however far
+              down the preview you have read — which is better-layout's rule about never
+              parking an action past a scroll edge. And a labelled button says what it does,
+              where three icons at the top of a reference panel would have to be guessed at
+              or hovered.
 
               Every one of them is SECONDARY. A primary is a recommendation, and this panel
               does not have one to make: you opened it to look something up, and History,
-              Download and Edit are three equally reasonable things to do next. Order still
+              Email Report and Edit are three equally reasonable things to do next. Order still
               carries the weight — Blend's own flex-end puts the trailing button where a
-              dialog's confirm sits, so the two that only read data lead. */}
-            <DrawerFooter direction="right" className="config-sheet-footer">
-              {downloading ? (
-                <>
-                  {/* Cancel as well as the back arrow, because the two are not the same
-                      gesture: the arrow is "I have finished looking at this", the button is
-                      the answer to a dialog's question. Both land back on the detail.
+              dialog's confirm sits, so the two that only read data lead.
 
-                      Download is SECONDARY like everything else here, so what marks it as the
-                      action is its position and its disabled state, not a fill. */}
-                  <ButtonV2
-                    buttonType={ButtonV2Type.SECONDARY}
-                    size={ButtonV2Size.MEDIUM}
-                    text="Cancel"
-                    onClick={closeDownload}
-                  />
-                  <ButtonV2
-                    buttonType={ButtonV2Type.SECONDARY}
-                    size={ButtonV2Size.MEDIUM}
-                    text="Download"
-                    leftSlot={{ slot: <Download size={16} /> }}
-                    disabled={!canDownload(row, recipients)}
-                    onClick={() => {
-                      if (row) download(downloadName(row))
-                      closeDownload()
-                    }}
-                  />
-                </>
-              ) : showHistory ? (
+              The Email report screen has no footer at all. Its two buttons are the end of a
+              form rather than chrome over a reference panel, so they scroll with the
+              questions they answer — see DownloadReportPanel's `actions`. A footer kept for
+              symmetry would still draw its hairline under a screen with nothing left to put
+              above it. */}
+            {!downloading && (
+            <DrawerFooter direction="right" className="config-sheet-footer">
+              {showHistory ? (
                 /* One button, and it is the back arrow's twin — the same reason Cancel sits
-                   beside the arrow on the Download screen. Nothing here is a decision, so
+                   under the cards on the Email report screen. Nothing here is a decision, so
                    there is nothing else for a footer to offer; an empty footer would still
                    draw its hairline and read as a row of controls that failed to render. */
                 <ButtonV2
@@ -530,11 +548,15 @@ export function ConfigDetailSheet({
                 leftSlot={{ slot: <History size={16} /> }}
                 onClick={() => setHistoryFor(row?.id ?? null)}
               />
+              {/* "Email Report" rather than "Download": the panel this opens asks which
+                  days and who gets it, and refuses an email channel with nobody in To
+                  (canDownload). Mail is the glyph the app already uses for the Email
+                  delivery channel, in DELIVERY_CHANNELS and in the panel itself. */}
               <ButtonV2
                 buttonType={ButtonV2Type.SECONDARY}
                 size={ButtonV2Size.MEDIUM}
-                text="Download"
-                leftSlot={{ slot: <Download size={16} /> }}
+                text="Email Report"
+                leftSlot={{ slot: <Mail size={16} /> }}
                 onClick={() => setDownloadFor(row?.id ?? null)}
               />
               <ButtonV2
@@ -553,6 +575,7 @@ export function ConfigDetailSheet({
                 </>
               )}
             </DrawerFooter>
+            )}
           </DrawerContent>
         </DrawerPortal>
       </Drawer>

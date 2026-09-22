@@ -51,6 +51,41 @@ const PERSIST_KEY = 'dialkit:fields-layout'
 /** The action control's path — what DialKit hands `onAction` when the button is pressed. */
 const RESET_ACTION = 'resetToCode'
 
+/** Every version FieldsStep can draw. All of them stay implemented and reachable. */
+const ALL_VERSION_OPTIONS: { value: FieldsLayoutVersion; label: string }[] = [
+  { value: 'v1', label: 'Version 1 — table first' },
+  { value: 'v2', label: 'Version 2 — fields first' },
+  { value: 'v3', label: 'Version 3 — 1200px, fields first' },
+  { value: 'v4', label: 'Version 4 — 1200px, table first' },
+  { value: 'v5', label: 'Version 5 — v4, add button below chips' },
+  { value: 'v6', label: 'Version 6 — v4, redrawn field chips' },
+  { value: 'v7', label: 'Version 7 — v6, plus Group by' },
+]
+
+/**
+ * Which of those the dial actually offers. Add an id back here to resurface it — nothing
+ * else has to change, and the hidden versions are still drawn by FieldsStep.
+ *
+ * It also clamps the stored value below, so a browser holding a now-hidden version from an
+ * earlier session draws the default rather than a layout the panel can no longer show.
+ */
+const VISIBLE_VERSIONS: FieldsLayoutVersion[] = ['v6']
+
+const DEFAULT_VERSION: FieldsLayoutVersion = 'v6'
+
+/**
+ * Display names that override the labels above. v6 is the only version on offer, so it reads
+ * as "Version 1" rather than carrying a number from a list nobody can see. The id stays `v6`
+ * — FieldsStep still switches on it, and the real v1 is a different layout. Delete an entry
+ * to go back to the version's own label.
+ */
+const LABEL_OVERRIDES: Partial<Record<FieldsLayoutVersion, string>> = {
+  v6: 'Version 1',
+}
+
+/** The versions drawn on the wide 1200px measure — see index.css. */
+const WIDE_VERSIONS: FieldsLayoutVersion[] = ['v3', 'v4', 'v5', 'v6', 'v7']
+
 /**
  * The Fields step's dial panel: which layout version to draw, and every vertical gap on the
  * page. Defaults are the tuned values — version 4, with 32px from the table to the fields and
@@ -68,22 +103,16 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
     {
       version: {
         type: 'select',
-        options: [
-          { value: 'v1', label: 'Version 1 — table first' },
-          { value: 'v2', label: 'Version 2 — fields first' },
-          { value: 'v3', label: 'Version 3 — 1200px, fields first' },
-          { value: 'v4', label: 'Version 4 — 1200px, table first' },
-          { value: 'v5', label: 'Version 5 — v4, add button below chips' },
-          { value: 'v6', label: 'Version 6 — v4, redrawn field chips' },
-          { value: 'v7', label: 'Version 7 — v6, plus Group by' },
-        ],
-        default: 'v4',
+        options: ALL_VERSION_OPTIONS.filter((option) => VISIBLE_VERSIONS.includes(option.value)).map(
+          (option) => ({ ...option, label: LABEL_OVERRIDES[option.value] ?? option.label }),
+        ),
+        default: DEFAULT_VERSION,
       },
       spacing: {
-        titleToDescription: [8, 0, 48, 2],
+        titleToDescription: [8, 0, 48, 4],
         headerToContent: [32, 0, 120, 4],
         tableToFields: [32, 0, 96, 4],
-        betweenTagRows: [12, 0, 40, 2],
+        betweenTagRows: [12, 0, 40, 4],
         fieldsToAddColumn: [32, 0, 64, 4],
       },
       [RESET_ACTION]: { type: 'action', label: 'Reset to code defaults' },
@@ -108,24 +137,15 @@ export function FieldsLayoutDials({ children }: { children: (layout: FieldsLayou
   const { values } = dials
   const { spacing } = values
 
+  // Narrowed by hand: DialKit types a select as a plain string, and a stored value the panel
+  // no longer offers should fall back to the default layout.
+  const version = (VISIBLE_VERSIONS as string[]).includes(values.version)
+    ? (values.version as FieldsLayoutVersion)
+    : DEFAULT_VERSION
+
   return children({
-    // Narrowed by hand: DialKit types a select as a plain string, and a stale stored value
-    // from a version that no longer exists should fall back to the default layout.
-    version:
-      values.version === 'v1' ||
-      values.version === 'v2' ||
-      values.version === 'v3' ||
-      values.version === 'v5' ||
-      values.version === 'v6' ||
-      values.version === 'v7'
-        ? values.version
-        : 'v4',
-    wide:
-      values.version === 'v3' ||
-      values.version === 'v4' ||
-      values.version === 'v5' ||
-      values.version === 'v6' ||
-      values.version === 'v7',
+    version,
+    wide: WIDE_VERSIONS.includes(version),
     style: {
       rowGap: `${spacing.headerToContent}px`,
       '--step-heading-gap': `${spacing.titleToDescription}px`,

@@ -9,7 +9,7 @@ import {
 import { X } from 'lucide-react'
 import { PrimitiveText, font } from '../../primitives'
 import {
-  FIELD_TAGS,
+  GROUPABLE_FIELDS,
   newFieldColumn,
   sameField,
   type FieldsAnswers,
@@ -24,11 +24,15 @@ const { colors } = FOUNDATION_THEME
  */
 const REMOVE_TAG_SLOT = { slot: <X size={12} color={colors.gray[0]} /> }
 
-/** The shipped chip shape, matching the Fields step's own default (TAG_SHAPE.current). */
+/**
+ * The chip shape, matching the Fields step's v6 chips (TAG_SHAPE.v6) — squarical, md, and
+ * subtle rather than outlined when off. The two steps draw the same vocabulary, so they are
+ * kept on the same chip; v6 is the only shape the Fields step offers now (fields-layout.tsx).
+ */
 const SHAPE = {
-  size: TagV2Size.SM,
-  subType: TagV2SubType.ROUNDED,
-  offType: TagV2Type.NO_FILL,
+  size: TagV2Size.MD,
+  subType: TagV2SubType.SQUARICAL,
+  offType: TagV2Type.SUBTLE,
 } as const
 
 /**
@@ -121,16 +125,19 @@ export function GroupingStep({
   }
 
   /**
-   * The vocabulary offered here is the same one the Fields step offers: Blend's field list,
-   * plus anything already added as a custom field. Deliberately the whole list rather than
-   * some "groupable" subset — which fields summarise usefully is the user's call, and a
-   * filtered list would be this file quietly holding an opinion it cannot justify.
+   * The dimensions worth grouping by (GROUPABLE_FIELDS), plus anything already added as a
+   * custom field.
+   *
+   * Narrower than the Fields step's vocabulary on purpose, and the reasoning is in
+   * answers.ts: a measure and an identifier are both answerable here and neither produces a
+   * report anyone wanted. Custom fields are still offered in full — their cardinality is not
+   * ours to guess.
    */
   const vocabulary = [
-    ...FIELD_TAGS,
+    ...GROUPABLE_FIELDS,
     ...answers.customFields
       .map(({ title }) => title)
-      .filter((title) => !FIELD_TAGS.some((tag) => sameField(tag, title))),
+      .filter((title) => !GROUPABLE_FIELDS.some((tag) => sameField(tag, title))),
   ]
 
   const picked = groupedTitles

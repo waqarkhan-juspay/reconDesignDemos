@@ -82,7 +82,9 @@ const CONDITION_ITEMS = [
 function ColumnHeaders() {
   return (
     <div className="mb-2 flex items-end gap-5">
-      <div className="w-[26px] shrink-0" />
+      {/* Mirrors RowMarker's gutter below — the two must move together or the headers
+          drift off their tracks. */}
+      <div className="w-6 shrink-0" />
       <div className="flex min-w-0 flex-1 items-end gap-3">
         {['Column', 'Condition', 'Value'].map((label) => (
           <div key={label} className="min-w-0 flex-1">
@@ -111,10 +113,16 @@ function ColumnHeaders() {
   )
 }
 
-/** The gutter that carries the row number, then AND. 26px is the design's own track. */
+/**
+ * The gutter that carries the row number, then AND.
+ *
+ * 24px, not the design's own 26: the 4px grid (rule 10) wins over a 2px difference nobody
+ * can see, and 24 centres the numeral just as well inside the h-8 row. The header spacer in
+ * ColumnHeaders mirrors this width and has to change with it.
+ */
 function RowMarker({ children }: { children?: React.ReactNode }) {
   return (
-    <div className="flex h-8 w-[26px] shrink-0 items-center justify-center">
+    <div className="flex h-8 w-6 shrink-0 items-center justify-center">
       <PrimitiveText
         // `code.lg`, not `code.md`. The design names this step `font/size/code/md`, but the
         // installed scale calls the same 14/18 pair `lg` and its own `md` is 12/18 — so the

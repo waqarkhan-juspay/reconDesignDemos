@@ -300,13 +300,23 @@ html {
  * Absolute against the flow's content pane and not against the scroller inside it, so the
  * rail stays where it is while the questions scroll past.
  *
- * `top` is the step grid's own top padding less the 6px StepperV2 keeps above its first
- * circle, which is what lines that circle up with the centre of the heading beside it. The
- * grid's own padding is `pt-8` (32px) in index.tsx — change one and change both.
+ * `top` is written as the grid position minus Blend's own inset rather than as the 26px that
+ * falls out of it, so both numbers a human sets here are on the 4px grid (rule 10) and the
+ * odd one is visibly derived. StepperV2's root token puts 6px above its first circle
+ * (stepperV2.light.tokens.ts:8-11) with no prop that reaches it, so the rail box starts 6px
+ * high and the circle itself lands on 32 — measured, and centred on the heading beside it.
+ *
+ * `--rail-grid-top` is the step grid's own `pt-8` in index.tsx — change one and change both.
+ *
+ * `left` needs no such correction: the inset is vertical in effect here, and the circle
+ * renders at 28 exactly.
  */
 .flow-rail {
+  --rail-grid-top: 32px;
+  --stepper-inset: 6px;
+
   position: absolute;
-  top: 26px;
+  top: calc(var(--rail-grid-top) - var(--stepper-inset));
   left: 28px;
   z-index: 1;
 }
@@ -383,6 +393,17 @@ html {
   .config-sheet-close {
     transition: none;
   }
+}
+
+/*
+ * The detail sheet's header rule.
+ *
+ * Blend's DrawerHeader brings the padding and the background but has no border token, so the
+ * line that separates it from a body scrolling underneath it is drawn here — the same
+ * --sheet-border the footer uses, so the sheet's two hairlines stay one decision.
+ */
+.config-sheet-header {
+  border-bottom: var(--sheet-border);
 }
 
 /*

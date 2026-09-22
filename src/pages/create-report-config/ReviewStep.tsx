@@ -273,11 +273,8 @@ export function ReviewStep({
           </span>
         }
       >
-        <ConfigSummaryRow
-          label="Configuration name"
-          value={delivery.name.trim() || UNSET}
-          muted={!delivery.name.trim()}
-        />
+        {/* No configuration name row: it is asked after this step, in SubmitConfigModal, so
+            at review time there is nothing to show but a dash. */}
         <ConfigSummaryRow
           label="Category"
           value={setup.category ?? UNSET}
@@ -313,7 +310,7 @@ export function ReviewStep({
           empty={columns.length === 0 ? UNSET : undefined}
         >
           {columns.map((column, index) => (
-            <span key={column.id} className="flex items-center gap-1.5">
+            <span key={column.id} className="flex items-center gap-1">
               {/* Numbered, because this row is about order and nothing else — the same
                   names carry no rank on their own. A grouped column keeps its place and
                   is marked rather than moved: the order is one fact, the grouping is a
