@@ -5,12 +5,10 @@ import {
   AlertV2Type,
   CheckboxV2,
   FOUNDATION_THEME,
-  InputSizeV2,
   SelectorV2Size,
   SingleSelectV2,
   SingleSelectV2Size,
   SingleSelectV2Variant,
-  TextInputV2,
   UnitInput,
   UnitInputSize,
   UnitPosition,
@@ -44,9 +42,17 @@ const { colors } = FOUNDATION_THEME
  * The long menus (Time, Day of the month) show seven rows and scroll the rest. Measured from
  * the rendered MD menu: the search box and its padding take 38px, and each row 33px.
  * Re-measure if the select's size or Blend's menu tokens change.
+ *
+ * Both measurements are Blend's own and neither is on the 4px grid, so the sum (269) is
+ * rounded UP to it. Up, not down: 268 clips the seventh row and defeats the constant, while
+ * 272 costs 3px of empty space below it. Rounding here rather than editing the operands
+ * keeps them honest as measurements for whoever re-measures next.
  */
 const MENU_VISIBLE_ROWS = 7
-const MENU_MAX_HEIGHT = 38 + MENU_VISIBLE_ROWS * 33
+const MENU_SEARCH_HEIGHT = 38
+const MENU_ROW_HEIGHT = 33
+const MENU_MAX_HEIGHT =
+  Math.ceil((MENU_SEARCH_HEIGHT + MENU_VISIBLE_ROWS * MENU_ROW_HEIGHT) / 4) * 4
 
 /**
  * A delivery channel — icon, name, and a checkbox at the far right (node 4418:6400).
@@ -141,7 +147,6 @@ export function DeliveryStep({
   onChange: (next: DeliveryAnswers) => void
 }) {
   const {
-    name,
     frequency,
     timing,
     dayOfWeek,
@@ -166,33 +171,10 @@ export function DeliveryStep({
   const note = scheduleNoteFor(answers)
   const [dismissed, setDismissed] = useState<string | null>(null)
 
-  /**
-   * The step opens on its name alone, and the cadence question arrives once there is one —
-   * the same one-question-at-a-time rhythm as the rest of the flow. Mounting the group is
-   * what plays its `flow-question` entrance, so no animation is written here.
-   *
-   * `|| frequency !== null` keeps it up once it has been answered: clearing the name to
-   * retype it would otherwise pull the cadence (and everything hanging off it) out from
-   * under the user on the empty keystroke, then replay the entrance on the next one.
-   * Before anything below is answered, hiding it again loses nothing.
-   */
-  const showCadence = name.trim() !== '' || frequency !== null
-
   return (
     <>
-      <div className="w-[350px]">
-        <TextInputV2
-          label="Configuration Name"
-          // The step cannot complete without a name (isDeliveryComplete), so the label says so.
-          required
-          placeholder="ex: Daily Recon Report"
-          size={InputSizeV2.MD}
-          value={name}
-          onChange={(event) => onChange({ ...answers, name: event.target.value })}
-        />
-      </div>
-
-      {showCadence && (
+      {/* The cadence is the step's opening question — the configuration name it used to
+          open on is asked at submit now, in SubmitConfigModal. */}
       <QuestionGroup label="How often?">
         {/* The cadence, timing and day/time rows, 16px apart — the same as the gap between
             cards in a row, so the three read as one grid. QuestionGroup's own 8px stays
@@ -225,9 +207,7 @@ export function DeliveryStep({
           ))}
         </OptionRow>
 
-        {/* Revealed once the cadence is Daily, and only then. The name no longer needs
-            checking here — this whole group only renders once it has one — and checking it
-            again would make the row vanish mid-retype while the channels below it stayed.
+        {/* Revealed once the cadence is Daily, and only then.
 
             Weekly and Monthly skip this row entirely rather than showing it with one card
             disabled: "as soon as recon completes" is a daily answer wearing a weekly label,
@@ -354,7 +334,6 @@ export function DeliveryStep({
         )}
         </div>
       </QuestionGroup>
-      )}
 
       {timing !== null && (
         <QuestionGroup label="Delivery channel">

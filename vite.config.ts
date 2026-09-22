@@ -11,6 +11,18 @@ import { defineConfig, type Plugin } from 'vite'
  */
 const AGENTATION_PORT = 4747
 
+/**
+ * TEMPORARY — agentation is hidden for now, matching SHOW_AGENTATION in src/main.tsx.
+ *
+ * The toolbar was already gated off there, but this file was not: the plugin still started
+ * the feedback server on every `npm run dev` and the proxy was still registered, so the
+ * process bound :4747 for a UI nobody could see. While this is false neither happens.
+ *
+ * Nothing is uninstalled and no code is deleted — flip this and SHOW_AGENTATION back
+ * together to bring it all back.
+ */
+const SHOW_AGENTATION = false
+
 /** Where the app talks to it: same origin as the app, so no second port to keep alive. */
 const AGENTATION_BASE = '/agentation'
 
@@ -69,7 +81,7 @@ function agentationServer(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react(), tailwindcss(), agentationServer()],
+  plugins: [react(), tailwindcss(), ...(SHOW_AGENTATION ? [agentationServer()] : [])],
   server: {
     // This project runs on 9000. Vite ignores $PORT by default, so read it
     // explicitly to leave a deliberate override available; strictPort then makes
@@ -77,6 +89,7 @@ export default defineConfig({
     // which previously left the app served from a port nobody was looking at.
     port: Number(process.env.PORT) || 9000,
     strictPort: true,
+    ...(SHOW_AGENTATION ? {
     proxy: {
       [AGENTATION_BASE]: {
         target: `http://localhost:${AGENTATION_PORT}`,
@@ -93,6 +106,7 @@ export default defineConfig({
         },
       },
     },
+    } : {}),
   },
   resolve: {
     alias: {

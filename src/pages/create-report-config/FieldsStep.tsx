@@ -161,11 +161,18 @@ const TAG_SHAPE = {
 } as const
 
 /**
- * Fixed tracks, per the design: 222px per column. Handed to DataTable as both `minWidth` and
- * `maxWidth` — its column styles set `width: auto` between the two (utils.ts getColumnStyles),
- * so pinning both ends is what holds a column at one width.
+ * Fixed tracks: 224px per column. Handed to DataTable as both `minWidth` and `maxWidth` —
+ * its column styles set `width: auto` between the two (utils.ts getColumnStyles), so pinning
+ * both ends is what holds a column at one width.
+ *
+ * 224, not the design's own 222, to land on the 4px grid (rule 10). Everything downstream
+ * derives from this constant — the column def, the scroll-step arithmetic, the letter-row
+ * fallback — and the letter row measures real `<th>` widths at runtime rather than assuming
+ * the number, so the change propagates without desynchronising. It does not tile against
+ * TABLE_MAX_WIDTH either way (1200 / 222 and 1200 / 224 are both fractional), so no
+ * alignment is lost. The only cost is 2px per column of drift from Figma.
  */
-const COLUMN_WIDTH = 222
+const COLUMN_WIDTH = 224
 
 /**
  * How wide the table's viewport is allowed to get, and how narrow it settles at.
@@ -199,6 +206,13 @@ const LETTER_ROW_HEIGHT = 56
  * The whole DataTable at rest: its 2px outer inset, 1px frame, 46px header and the three
  * empty rows with their dividers — measured, since none of it is a prop. The empty state
  * matches it, plus the letter row, so clearing the last column does not yank the tags up.
+ *
+ * Deliberately left off the 4px grid. This is not a gap anyone chose; it is the sum of
+ * Blend's own internals (a 46px header, a 1px frame) and its whole job is to *equal* what
+ * the real table renders. Rounding it to 212 would buy a grid-compliant number and pay for
+ * it with a visible 2px jump every time the last column leaves — the exact thing the
+ * constant exists to prevent. Contrast MENU_MAX_HEIGHT in DeliveryStep, which is a cap
+ * rather than a match, so rounding it up costs nothing but slack.
  */
 const TABLE_HEIGHT = 210
 
@@ -524,7 +538,7 @@ export function FieldsStep({
    * same state the edge fades read, so the footer appears precisely when a fade does.
    */
   const tableFooter = SHOW_TABLE_SCROLL_FOOTER && (clipped.left || clipped.right) && (
-    <div className="flex items-center justify-end gap-2 px-0.5">
+    <div className="flex items-center justify-end gap-2 px-1">
       <ButtonV2
         buttonType={ButtonV2Type.SECONDARY}
         size={ButtonV2Size.SMALL}

@@ -109,7 +109,6 @@ export const DELIVERY_CHANNELS: { id: string; icon: LucideIcon | string }[] = [
 ]
 
 export type DeliveryAnswers = {
-  name: string
   frequency: string | null
   timing: string | null
   /** Only asked, and only kept, while the cadence is Weekly. */
@@ -134,7 +133,6 @@ export type DeliveryAnswers = {
 export const isEmailAddress = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
 
 export const EMPTY_DELIVERY: DeliveryAnswers = {
-  name: '',
   frequency: null,
   timing: null,
   dayOfWeek: null,
@@ -149,7 +147,6 @@ export const EMPTY_DELIVERY: DeliveryAnswers = {
 }
 
 export const isDeliveryComplete = ({
-  name,
   frequency,
   timing,
   dayOfWeek,
@@ -159,7 +156,6 @@ export const isDeliveryComplete = ({
   emailTo,
   slackChannel,
 }: DeliveryAnswers) =>
-  name.trim() !== '' &&
   frequency !== null &&
   timing !== null &&
   (timing !== SPECIFIED_TIME || time !== '') &&
@@ -356,6 +352,37 @@ export const IMPORTANT_FIELDS = [
   'Total Transactions',
   'Total Amount',
   'Failure Count',
+] as const satisfies readonly (typeof FIELD_TAGS)[number][]
+
+/**
+ * The fields the Grouping step offers, out of the whole vocabulary above.
+ *
+ * A subset because grouping is not the same question as "which columns do you want". A
+ * GROUP BY needs a *dimension* — something a row can be bucketed by — and most of FIELD_TAGS
+ * is not one:
+ *
+ * - Measures are what you aggregate, not what you group by. Grouping by Txn Amount asks for
+ *   one row per distinct rupee value. That rules out Credit, Debit, Fee, Tax, Txn Amount,
+ *   Settlement Amount and the four report-level aggregates (IMPORTANT_FIELDS).
+ * - Identifiers are unique per record, so grouping by one returns the ungrouped report with
+ *   extra steps. That rules out ID, Recon Id, Payment Entity Txn Id and the free-text Label.
+ *
+ * What survives is the eight below: two entities, the recon status pair, two dates and the
+ * two categorical facts about a transaction. Custom fields are still offered alongside these
+ * — GroupingStep appends them — because nothing here can know a custom column's cardinality.
+ *
+ * Same `satisfies` guard as IMPORTANT_FIELDS: renaming a tag without renaming it here would
+ * otherwise drop a field out of the step silently.
+ */
+export const GROUPABLE_FIELDS = [
+  'Gateway',
+  'Merchant Id',
+  'Recon Status',
+  'Recon Sub Status',
+  'Settlement Date',
+  'Txn Currency',
+  'Txn Date',
+  'Txn Type',
 ] as const satisfies readonly (typeof FIELD_TAGS)[number][]
 
 /**
