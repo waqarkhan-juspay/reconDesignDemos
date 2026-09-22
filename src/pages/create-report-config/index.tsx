@@ -238,11 +238,33 @@ function TopbarContent({ onExit }: { onExit: () => void }) {
 function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   const navigate = useNavigate()
 
+  const [setup, setSetup] = useState<SetupAnswers>(EMPTY_SETUP)
+
   /**
-   * The steps this flow actually walks. Version 1 is the shipped five; version 2 keeps
-   * Grouping, which ALL_STEPS carries in its natural position (flow-layout.tsx).
+   * Whether the report groups its records at all — Setup's third question, which offers
+   * "Grouped records" and "Transaction level records" (REPORT_FORMATS in report-config.ts).
+   *
+   * This is the flow's own branch, and it is read in three places from here: whether Grouping
+   * is a step, whether a column can be given an aggregation, and — through `changeSetup`
+   * below — whether a grouping that was already chosen survives.
    */
-  const STEPS = flowVersion === 'v2' ? ALL_STEPS : ALL_STEPS.filter(({ id }) => id !== 'grouping')
+  const groupsRecords = setup.format === 'Aggregated'
+
+  /**
+   * The steps this flow actually walks. Version 1 is the shipped five; version 2 adds
+   * Grouping, which ALL_STEPS carries in its natural position (flow-layout.tsx) — but only
+   * for a report that is grouped.
+   *
+   * Conditional rather than always present, because Setup has already asked. A step offering
+   * to group a transaction-level report is asking a question whose answer the user gave two
+   * steps ago, and the honest thing to do with an answer is act on it rather than ask again
+   * with a Skip button attached. `format` is null until Setup is answered, so the flow opens
+   * on the five and grows the sixth the moment "Grouped records" is picked.
+   */
+  const STEPS =
+    flowVersion === 'v2' && groupsRecords
+      ? ALL_STEPS
+      : ALL_STEPS.filter(({ id }) => id !== 'grouping')
 
   /**
    * Which step is showing, by id rather than index: switching flow version changes what
@@ -263,13 +285,32 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * commit it, and Setup and Delivery are still untouched behind you.
    */
   const [confirmed, setConfirmed] = useState<ReadonlySet<StepId>>(() => new Set())
-  const [setup, setSetup] = useState<SetupAnswers>(EMPTY_SETUP)
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
   const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
   const [confirmingExit, setConfirmingExit] = useState(false)
   /** The Fields step's "Add custom column" modal — its button sits in the heading row below. */
   const [addingColumn, setAddingColumn] = useState(false)
+
+  /**
+   * Setup's answers, plus the one thing answering Setup can invalidate.
+   *
+   * Turning a report back to transaction level takes the grouping with it. A `groupBy` the
+   * flow no longer has a step for would keep steering the Fields step from off-screen — the
+   * purple chips, the "Grouped by" row, the aggregations — with nothing on the page left to
+   * say why, and it would ride out to Review and into the delivered config.
+   *
+   * The *columns* those levels created stay, which is the rule GroupingStep already states
+   * for unpicking a single badge: grouping by a field guarantees it is a column; ungrouping
+   * says nothing about whether it should stay one. This is that rule applied to all of them
+   * at once, so the two cannot disagree.
+   */
+  const changeSetup = (next: SetupAnswers) => {
+    setSetup(next)
+    if (next.format !== 'Aggregated') {
+      setFields((current) => (current.groupBy?.length ? { ...current, groupBy: [] } : current))
+    }
+  }
 
   /**
    * Both exits land on the Configurator. There is no draft store yet, so "Save as draft"
@@ -407,13 +448,14 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
       </div>
       </div>
 
-      {current.id === 'setup' && <SetupStep answers={setup} onChange={setSetup} />}
+      {current.id === 'setup' && <SetupStep answers={setup} onChange={changeSetup} />}
       {current.id === 'delivery' && <DeliveryStep answers={delivery} onChange={setDelivery} />}
       {current.id === 'grouping' && <GroupingStep answers={fields} onChange={setFields} />}
       {current.id === 'fields' && (
         <FieldsStep
           answers={fields}
           onChange={setFields}
+          aggregated={groupsRecords}
           version={layout?.version}
           addingColumn={addingColumn}
           onAddingColumnChange={setAddingColumn}

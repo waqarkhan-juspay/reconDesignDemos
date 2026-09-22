@@ -5,11 +5,7 @@ import {
   ColumnType,
   DataTable,
   InputSizeV2,
-  TagV2,
   TagV2Color,
-  TagV2Size,
-  TagV2SubType,
-  TagV2Type,
   TextAreaV2,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
@@ -26,6 +22,8 @@ import {
 import { REPORT_FORMATS } from '../../report-config'
 import {
   activeGroupBy,
+  fieldOf,
+  sameField,
   LAST_DAY_OF_MONTH,
   MONTHLY,
   SPECIFIED_TIME,
@@ -254,25 +252,11 @@ export function ReviewStep({
         />
       </div>
 
-      <ConfigSummaryCard
-        title="Configuration"
-        keyColumn="240px"
-        // The count sits on the header row, which is where the one number worth knowing
-        // before reading anything belongs.
-        action={
-          // The wrapper is doing real work: TagV2 omits className (rule 2), and at its
-          // natural basis in a flex row the label breaks after every word.
-          <span className="whitespace-nowrap">
-            <TagV2
-              text={`${columns.length} ${columns.length === 1 ? 'column' : 'columns'} selected`}
-              size={TagV2Size.SM}
-              subType={TagV2SubType.SQUARICAL}
-              color={TagV2Color.PRIMARY}
-              type={TagV2Type.SUBTLE}
-            />
-          </span>
-        }
-      >
+      {/* No header action. The column count used to sit up here as a tag, which said the
+          same number as the "Columns · N" label further down — and said it first, in the one
+          slot on the card that should carry something the rows below do not. A count is a
+          fact about one row, so it lives on that row. */}
+      <ConfigSummaryCard title="Configuration" keyColumn="240px">
         {/* No configuration name row: it is asked after this step, in SubmitConfigModal, so
             at review time there is nothing to show but a dash. */}
         <ConfigSummaryRow
@@ -309,29 +293,38 @@ export function ReviewStep({
           label={`Columns · ${columns.length}`}
           empty={columns.length === 0 ? UNSET : undefined}
         >
-          {columns.map((column, index) => (
-            <span key={column.id} className="flex items-center gap-1">
-              {/* Numbered, because this row is about order and nothing else — the same
-                  names carry no rank on their own. A grouped column keeps its place and
-                  is marked rather than moved: the order is one fact, the grouping is a
-                  second fact about one of them. */}
-              {summaryChip(`${index + 1} · ${column.title}`)}
-              {groupBy.includes(column.id) && (
-                <TagV2
-                  text={
-                    groupBy.length > 1
-                      ? `Group by ${groupBy.indexOf(column.id) + 1}`
-                      : 'Group by'
-                  }
-                  size={TagV2Size.XS}
-                  subType={TagV2SubType.SQUARICAL}
-                  color={TagV2Color.PRIMARY}
-                  type={TagV2Type.SUBTLE}
-                  title={`Grouping level ${groupBy.indexOf(column.id) + 1} of ${groupBy.length}`}
-                />
-              )}
-            </span>
-          ))}
+          {columns.map((column, index) => {
+            /*
+             * Numbered, because this row is about order and nothing else — the same names
+             * carry no rank on their own. A grouped column keeps its place and is marked
+             * rather than moved: the order is one fact, the grouping is a second fact about
+             * one of them.
+             *
+             * The grouping is the chip's *colour*, not more words in it. Purple is already
+             * what a grouped field wears on the Grouping step and in the column organiser,
+             * so by the time a reader reaches this card they have met it twice; spelling it
+             * out a third time costs the row a third of its width and tells them nothing the
+             * colour has not. The level, which the colour cannot carry, is in the tooltip.
+             *
+             * Matched by field, because `groupBy` holds fields rather than column ids
+             * (answers.ts), so a column that was removed and re-added still reads as the
+             * level the user set on the Grouping step.
+             */
+            const level = groupBy.findIndex((field) => sameField(field, fieldOf(column)))
+            return summaryChip(
+              `${index + 1} · ${column.title}`,
+              column.id,
+              level === -1
+                ? undefined
+                : {
+                    color: TagV2Color.PURPLE,
+                    title:
+                      groupBy.length > 1
+                        ? `Grouping level ${level + 1} of ${groupBy.length}`
+                        : 'Grouped by',
+                  },
+            )
+          })}
         </ConfigSummaryChipRow>
       </ConfigSummaryCard>
     </>

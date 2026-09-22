@@ -523,3 +523,148 @@ html {
 .config-summary-row[data-muted] [data-element='value'] p {
   color: var(--summary-muted);
 }
+
+/*
+ * ── The collapsed sidebar rail (src/layout/AppShell.tsx) ────────────────────────────────
+ *
+ * Four of the nav's sections — Offers, Mandates, Smart Convert, Monitoring — are labels with
+ * no items yet (src/layout/navigation.tsx). Expanded that reads correctly: a heading and a
+ * chevron with nothing under it. Collapsed it does not, because the icon-only rail drops the
+ * label and draws a divider instead (Section.tsx:222-234, guarded only on `iconOnlyMode &&
+ * sectionIndex > 0`), leaving four hairlines stacked below the wrench with nothing between
+ * them.
+ *
+ * Hidden here rather than filtered out of `data`, because collapsing does not swap the data:
+ * SidebarV2 renders BOTH panels at once while collapsed — the rail, and a zero-width
+ * hover-peek panel with `iconOnlyMode={false}` (SidebarV2.tsx:345-414) — off the same
+ * `data` prop. Dropping the sections there would empty the peek too, which is the one place
+ * they are still meant to be read.
+ *
+ * Both halves of the selector are load-bearing. `> [role='separator']` is what says
+ * *icon-only*: it is the one thing Section renders only in that mode, so the expanded panel
+ * and the peek are never matched — including when a section is opened there and its empty
+ * <ul> appears. `> ul:empty` is what says *no items*: Reconciliation's divider above the
+ * wrench is a real one and stays.
+ *
+ * `display: none` rather than `height: 0`, so the rail's own 8px flex gap goes with it.
+ */
+[data-element='sidebar-section']:has(> [role='separator']):has(> ul:empty) {
+  display: none;
+}
+
+/*
+ * ── The column organiser (src/pages/create-report-config/ColumnOrganiser.tsx) ───────────
+ *
+ * Four rules. Each is here because Blend offers no prop for what it does, or because the
+ * state it answers to is a CSS state rather than one React should be holding.
+ */
+
+/*
+ * Palette chips run the full width of their column.
+ *
+ * TagV2 hardcodes `width: fit-content` and `justify-content: center` (TagV2.tsx:108-111) and
+ * strips `className` and `style` at runtime as well as in its type (prop-helpers.ts:1-10), so
+ * there is no prop and no escape hatch on the component. The alternative was composing the
+ * chip from Block + PrimitiveText, which would hand-roll a control Blend already draws — its
+ * tokens, its focus ring, its Enter/Space handling — for the sake of one CSS property.
+ *
+ * `[data-tag]` is TagV2's own attribute on the button it renders, not a class name, so this
+ * is the same structural hook the rules above use. Scoped to the palette: the Fields step's
+ * v1 chip row is content-width and stays that way, and the Grouping step's column takes a
+ * floor of its own below rather than this rule's full width.
+ */
+.organiser-palette [data-tag] {
+  width: 100%;
+  justify-content: space-between;
+}
+
+/*
+ * The Grouping step's chips: a vertical list with one width floor.
+ *
+ * Same hook and the same reason as the rule above — TagV2 takes neither `className` nor
+ * `style`, so a width the component does not offer has to arrive through its own
+ * `[data-tag]`. `min-width` rather than `width`: the floor is sized to the longest field the
+ * step offers, and a custom field can be named anything, so a chip wider than the floor is a
+ * chip that fits its name rather than one that broke the list.
+ *
+ * `space-between` holds the label against the left edge and the ✕ against the right, so the
+ * column reads as a list of rows rather than as labels floating in the middle of their boxes
+ * — TagV2 centres them otherwise. An unpicked chip has no right slot, where it behaves as
+ * flex-start.
+ */
+.grouping-palette [data-tag] {
+  min-width: var(--grouping-chip-min);
+  justify-content: space-between;
+}
+
+/*
+ * The rename pencil, on hover.
+ *
+ * Kept in CSS rather than as a `hovered` state in OrganiserRow: a row that re-rendered on
+ * every pointer enter and leave would re-render the whole list as the pointer crossed it,
+ * and the state has no meaning outside the styling it drives.
+ *
+ * `:focus-within` is the half that makes it reachable — the pencil is a real button in tab
+ * order, and one that is invisible until a mouse arrives is one a keyboard can focus and not
+ * see. Its own `:focus-visible` is covered by the same rule.
+ */
+.organiser-edit {
+  opacity: 0;
+  transition: opacity var(--organiser-micro) var(--organiser-ease);
+}
+
+.organiser-row:hover .organiser-edit,
+.organiser-row:focus-within .organiser-edit {
+  opacity: 1;
+}
+
+/*
+ * The list is one frame, not a stack of cards: every row draws its own 1px border and pulls
+ * the next one up over it (OrganiserRow's `marginBottom: -1`), so adjacent edges collapse
+ * into a single hairline. These two give the frame its corners — the radius is on the rows
+ * themselves because the container cannot clip them without also clipping the lift below.
+ */
+.organiser-list > [data-organiser-row]:first-child {
+  border-start-start-radius: inherit;
+  border-start-end-radius: inherit;
+}
+
+.organiser-list > [data-organiser-row]:last-child {
+  border-end-start-radius: inherit;
+  border-end-end-radius: inherit;
+  /* The last row has nothing below it to collapse into, so it keeps its own bottom edge. */
+  margin-bottom: 0;
+}
+
+/*
+ * A row being dragged.
+ *
+ * Above its neighbours so it passes over them rather than between them, and lifted just
+ * enough to read as picked up — 0.06 alpha, under DESIGN.md's 0.07 ceiling (rule 10). No
+ * transition on the transform: the row is following a pointer, and easing it would mean
+ * drawing it where the pointer was rather than where it is.
+ */
+.organiser-row[data-dragging] {
+  z-index: 1;
+  box-shadow: 0 6px 16px rgb(14 18 27 / 0.06);
+  cursor: grabbing;
+}
+
+/*
+ * The action glyphs sit in bare hit areas (Preflight has already stripped the buttons), so
+ * hover is the only thing telling you the 36px square is a target and not padding.
+ */
+.organiser-action {
+  transition: background-color var(--organiser-micro) var(--organiser-ease);
+}
+
+.organiser-action:hover {
+  background-color: var(--organiser-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .organiser-edit,
+  .organiser-action {
+    transition: none;
+  }
+}

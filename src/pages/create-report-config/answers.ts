@@ -243,8 +243,31 @@ export const scheduleNoteFor = ({
  * Each column keeps an id of its own because the title is editable and duplicable: keying
  * React off the title would make two columns called "<Title>" the same column.
  */
-/** `defaultValue` is set only on custom columns — the value every row carries in it. */
-export type FieldColumn = { id: string; title: string; defaultValue?: string }
+export type FieldColumn = {
+  id: string
+  title: string
+  /** Set only on custom columns — the value every row carries in it. */
+  defaultValue?: string
+  /**
+   * The name this column was created under, kept so a rename does not erase where the column
+   * came from. It is what the organiser reads back as `represents "…"`, and — more
+   * importantly — what decides which field chip is lit (`isFieldSelected`).
+   *
+   * Without it, renaming a column to the name of another field moved the column onto that
+   * field: the chip you picked went dark and a chip you never touched lit up. A title is a
+   * label, not an identity.
+   *
+   * Absent on a column made before a title was chosen (see `newFieldColumn`), which is why
+   * every read of it falls back to the title.
+   */
+  source?: string
+  /**
+   * How this column is rolled up once the report groups (see `groupBy`). Absent means COUNT
+   * — stored only once changed, so an answers object carries the user's decisions rather
+   * than a default written 26 times. Read it through `aggregationOf`.
+   */
+  aggregate?: Aggregation
+}
 
 /** The default title a freshly inserted column carries until it is renamed. */
 export const NEW_COLUMN_TITLE = '<Title>'
@@ -254,7 +277,26 @@ export const newFieldColumn = (title = NEW_COLUMN_TITLE, defaultValue?: string):
   id: `field-${(nextColumnId += 1)}`,
   title,
   ...(defaultValue ? { defaultValue } : {}),
+  // Not set for the placeholder title: a column inserted blank has no field behind it yet,
+  // and `<Title> represents "<Title>"` is not a sentence about anything.
+  ...(title === NEW_COLUMN_TITLE ? {} : { source: title }),
 })
+
+/**
+ * Spreadsheet labels — A…Z, then AA, AB, so a 27th column still reads sensibly.
+ *
+ * Derived from position, never stored: the letters are the slots, not the columns. Moving a
+ * column moves it between letters; A stays leftmost whatever ends up in it.
+ */
+export function columnLetter(index: number) {
+  let remaining = index
+  let label = ''
+  do {
+    label = String.fromCharCode(65 + (remaining % 26)) + label
+    remaining = Math.floor(remaining / 26) - 1
+  } while (remaining >= 0)
+  return label
+}
 
 /** A field made with "Add custom column" — kept after its column leaves the table. */
 export type CustomField = { title: string; defaultValue?: string }
@@ -268,12 +310,18 @@ export type FieldsAnswers = {
   columns: FieldColumn[]
   customFields: CustomField[]
   /**
-   * Column ids the report groups by, outermost first — see GroupByBar. Order is the whole
-   * point: "Gateway, then Txn Type" is a different report from "Txn Type, then Gateway", so
-   * this is a list and not a set.
+   * The fields the report groups by, outermost first — see GroupingStep and GroupByBar.
+   * Order is the whole point: "Gateway, then Txn Type" is a different report from "Txn Type,
+   * then Gateway", so this is a list and not a set.
    *
-   * Optional because it arrived after the other two and every version but 7 ignores it. Ids
-   * rather than titles, so renaming a column in the table header does not orphan its grouping.
+   * **Fields, not column ids.** Ids were the first answer, chosen so that renaming a column
+   * could not orphan its grouping — but they broke on the move a user actually makes: take a
+   * grouped field's chip off in the organiser and put it back, and the column that returns is
+   * a new column with a new id, so the grouping stayed pointing at the one that left and the
+   * field came back ungrouped. A field name survives that, and survives the rename too, since
+   * `fieldOf` reads a column's `source` rather than its editable title.
+   *
+   * Optional because it arrived after the other two and every version but 7 and 8 ignores it.
    */
   groupBy?: string[]
 }
@@ -305,8 +353,23 @@ export const EMPTY_FIELDS: FieldsAnswers = {
  * what "Add important columns" selects (IMPORTANT_FIELDS below). They sit in the list in the
  * same alphabetical order as the rest so the vocabulary reads as one set, and they carry
  * samples of their own in field-samples.ts so a preview of them is not a row of dashes.
+ *
+ * Three more are ours as well, and each fills a kind the node's list leaves unrepresented:
+ *
+ * - **Bank Reference Number** — the bank's own reference for the credit, which is the thing
+ *   a reconciliation is matched *on*. Every other identifier here is from the payment side.
+ * - **Payment Method** — how the money was taken. The vocabulary could say which gateway
+ *   carried a transaction but not which instrument, which is the cut most recon questions
+ *   actually start from.
+ * - **Refund Amount** — a vocabulary whose Txn Type has a REFUND value but no column saying
+ *   how much came back is missing a column its own data implies.
+ *
+ * Same treatment as the four above: alphabetical, with samples in field-samples.ts. Between
+ * them they land in three different classifications below — an identifier, a dimension
+ * (GROUPABLE_FIELDS) and a measure (MEASURE_FIELDS) — so each one is wired, not just listed.
  */
 export const FIELD_TAGS = [
+  'Bank Reference Number',
   'Credit',
   'Debit',
   'Failure Count',
@@ -316,12 +379,14 @@ export const FIELD_TAGS = [
   'Label',
   'Merchant Id',
   'Payment Entity Txn Id',
+  'Payment Method',
   'Recon Id',
   'Recon Secondary Status',
   'Recon Secondary Sub Status',
   'Recon Status',
   'Recon Sub Status',
   'Reconciled At',
+  'Refund Amount',
   'Settlement Amount',
   'Settlement Currency',
   'Settlement Date',
@@ -362,14 +427,16 @@ export const IMPORTANT_FIELDS = [
  * is not one:
  *
  * - Measures are what you aggregate, not what you group by. Grouping by Txn Amount asks for
- *   one row per distinct rupee value. That rules out Credit, Debit, Fee, Tax, Txn Amount,
- *   Settlement Amount and the four report-level aggregates (IMPORTANT_FIELDS).
+ *   one row per distinct rupee value. That rules out Credit, Debit, Fee, Refund Amount, Tax,
+ *   Txn Amount, Settlement Amount and the four report-level aggregates (IMPORTANT_FIELDS).
  * - Identifiers are unique per record, so grouping by one returns the ungrouped report with
- *   extra steps. That rules out ID, Recon Id, Payment Entity Txn Id and the free-text Label.
+ *   extra steps. That rules out ID, Recon Id, Payment Entity Txn Id, Bank Reference Number
+ *   and the free-text Label.
  *
- * What survives is the eight below: two entities, the recon status pair, two dates and the
- * two categorical facts about a transaction. Custom fields are still offered alongside these
- * — GroupingStep appends them — because nothing here can know a custom column's cardinality.
+ * What survives is the nine below: two entities, the recon status pair, two dates and the
+ * three categorical facts about a transaction — its currency, its type, and the instrument it
+ * was taken with. Custom fields are still offered alongside these — GroupingStep appends them
+ * — because nothing here can know a custom column's cardinality.
  *
  * Same `satisfies` guard as IMPORTANT_FIELDS: renaming a tag without renaming it here would
  * otherwise drop a field out of the step silently.
@@ -377,6 +444,7 @@ export const IMPORTANT_FIELDS = [
 export const GROUPABLE_FIELDS = [
   'Gateway',
   'Merchant Id',
+  'Payment Method',
   'Recon Status',
   'Recon Sub Status',
   'Settlement Date',
@@ -386,15 +454,95 @@ export const GROUPABLE_FIELDS = [
 ] as const satisfies readonly (typeof FIELD_TAGS)[number][]
 
 /**
- * A tag is lit when a column carries its name — derived, never stored.
+ * How a column is rolled up once the report groups by something else.
+ *
+ * The words are Blend's own — `PivotAggregationType` (DataTable/types.d.ts:34-42) spells them
+ * SUM / COUNT / AVERAGE / MIN / MAX — so a column organiser and a pivot table would not offer
+ * the same idea under two names. MEAN and MEDIAN are left out: MEAN is AVERAGE again, and
+ * MEDIAN is not a thing any of these fields is asked for.
+ */
+export const AGGREGATIONS = ['COUNT', 'SUM', 'AVERAGE', 'MIN', 'MAX'] as const
+export type Aggregation = (typeof AGGREGATIONS)[number]
+
+/**
+ * COUNT, for everything. It is the one aggregation that is defined for every field — a count
+ * of rows in the bucket asks nothing of what is in them — so it is the only honest default,
+ * and it is what an unset `FieldColumn.aggregate` means.
+ */
+export const DEFAULT_AGGREGATION: Aggregation = 'COUNT'
+
+export const aggregationOf = ({ aggregate }: FieldColumn) => aggregate ?? DEFAULT_AGGREGATION
+
+/**
+ * The first classification of the vocabulary by *type* rather than by role.
+ *
+ * `GROUPABLE_FIELDS` above is close but answers a different question — it says which fields
+ * are dimensions, lumping measures and identifiers together in its complement. Deciding what
+ * a field can be aggregated by needs the two apart: SUM over Txn Amount is the point of the
+ * control, SUM over Recon Id is nonsense.
+ *
+ * Three kinds, and everything not named here is categorical:
+ *
+ * - **measures** — quantities. Everything applies.
+ * - **rates** — Success Rate, alone. A percentage can be averaged and bounded but not summed:
+ *   adding two success rates gives a number that is not a rate. One field is worth its own
+ *   kind precisely because the wrong answer here (offering SUM) is the kind of thing a report
+ *   would quietly ship with.
+ * - **dates** — earliest and latest are real questions; a total of dates is not.
+ *
+ * Same `satisfies` guard the lists above carry: renaming a tag without renaming it here would
+ * silently drop a field back to COUNT-only.
+ */
+const MEASURE_FIELDS = [
+  'Credit',
+  'Debit',
+  'Failure Count',
+  'Fee',
+  'Refund Amount',
+  'Settlement Amount',
+  'Tax',
+  'Total Amount',
+  'Total Transactions',
+  'Txn Amount',
+] as const satisfies readonly (typeof FIELD_TAGS)[number][]
+
+const RATE_FIELDS = ['Success Rate'] as const satisfies readonly (typeof FIELD_TAGS)[number][]
+
+const DATE_FIELDS = [
+  'Reconciled At',
+  'Settlement Date',
+  'Txn Date',
+] as const satisfies readonly (typeof FIELD_TAGS)[number][]
+
+/**
+ * What the aggregation control offers for a field, in the order it lists them.
+ *
+ * COUNT leads every list because it is the default and the one that always applies. A custom
+ * column falls through to COUNT alone — nothing here knows what a user's own field holds, and
+ * offering SUM over something that turns out to be text is worse than offering less.
+ */
+export function aggregationsFor(field: string): readonly Aggregation[] {
+  const named = (fields: readonly string[]) => fields.some((name) => sameField(name, field))
+  if (named(MEASURE_FIELDS)) return AGGREGATIONS
+  if (named(RATE_FIELDS)) return ['COUNT', 'AVERAGE', 'MIN', 'MAX']
+  if (named(DATE_FIELDS)) return ['COUNT', 'MIN', 'MAX']
+  return ['COUNT']
+}
+
+/**
+ * A tag is lit when a column came from it — derived, never stored.
  *
  * Two states that could disagree is the whole failure mode here: a tag remembering it was
- * clicked after its column was deleted from the table, or renamed out from under it. There
- * is one source of truth, `columns`, and the tags are a view of it.
+ * clicked after its column was deleted from the table. There is one source of truth,
+ * `columns`, and the tags are a view of it.
  *
- * Case- and space-insensitive because column titles are free text the user can edit: having
- * renamed a column to "merchant id", they mean the Merchant Id field, and a tag that stays
- * dark is just wrong.
+ * Matched on `source` — the name the column was created under — and not on its title, which
+ * the user can edit. Renaming a column to "merchant id" used to *move* it onto the Merchant
+ * Id field: the chip you actually picked went dark and one you never touched lit up, and the
+ * column's origin was gone. A title is a label; `source` is the identity.
+ *
+ * Still case- and space-insensitive, because `source` starts life as a title and custom
+ * columns reach here through the title fallback.
  */
 const normalise = (value: string) => value.trim().toLowerCase()
 
@@ -405,8 +553,18 @@ const normalise = (value: string) => value.trim().toLowerCase()
  */
 export const sameField = (a: string, b: string) => normalise(a) === normalise(b)
 
+/** The field a column stands for: where it came from, or its title if it came from nowhere. */
+export const fieldOf = ({ source, title }: FieldColumn) => source ?? title
+
 export const isFieldSelected = (columns: FieldColumn[], tag: string) =>
-  columns.some(({ title }) => normalise(title) === normalise(tag))
+  columns.some((column) => sameField(fieldOf(column), tag))
+
+/**
+ * Every column standing for a field — plural, because a column can be duplicated. Unpicking
+ * a chip has to take all of them, or the chip would go dark with copies still in the report.
+ */
+export const withoutField = (columns: FieldColumn[], tag: string) =>
+  columns.filter((column) => !sameField(fieldOf(column), tag))
 
 /**
  * Whether a column's title names a field in the vocabulary — i.e. whether a tag already
@@ -511,15 +669,27 @@ export const valuesFor = (column: string | null) =>
   column === null ? [] : (VALUE_SUGGESTIONS[column] ?? [])
 
 /**
- * The groupings that still stand, in order — derived on every read rather than pruned on
- * write. A column can leave the table from four places (its chip, its ✕, Clear all, a
- * rename), and a stored list kept in sync from all four is a list that eventually is not.
+ * The groupings the report can actually perform: the user's list, minus any field the table
+ * no longer carries a column for.
+ *
+ * Derived on every read rather than pruned on write. A column can leave the table from five
+ * places (its chip, its ✕, Clear all, a rename, "Transaction level records" on Setup), and a
+ * stored list kept in sync from all five is a list that eventually is not.
+ *
+ * Pruned for *output* only, and the distinction matters: a field with no column is still the
+ * user's answer on the Grouping step and comes back the moment its column does. So anything
+ * describing what the delivered file will look like reads this, and anything describing what
+ * the user chose reads `groupBy` — see `isGroupedField` and `hasAnyGrouping`.
  */
 export const activeGroupBy = ({ columns, groupBy }: FieldsAnswers) =>
-  (groupBy ?? []).filter((id) => columns.some((column) => column.id === id))
+  (groupBy ?? []).filter((field) => columns.some((column) => sameField(fieldOf(column), field)))
 
-/** Whether any grouping level is set — the Grouping step's equivalent of `hasAnyFilter`. */
-export const hasAnyGrouping = (answers: FieldsAnswers) => activeGroupBy(answers).length > 0
+/** Whether the user has grouped by anything — their answer, column or no column. */
+export const hasAnyGrouping = ({ groupBy }: FieldsAnswers) => (groupBy ?? []).length > 0
+
+/** Whether the report groups by this field. Case-insensitive, like every other field match. */
+export const isGroupedField = ({ groupBy }: FieldsAnswers, field: string) =>
+  (groupBy ?? []).some((other) => sameField(other, field))
 
 /** A column with a blank name would produce a nameless header in the report. */
 export const isFieldsComplete = ({ columns }: FieldsAnswers) =>
