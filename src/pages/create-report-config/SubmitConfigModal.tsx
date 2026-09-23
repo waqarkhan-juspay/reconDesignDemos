@@ -105,17 +105,22 @@ export function SubmitConfigModal({
    * overwrites what the user typed.
    */
   const [typed, setTyped] = useState<string | null>(null)
-  const [dateFormat, setDateFormat] = useState(DATE_FORMATS[0].value)
+  /**
+   * `''` until an option is picked. Every field in this modal opens empty on its placeholder —
+   * a pre-picked format is an answer nobody gave, and it would ship unread.
+   */
+  const [dateFormat, setDateFormat] = useState('')
 
   const fileName = typed ?? slugify(configName)
-  // Both names are required: the config cannot be saved nameless, and a blank slug would
-  // deliver a file called nothing at all.
-  const canSubmit = configName.trim() !== '' && fileName.trim() !== ''
+  // All three are required: the config cannot be saved nameless, a blank slug would deliver
+  // a file called nothing at all, and "No date in the file name" is an option to pick rather
+  // than what an unanswered select means.
+  const canSubmit = configName.trim() !== '' && fileName.trim() !== '' && dateFormat !== ''
 
   const close = () => {
     setConfigName('')
     setTyped(null)
-    setDateFormat(DATE_FORMATS[0].value)
+    setDateFormat('')
     onClose()
   }
 
@@ -126,10 +131,15 @@ export function SubmitConfigModal({
     close()
   }
 
-  /** What a delivered file will actually be called — the field and the format, resolved. */
-  const preview = `${fileName.trim() || 'report'}${
-    dateFormat === 'none' ? '' : `_${EXAMPLES[dateFormat] ?? ''}`
-  }.csv`
+  /**
+   * What a delivered file will actually be called — the field and the format, resolved. `null`
+   * until both are answered: half a filename (`report_.csv`, or a name missing the date it
+   * will carry) would preview a file that will never be delivered.
+   */
+  const preview =
+    fileName.trim() !== '' && dateFormat !== ''
+      ? `${fileName.trim()}${dateFormat === 'none' ? '' : `_${EXAMPLES[dateFormat] ?? ''}`}.csv`
+      : null
 
   return (
     <ModalV2
@@ -202,12 +212,8 @@ export function SubmitConfigModal({
             // saying the same thing in general terms directly above a worked example of it is
             // the example read twice, and the weaker of the two readings.
             //
-            // No asterisk. It was claiming a requirement the form does not have and could
-            // not have: `canSubmit` gates on the two names only, the select opens already
-            // holding DD-MM-YYYY, and "No date in the file name" is a real option rather
-            // than an empty row — so there is no state in which this is unanswered and
-            // nothing an asterisk could ever stop. A required mark that never blocks is the
-            // kind that teaches people to stop reading the ones that do.
+            // Required: it opens empty, and `canSubmit` holds until it is answered.
+            required
             triggerDimensions={{ width: '100%' }}
             placeholder="Select a date format"
             size={SingleSelectV2Size.MD}
@@ -232,13 +238,21 @@ export function SubmitConfigModal({
             <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.sm)} color={colors.gray[500]}>
               Files will be delivered as
             </PrimitiveText>
-            <PrimitiveText
-              {...font(FOUNDATION_THEME.font.size.body.md)}
-              color={colors.gray[700]}
-              fontWeight={FOUNDATION_THEME.font.weight[600]}
-            >
-              {preview}
-            </PrimitiveText>
+            {/* The box stays while it has nothing to show, so the modal does not grow when the
+                last answer lands; until then it holds a placeholder, in placeholder grey. */}
+            {preview ? (
+              <PrimitiveText
+                {...font(FOUNDATION_THEME.font.size.body.md)}
+                color={colors.gray[700]}
+                fontWeight={FOUNDATION_THEME.font.weight[600]}
+              >
+                {preview}
+              </PrimitiveText>
+            ) : (
+              <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.md)} color={colors.gray[400]}>
+                Add a file name and date format to preview it
+              </PrimitiveText>
+            )}
           </div>
         </div>
 
