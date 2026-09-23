@@ -210,7 +210,7 @@ export function DeliveryStep({
           neighbours. Weekly and Monthly are answered a specified time on the user's behalf
           (see onSelect above), so any cadence opens it. */}
       {frequency !== null && (
-        <QuestionGroup label="What time?">
+        <QuestionGroup label="When should it be sent?">
         <div className="flex flex-col gap-4">
         {/* Revealed once the cadence is Daily, and only then.
 
