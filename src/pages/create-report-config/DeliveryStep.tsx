@@ -211,7 +211,11 @@ export function DeliveryStep({
           (see onSelect above), so any cadence opens it. */}
       {frequency !== null && (
         <QuestionGroup label="When should it be sent?">
-        <div className="flex flex-col gap-4">
+        {/* 16px under the heading when the section opens on the day and time selects (Weekly,
+            Monthly) — QuestionGroup's 8px suits a row of cards, but above the selects' own
+            labels it stacks two lines of text with nothing to tell them apart. Daily opens on
+            the timing cards and keeps the 8px, the same as "How often?" above it. */}
+        <div className={`flex flex-col gap-4 ${frequency === DAILY ? '' : 'pt-2'}`}>
         {/* Revealed once the cadence is Daily, and only then.
 
             Weekly and Monthly skip this row entirely rather than showing it with one card
