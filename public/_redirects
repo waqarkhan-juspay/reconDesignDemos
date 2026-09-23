@@ -1,0 +1,5 @@
+# The app routes client-side (react-router's createBrowserRouter), so a refresh on
+# /configurator/create asks Netlify for a file that doesn't exist. Serve index.html for
+# every path instead and let the router decide. Real files (JS, CSS, icons) still win:
+# Netlify only applies a 200 rewrite when nothing exists at that path.
+/*  /index.html  200
