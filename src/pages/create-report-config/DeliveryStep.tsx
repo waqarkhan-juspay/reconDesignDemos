@@ -423,7 +423,10 @@ export function DeliveryStep({
                     unit="#"
                     unitPosition={UnitPosition.LEFT}
                     type="text"
-                    placeholder="ex: juspay-troubleshoot"
+                    // The shape Slack assigns: a type letter (C for a public channel, G for a
+                    // private one) and uppercase alphanumerics. Found under the channel's
+                    // details, and as the last segment of its app.slack.com URL.
+                    placeholder="ex: C08KX4R2QHN"
                     hintText="Alerts will be sent to this specific channel"
                     value={slackChannel as unknown as number}
                     // The box already draws the `#`, so a pasted "#channel" drops its own.
