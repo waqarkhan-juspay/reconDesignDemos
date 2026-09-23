@@ -4,6 +4,7 @@ import {
   ButtonV2SubType,
   ButtonV2Type,
   FOUNDATION_THEME,
+  SnackbarV2Variant,
   TagV2,
   TagV2Color,
   TagV2Size,
@@ -11,6 +12,7 @@ import {
   TagV2Type,
   ThemeProvider,
   TopbarV2,
+  addSnackbarV2,
 } from '@juspay/blend-design-system'
 import { ArrowLeft } from 'lucide-react'
 import { useState, type CSSProperties } from 'react'
@@ -629,7 +631,13 @@ function ReportFlow() {
       <SubmitConfigModal
         isOpen={submitting}
         onClose={() => setSubmitting(false)}
-        onSubmit={() => navigate('/configurator')}
+        onSubmit={() => {
+          // Raised before leaving: the one SnackbarV2 host is mounted at the app root
+          // (main.tsx), outside the routes, so the toast outlives this page and lands on the
+          // Configurator the flow returns to.
+          addSnackbarV2({ header: 'Submitted successfully', variant: SnackbarV2Variant.SUCCESS })
+          navigate('/configurator')
+        }}
       />
     </div>
   )
