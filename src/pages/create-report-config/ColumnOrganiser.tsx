@@ -12,9 +12,20 @@ import {
   TagV2Type,
   TextInputV2,
   ThemeProvider,
+  TooltipV2,
+  TooltipV2Align,
+  TooltipV2Side,
 } from '@juspay/blend-design-system'
 import { Check, Plus, Search, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from 'react'
 import { FEEDBACK_EASING, MICRO_MS } from '../../motion'
 import { SLOT_ICON } from '../../icons'
 import { LinkAction } from '../../link-action'
@@ -103,6 +114,39 @@ const HEADING = {
  * came from it (`isFieldSelected`), never because it remembers being clicked — so there is no
  * second list to keep in step, and no way for the two sides to disagree.
  */
+/**
+ * A palette chip's name in a tooltip — but only while the chip is cutting it short.
+ *
+ * The label ellipses inside its chip (index.css, `.organiser-palette [data-tag] > [data-id]`),
+ * and a tooltip repeating a name you can already read in full is a hover that answers with
+ * what is on screen. So it agrees to open only when the label is clipped, measured on the
+ * hover itself — `scrollWidth > clientWidth` — so it follows the pane's width without an
+ * observer. The same rule as the organiser row's origin line (OrganiserRow.tsx).
+ *
+ * `fullWidth`: TagV2 is not a host element, so TooltipV2 wraps it in a span of its own
+ * (TooltipV2.tsx:85-96), and only the full-width wrapper leaves the chip its whole row.
+ */
+function ClippedNameTooltip({ name, children }: { name: string; children: ReactElement }) {
+  const wrapperRef = useRef<HTMLSpanElement>(null)
+  const [open, setOpen] = useState(false)
+  return (
+    <TooltipV2
+      ref={wrapperRef}
+      content={name}
+      side={TooltipV2Side.TOP}
+      align={TooltipV2Align.START}
+      fullWidth
+      open={open}
+      onOpenChange={(next) => {
+        const label = wrapperRef.current?.querySelector<HTMLElement>('[data-id]')
+        setOpen(next && label != null && label.scrollWidth > label.clientWidth)
+      }}
+    >
+      {children}
+    </TooltipV2>
+  )
+}
+
 export function ColumnOrganiser({
   answers,
   onChange,
@@ -384,30 +428,32 @@ export function ColumnOrganiser({
      * "Grouped by" row on the right.
      */
     return (
-      <TagV2
-        key={tag}
-        text={tag}
-        size={TagV2Size.MD}
-        subType={TagV2SubType.SQUARICAL}
-        color={
-          groupedField
-            ? TagV2Color.PURPLE
-            : isCustom(tag)
-              ? TagV2Color.WARNING
-              : TagV2Color.NEUTRAL
-        }
-        // SUBTLE when in, NO_FILL when out. Node 4911:111688 gives both states the same
-        // #ECEFF3 hairline — that is what fieldTagTokens' border override is for
-        // (src/theme.ts) — and separates them by their fill alone: a chosen chip on gray[50],
-        // an unchosen one on the pane's own white, whatever colour its label is. ATTENTIVE,
-        // which is what the v1 chips use for the same state, is far too loud down a column of
-        // twenty-nine.
-        type={selected ? TagV2Type.SUBTLE : TagV2Type.NO_FILL}
-        rightSlot={selected ? (groupedField ? GROUPED_SLOT : ADDED_SLOT) : ADD_SLOT}
-        aria-pressed={selected}
-        title={selected ? `Remove ${tag} from the report` : `Add ${tag} to the report`}
-        onClick={() => toggleField(tag)}
-      />
+      <ClippedNameTooltip key={tag} name={tag}>
+        <TagV2
+          text={tag}
+          size={TagV2Size.MD}
+          subType={TagV2SubType.SQUARICAL}
+          color={
+            groupedField
+              ? TagV2Color.PURPLE
+              : isCustom(tag)
+                ? TagV2Color.WARNING
+                : TagV2Color.NEUTRAL
+          }
+          // SUBTLE when in, NO_FILL when out. Node 4911:111688 gives both states the same
+          // #ECEFF3 hairline — that is what fieldTagTokens' border override is for
+          // (src/theme.ts) — and separates them by their fill alone: a chosen chip on gray[50],
+          // an unchosen one on the pane's own white, whatever colour its label is. ATTENTIVE,
+          // which is what the v1 chips use for the same state, is far too loud down a column of
+          // twenty-nine.
+          type={selected ? TagV2Type.SUBTLE : TagV2Type.NO_FILL}
+          rightSlot={selected ? (groupedField ? GROUPED_SLOT : ADDED_SLOT) : ADD_SLOT}
+          aria-pressed={selected}
+          // No native `title`: it would stack a second, browser-drawn tooltip on the one above
+          // whenever the name is clipped. The ✓ and + already say what a click does.
+          onClick={() => toggleField(tag)}
+        />
+      </ClippedNameTooltip>
     )
   }
 

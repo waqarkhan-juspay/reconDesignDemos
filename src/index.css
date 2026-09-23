@@ -623,7 +623,8 @@ button[aria-label='Close modal'] {
  * TagV2 fixes the chip's height but lets its label wrap, so a custom field named at any
  * length ran onto a second and third line that spilled over the chips below. `[data-id]` is
  * the label's own attribute (TagV2.tsx:152), the same kind of hook as `[data-tag]` above. The
- * full name is still one hover away — every palette chip carries a `title` naming it.
+ * full name is still one hover away — a clipped chip opens a tooltip with it
+ * (ClippedNameTooltip, ColumnOrganiser.tsx).
  */
 .organiser-palette [data-tag] > [data-id] {
   min-width: 0;
