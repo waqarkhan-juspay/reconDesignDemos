@@ -67,15 +67,11 @@ const BADGE_WIDTH = { single: 20, double: 28 }
 const NAME_GAP = { single: 16, double: 8 }
 
 /**
- * How much more readily the origin line gives up width than the column's name does.
- *
- * Flexbox has no priority order, only weights — shrinkage is shared out in proportion to
- * each item's factor times its basis — so "shorten the note, not the name" is written as a
- * factor large enough that the name's share of any realistic overflow rounds to nothing. It
- * is not infinity: past the point where the note has vanished entirely the name does start
- * to ellipsis, which is what keeps it off the row's own buttons.
+ * The least room between the row's two halves — the name and its note on the left, the
+ * aggregation and the actions on the right. `justify-between` already holds them at the
+ * card's edges; this is what stops a long name running up against COUNT when it does not.
  */
-const ORIGIN_SHRINK = 999
+const HALF_GAP = 16
 
 const NAME = font(FOUNDATION_THEME.font.size.body.md)
 const META = {
@@ -225,6 +221,7 @@ export function OrganiserRow({
       data-dragging={dragging || undefined}
       className="organiser-row relative flex items-center justify-between"
       style={{
+        columnGap: HALF_GAP,
         backgroundColor: colors.gray[0],
         border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
         // Rows are pulled together so their borders collapse into one hairline — the design
@@ -295,14 +292,14 @@ export function OrganiserRow({
             <>
               {/* The note gives ground first. It is the name that is the column, and the line
                   beside it is a note *about* the column — so when the row runs out of width it
-                  is the note that shortens.
+                  is the note that shortens, all the way to nothing, before the name loses a
+                  pixel. The name still yields after that, so a long one ellipses rather than
+                  running on under the buttons.
 
-                  Weighted shrink rather than `flex-shrink: 0` on the name, because the name
-                  has to yield eventually: a long enough one used to run on under the duplicate
-                  and ✕ buttons, which is the same thing the note was asked not to do. Flexbox
-                  distributes shrinkage by factor × basis, so ORIGIN_SHRINK against this 1
-                  means the note is effectively gone before the name loses its first pixel —
-                  a priority, expressed with the only lever flexbox gives for one. */}
+                  That order lives on the note (below): it asks for no width at all and only
+                  grows into what the name leaves. A weighted shrink on both — the note at 999,
+                  the name at 1 — was not a priority: flexbox shares overflow by factor × basis,
+                  so the name always lost a sliver, and any sliver is enough for an ellipsis. */}
               <PrimitiveText
                 as="span"
                 {...NAME}
@@ -335,10 +332,13 @@ export function OrganiserRow({
                     setShowOrigin(next && el !== null && el.scrollWidth > el.clientWidth)
                   }}
                 >
+                  {/* Basis 0 and grow 1: it takes no part in sizing the name, then fills the
+                      space left over — capped at its own text by max-content, so the pencil
+                      still follows the note rather than being pushed to the row's far edge. */}
                   <span
                     ref={originRef}
                     className="min-w-0 truncate"
-                    style={{ ...META, color: colors.gray[500], flexShrink: ORIGIN_SHRINK }}
+                    style={{ ...META, color: colors.gray[500], flex: '1 1 0', maxWidth: 'max-content' }}
                   >
                     {`represents “${origin}”`}
                   </span>

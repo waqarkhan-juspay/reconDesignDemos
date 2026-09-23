@@ -751,6 +751,21 @@ button[aria-label='Close modal'] {
 }
 
 /*
+ * …and a long label ellipses inside its chip rather than wrapping out of it.
+ *
+ * TagV2 fixes the chip's height but lets its label wrap, so a custom field named at any
+ * length ran onto a second and third line that spilled over the chips below. `[data-id]` is
+ * the label's own attribute (TagV2.tsx:152), the same kind of hook as `[data-tag]` above. The
+ * full name is still one hover away — every palette chip carries a `title` naming it.
+ */
+.organiser-palette [data-tag] > [data-id] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
  * The Grouping step's chips: a vertical list with one width floor.
  *
  * Same hook and the same reason as the rule above — TagV2 takes neither `className` nor
