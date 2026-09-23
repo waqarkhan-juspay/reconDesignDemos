@@ -38,10 +38,11 @@ const { colors } = FOUNDATION_THEME
 const RAIL_STARTS_EXPANDED = false
 
 /**
- * Not the default `"/"`, which hijacks the slash key anywhere outside a form field
- * (AGENTS.md rule 8.6) — a stray keystroke would collapse the rail mid-demo.
+ * `/`, Blend's own default, chosen on purpose despite AGENTS.md rule 8.6: SidebarV2 listens
+ * for it anywhere outside a form field, so a stray slash toggles the rail. Typing into an
+ * input is safe.
  */
-const SIDEBAR_COLLAPSE_KEY = '['
+const SIDEBAR_COLLAPSE_KEY = '/'
 
 /**
  * The sidebar rows this file draws — the footer's menu items and the profile.
