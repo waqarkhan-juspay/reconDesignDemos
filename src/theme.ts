@@ -124,7 +124,16 @@ const SIDEBARV2 = perBreakpoint(
       container: { ...token.container, backgroundColor: white },
       leftPanel: { ...token.leftPanel, backgroundColor: white },
       header: { ...token.header, backgroundColor: white },
-      footer: { ...token.footer, backgroundColor: white },
+      // No padding of its own: the profile row (AppShell's SidebarFooter) carries its own, and
+      // the footer's added a second inset around it.
+      footer: {
+        ...token.footer,
+        backgroundColor: white,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+      },
       secondarySidebar: { ...token.secondarySidebar, backgroundColor: white },
     }
   },
