@@ -176,10 +176,10 @@ export function DeliveryStep({
       {/* The cadence is the step's opening question — the configuration name it used to
           open on is asked at submit now, in SubmitConfigModal. */}
       <QuestionGroup label="How often?">
-        {/* The cadence, timing and day/time rows, 16px apart — the same as the gap between
-            cards in a row, so the three read as one grid. QuestionGroup's own 8px stays
+        {/* The cadence, timing and day/time rows, 32px apart — each is its own question, so
+            they take the same gap as the sections on Setup. QuestionGroup's own 8px stays
             between the label and the first row. */}
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-8">
         <OptionRow>
           {FREQUENCIES.map((option) => (
             <OptionCard
