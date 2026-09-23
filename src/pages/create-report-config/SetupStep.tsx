@@ -138,9 +138,9 @@ export function SetupStep({
   return (
     <>
       {/* No label: the step heading is the question, and the cards sit directly under it.
-          16px under the intro rather than the 24px between sections (node 4541:16687),
+          16px under the intro rather than the 32px between sections (node 4541:16687),
           which the step grid's row gap cannot express on its own. */}
-      <div className="flow-question -mt-2">
+      <div className="flow-question -mt-4">
         <OptionRow>
           {REPORT_CATEGORIES.map((option) => {
             const selected = category === option.id

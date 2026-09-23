@@ -416,9 +416,9 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * inline row-gap is absent, and the heading's custom property falls back to 8px.
    */
   const renderStep = (layout?: FieldsLayout) => (
-    // Setup follows node 4541:16282, which sets its sections 24px apart; the other steps
-    // keep the 32px rhythm their own frames were drawn at.
-    <div key={current.id} className={`${COLUMN} flow-question ${current.id === 'setup' ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
+    // 32px between a step's sections. Setup was drawn at 24 (node 4541:16282) and opened up
+    // to match the other steps' rhythm.
+    <div key={current.id} className={`${COLUMN} flow-question gap-y-8 pt-8 pb-12`}
       style={layout?.style}
       data-layout={layout?.wide ? 'wide' : undefined}
       /* The column organiser is the one step body that should fit the window rather than
