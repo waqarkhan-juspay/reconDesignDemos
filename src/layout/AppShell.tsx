@@ -272,7 +272,14 @@ function AppShell({ children }: { children?: ReactNode }) {
       onSidebarStateChange={handleSidebarState}
       footer={<SidebarFooter collapsed={isRailCollapsed} />}
     >
-      {children}
+      {/* The page's own surface, white. SidebarV2 paints its whole shell — the rail and the
+          area behind the page alike — from one token, `container.backgroundColor` (gray[25]),
+          so the page is painted here instead: the rail keeps its off-white and the page
+          reads as the white sheet it sits beside. `min-h-full` against the page's scroller
+          ([data-main-content]) so a short page is still white to the bottom. */}
+      <div className="min-h-full" style={{ backgroundColor: colors.gray[0] }}>
+        {children}
+      </div>
     </SidebarV2>
   )
 }
