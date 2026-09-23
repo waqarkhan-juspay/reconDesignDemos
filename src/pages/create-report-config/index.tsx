@@ -4,6 +4,7 @@ import {
   ButtonV2SubType,
   ButtonV2Type,
   FOUNDATION_THEME,
+  SnackbarV2Position,
   SnackbarV2Variant,
   TagV2,
   TagV2Color,
@@ -637,7 +638,15 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
           // Raised before leaving: the one SnackbarV2 host is mounted at the app root
           // (main.tsx), outside the routes, so the toast outlives this page and lands on the
           // Configurator the flow returns to.
-          addSnackbarV2({ header: 'Submitted successfully', variant: SnackbarV2Variant.SUCCESS })
+          //
+          // Bottom right, overriding the host's bottom-left. The host sits left because the
+          // detail sheet covers the right; nothing is open over the Configurator when this
+          // toast arrives, so it takes the usual corner.
+          addSnackbarV2({
+            header: 'Submitted successfully',
+            variant: SnackbarV2Variant.SUCCESS,
+            position: SnackbarV2Position.BOTTOM_RIGHT,
+          })
           navigate('/configurator')
         }}
       />
