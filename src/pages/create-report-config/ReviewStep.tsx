@@ -323,18 +323,30 @@ export function ReviewStep({
              * level the user set on the Grouping step.
              */
             const level = groupBy.findIndex((field) => sameField(field, fieldOf(column)))
+            /*
+             * Orange for a field the user wrote — the palette chip's and the organiser row's
+             * "Custom" mark, carried here the same way purple carries grouping. Read off
+             * `customFields`, as the organiser does, rather than off the vocabulary's
+             * complement. Grouping wins where the two meet, as it does in the palette: what
+             * the report does with a field outranks where the field came from.
+             */
+            const custom = fields.customFields.some((field) =>
+              sameField(field.title, fieldOf(column)),
+            )
             return summaryChip(
               `${index + 1} · ${column.title}`,
               column.id,
-              level === -1
-                ? undefined
-                : {
+              level !== -1
+                ? {
                     color: TagV2Color.PURPLE,
                     title:
                       groupBy.length > 1
                         ? `Grouping level ${level + 1} of ${groupBy.length}`
                         : 'Grouped by',
-                  },
+                  }
+                : custom
+                  ? { color: TagV2Color.WARNING, title: 'Custom column' }
+                  : undefined,
             )
           })}
         </ConfigSummaryChipRow>
