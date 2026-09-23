@@ -294,6 +294,15 @@ function ReportFlow() {
    * and walking back leaves later steps committed behind you.
    */
   const [confirmed, setConfirmed] = useState<ReadonlySet<StepId>>(() => new Set())
+  /**
+   * Every step the user has arrived on. Arrival only ever happens through Continue — the rail
+   * cannot reach a step for the first time (StepRail.tsx) — so this is how far the user has
+   * actually walked, and walking back never shrinks it.
+   *
+   * A Set rather than a furthest index for the same reason as `confirmed`: Grouping comes and
+   * goes in the middle of the list, which moves every index after it.
+   */
+  const [reached, setReached] = useState<ReadonlySet<StepId>>(() => new Set(['setup']))
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
   const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
@@ -390,6 +399,21 @@ function ReportFlow() {
    * false would also disable Submit — permanently, since nothing on Review can flip it.
    */
   const complete = skipLabel !== undefined || isLastStep || answeredFor(current.id)
+
+  /**
+   * Whether the rail can take the user to a step.
+   *
+   * Backwards, always. Forwards, only to a step already reached — and only while every
+   * required step before it is still answered. Walking back can undo an answer (a new Setup
+   * category clears the questions under it), and a rail that jumped past that step would
+   * reach Review with a required answer missing, which Continue alone never allows. So the
+   * steps after an unanswered one lock again until it is answered, and unlock without being
+   * walked a second time.
+   */
+  const canReach = (index: number) =>
+    index <= step ||
+    (reached.has(STEPS[index].id) &&
+      STEPS.slice(0, index).every(({ id, skipLabel }) => skipLabel !== undefined || answeredFor(id)))
 
   /** One step's heading and body. */
   const stepBody = (
@@ -501,11 +525,12 @@ function ReportFlow() {
               gutter, which `--flow-rail-gutter` on the root above keeps clear for it. */}
           <nav className="flow-rail" aria-label="Report setup steps">
             <StepRail
-              steps={STEPS.map(({ id, label, skipLabel }) => ({
+              steps={STEPS.map(({ id, label, skipLabel }, index) => ({
                 label,
                 optional: skipLabel !== undefined,
                 answered: answeredFor(id),
                 confirmed: confirmed.has(id),
+                reachable: canReach(index),
               }))}
               current={step}
               onNavigate={setStep}
@@ -581,6 +606,7 @@ function ReportFlow() {
                     // does not unanswer them. Clearing a required answer does — that is
                     // `answered`'s job over in statusOf.
                     setConfirmed((prev) => new Set(prev).add(current.id))
+                    setReached((prev) => new Set(prev).add(STEPS[step + 1].id))
                     setStep(step + 1)
                   }}
                 />

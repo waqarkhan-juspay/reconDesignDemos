@@ -19,6 +19,8 @@ export type RailStep = {
    * action on it. This, not `answered`, is what earns a tick.
    */
   confirmed: boolean
+  /** Whether the rail may take the user here — see `canReach` in index.tsx. */
+  reachable: boolean
 }
 
 /**
@@ -46,16 +48,15 @@ function statusOf({ optional, answered, confirmed }: RailStep, index: number, cu
 /**
  * The create flow's step rail — Blend's vertical `StepperV2` (node 4853:101733).
  *
- * The rail goes **backwards only**. The current step and every step before it can be
- * clicked; every step after it is `disabled`, so the only way forward is the footer's primary
- * action, which is held until the step is answered. That is what guarantees Review is only
- * ever reached with every required step complete.
+ * The rail never takes the user somewhere new. Any step they have already reached can be
+ * clicked, backwards or forwards; a step they have never reached is `disabled`, so the only
+ * way onto it is the footer's primary action, which is held until the step before it is
+ * answered. Which steps are reachable is the page's call (`canReach` in index.tsx), because
+ * it depends on answers this component never sees.
  *
  * `disabled` rather than ignoring the click: StepperV2 then drops the pointer cursor, takes
  * the step out of the tab order, skips it in its Up/Down/Home/End keyboard navigation and
  * announces it as disabled — a step that looked clickable and did nothing would be worse.
- * It also overrides `status` (StepperV2/utils.ts `getStepState`), so a step you have walked
- * back past shows as disabled rather than ticked until you Continue onto it again.
  *
  * A disabled step keeps its number. Blend draws a lock there, but a lock says "you may not",
  * where these steps are simply not reached yet — so `icon` (which Blend renders ahead of any
@@ -97,8 +98,8 @@ export function StepRail({
     id: index,
     title: step.label,
     status: statusOf(step, index, current),
-    disabled: index > current,
-    icon: index > current ? <DisabledStepNumber value={index + 1} /> : undefined,
+    disabled: !step.reachable,
+    icon: step.reachable ? undefined : <DisabledStepNumber value={index + 1} />,
   }))
 
   return (
@@ -108,7 +109,7 @@ export function StepRail({
       clickable
       // Guarded as well as disabled, so the rule does not rest on Blend honouring the flag.
       onStepClick={(target) => {
-        if (target <= current) onNavigate(target)
+        if (steps[target]?.reachable) onNavigate(target)
       }}
     />
   )
