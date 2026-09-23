@@ -420,9 +420,9 @@ function ReportFlow() {
 
   /** One step's heading and body. */
   const stepBody = (
-    // Setup follows node 4541:16282, which sets its sections 24px apart; the other steps
-    // keep the 32px rhythm their own frames were drawn at.
-    <div key={current.id} className={`${COLUMN} flow-question ${current.id === 'setup' ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
+    // 32px between a step's sections. Setup was drawn at 24 (node 4541:16282) and opened up
+    // to match the other steps' rhythm.
+    <div key={current.id} className={`${COLUMN} flow-question gap-y-8 pt-8 pb-12`}
       // Fields' title and standfirst sit 8px apart, where every other step's sit 4px — the
       // value the step was tuned to (see the heading's gap below).
       style={current.id === 'fields' ? ({ '--step-heading-gap': '8px' } as CSSProperties) : undefined}
