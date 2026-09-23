@@ -12,12 +12,6 @@ import globeIcon from '../assets/icons/globe-01.svg'
 import MaskIcon from '../components/MaskIcon'
 import { ICON_SIZE } from './chrome'
 
-/**
- * Home has its own path rather than sitting at the root, because the root is a redirect to
- * the Configurator — the app's landing page (src/router.tsx). Leaving Home at `/` would
- * make the nav row a dead end: clicking it would bounce straight back here.
- */
-export const HOME_PATH = '/home'
 export const CONFIGURATOR_PATH = '/configurator'
 
 /**
@@ -33,12 +27,11 @@ const PLACEHOLDER_SECTIONS = ['Offers', 'Mandates', 'Smart Convert', 'Monitoring
 
 export type NavigationOptions = {
   /**
-   * Which nav item is the active route, as booleans rather than the pathname, so that
+   * Whether the Configurator is the active route, as a boolean rather than the pathname, so that
    * navigating between two routes that are both "not this item" does not rebuild a
    * byte-identical tree — SidebarV2 re-binds scroll and resize listeners on a new `data`
    * identity (SidebarV2.tsx:230-274).
    */
-  isHomeActive: boolean
   isConfiguratorActive: boolean
   /** Router push. Blend's NavItem does no routing of its own — see below. */
   navigate: (to: string) => void
@@ -50,12 +43,11 @@ export type NavigationOptions = {
  * so `href` alone goes nowhere and an `onClick` is required. `href` still earns its place —
  * cmd/ctrl-click bails out before that handler and opens the real URL in a new tab.
  *
- * Only Home and Configurator have routes. The rest are the design's labels, drawn so the
- * rail reads as the product's nav rather than the two pages that exist — they are
- * deliberately inert rather than pointing at a 404.
+ * Only Configurator has a route. The rest are the design's labels, drawn so the rail reads
+ * as the product's nav rather than the one page that exists — they are deliberately inert
+ * rather than pointing at a 404.
  */
 export function buildNavigationData({
-  isHomeActive,
   isConfiguratorActive,
   navigate,
 }: NavigationOptions): DirectoryData[] {
@@ -65,9 +57,6 @@ export function buildNavigationData({
         {
           label: 'Home',
           leftSlot: <House size={ICON_SIZE} />,
-          href: HOME_PATH,
-          onClick: () => navigate(HOME_PATH),
-          isSelected: isHomeActive,
           showOnMobile: true,
         },
         {

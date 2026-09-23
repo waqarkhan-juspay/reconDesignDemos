@@ -21,7 +21,7 @@ import merchantOrb from '../assets/merchant-hyper-recon.png'
 import MaskIcon from '../components/MaskIcon'
 import { font } from '../primitives'
 import { CHROME_HOVER, ICON_SIZE } from './chrome'
-import { CONFIGURATOR_PATH, HOME_PATH, buildNavigationData } from './navigation'
+import { CONFIGURATOR_PATH, buildNavigationData } from './navigation'
 import { TopbarStatusIcons } from './topbar'
 
 const { colors } = FOUNDATION_THEME
@@ -241,11 +241,10 @@ function AppShell({ children }: { children?: ReactNode }) {
     [],
   )
 
-  const isHomeActive = pathname === HOME_PATH
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
   const navigationData = useMemo(
-    () => buildNavigationData({ isHomeActive, isConfiguratorActive, navigate }),
-    [isHomeActive, isConfiguratorActive, navigate],
+    () => buildNavigationData({ isConfiguratorActive, navigate }),
+    [isConfiguratorActive, navigate],
   )
 
   return (

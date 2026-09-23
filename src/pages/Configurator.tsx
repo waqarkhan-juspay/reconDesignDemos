@@ -26,13 +26,11 @@ import {
   type FilterOption,
   type SortConfig,
 } from '@juspay/blend-design-system'
-import { useDialKit } from 'dialkit'
 import { Trash2 } from 'lucide-react'
-import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import { ConfigDetailSheet } from './ConfigDetailSheet'
 import { MiddleTruncate } from '../middle-truncate'
-import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
 import type { Categorised } from '../report-config'
 import { sectionTabsTokens } from '../theme'
@@ -91,8 +89,7 @@ type ReportConfigRow = Categorised & {
  * overridden below with `0` / `none`, leaving each column free to size to its content.
  *
  * Which column takes the leftover width is not expressible here: getColumnStyles hardcodes
- * `width: 'auto'` on every cell and ignores ColumnDefinition.width entirely. That part is
- * done in index.css against `.reports-config-table`.
+ * `width: 'auto'` on every cell and ignores ColumnDefinition.width entirely.
  */
 const COLUMNS = [
   { field: 'configurationName', header: 'Configuration Name' },
@@ -276,7 +273,7 @@ const rows: ReportConfigRow[] = [
  *
  * Named steps rather than "3 of 6", because the flow's own step count is conditional now —
  * a grouped report walks six and a transaction-level one walks five (create-report-config/
- * flow-layout.tsx), so a fraction would mean different things on different rows.
+ * index.tsx), so a fraction would mean different things on different rows.
  */
 const DRAFT_STEPS = ['Setup', 'Delivery', 'Grouping', 'Fields', 'Filters', 'Review'] as const
 type DraftStep = (typeof DRAFT_STEPS)[number]
@@ -524,39 +521,21 @@ type TableRow = ReportConfigRow & {
 }
 
 /**
- * The page's vertical rhythm, tunable live from the DialKit panel.
+ * The page's vertical rhythm — one gap per boundary between its top-level blocks: title,
+ * section tabs, the toolbar row, the table. The table is a single block: nothing here reaches
+ * inside it, so row heights and cell padding stay owned by Blend's tokens.
  *
- * One dial per gap between the page's top-level blocks — title, section tabs, the
- * toolbar row, the table. The table is deliberately a single block: nothing here reaches
- * inside it, so row heights, header height and cell padding stay owned by Blend's tokens
- * and cannot be knocked off the design by a stray drag.
- *
- * Tuples are [value, min, max, step]. The step is 4 so every value the dial can produce
- * still lands on the 4px spacing grid (DESIGN.md §7). Defaults are 24 except the toolbar
- * to table gap, which is 8 — the toolbar's tabs choose what the table shows, so the two read
- * as one block, and the 24px around everything else is what says where that block ends.
+ * All 24 except the toolbar to table gap, which is 8 — the toolbar's tabs choose what the
+ * table shows, so the two read as one block, and the 24px around everything else is what says
+ * where that block ends.
  */
-// A factory rather than five literals: it puts the range and the 4px step in one place,
-// and returns a mutable tuple, which is what DialKit's DialConfig wants — `as const` here
-// produces a readonly tuple and does not typecheck.
-const dial = (value: number): [number, number, number, number] => [value, 0, 96, 4]
-
-const SPACING_DIALS = {
-  aboveTitle: dial(24),
-  titleToTabs: dial(24),
-  tabsToToolbar: dial(24),
-  toolbarToTable: dial(8),
-  belowTable: dial(24),
+const SPACING = {
+  aboveTitle: 24,
+  titleToTabs: 24,
+  tabsToToolbar: 24,
+  toolbarToTable: 8,
+  belowTable: 24,
 }
-
-/**
- * Handed to index.css so the hover reveal on the column filter buttons reads its timing
- * from src/motion.ts (rule 14) rather than keeping a second copy in the stylesheet.
- */
-const TABLE_MOTION = {
-  '--table-feedback': `${MICRO_MS}ms`,
-  '--table-feedback-ease': FEEDBACK_EASING,
-} as CSSProperties
 
 function Configurator() {
   const navigate = useNavigate()
@@ -611,8 +590,6 @@ function Configurator() {
     setPageSize(next)
     setPage(1)
   }, [])
-
-  const spacing = useDialKit('Configurator spacing', SPACING_DIALS)
 
   /** Row id → enabled. Every row starts enabled, so every row starts "Active". */
   const [enabled, setEnabled] = useState<Record<string, boolean>>(() =>
@@ -946,7 +923,7 @@ function Configurator() {
     // under Preflight, so the 24px gutters are inside the 1440 rather than added to it.
     <div
       className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
-      style={{ paddingTop: spacing.aboveTitle }}
+      style={{ paddingTop: SPACING.aboveTitle }}
     >
       <PrimitiveText
         as="h1"
@@ -964,7 +941,7 @@ function Configurator() {
       {/* Its own ThemeProvider, so the 24px trigger gap reaches these tabs and not the
           boxed filter tabs below — `tabList.gap` is a single token, not keyed by variant.
           See sectionTabsTokens in src/theme.ts. */}
-      <div style={{ marginTop: spacing.titleToTabs }}>
+      <div style={{ marginTop: SPACING.titleToTabs }}>
         <ThemeProvider componentTokens={sectionTabsTokens}>
           <TabsV2
             variant={TabsV2Variant.UNDERLINE}
@@ -987,13 +964,13 @@ function Configurator() {
           content nested under the active Report Config tab, but that put the toolbar and
           table 24px right of the heading and the section tabs — two keylines on one page.
           The gutter now belongs to the page container alone, so every row starts at the
-          same x. Vertical padding is still the dial's. */}
+          same x. Vertical padding comes from SPACING. */}
       <div
         className="flex flex-col"
         style={{
-          paddingTop: spacing.tabsToToolbar,
-          paddingBottom: spacing.belowTable,
-          gap: spacing.toolbarToTable,
+          paddingTop: SPACING.tabsToToolbar,
+          paddingBottom: SPACING.belowTable,
+          gap: SPACING.toolbarToTable,
         }}
       >
         <div className="flex items-center justify-between">
@@ -1037,7 +1014,7 @@ function Configurator() {
           </div>
         </div>
 
-        <div className="reports-config-table" style={TABLE_MOTION}>
+        <div>
           <DataTable
             data={data}
             columns={columns}
@@ -1051,7 +1028,7 @@ function Configurator() {
             // divergence from the design is deliberate rather than forgotten.
             enableColumnReordering={false}
             // Defaults to true, which adds a "+" column-manager button past the last
-            // header cell. The design ends at column six.
+            // header cell, which the design does not have.
             enableColumnManager={false}
             // The header's sort and filter menus are inert on their own here — see the
             // note on the state above — so both callbacks are the wiring, not extras.

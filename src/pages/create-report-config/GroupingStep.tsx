@@ -36,8 +36,7 @@ const REMOVE_TAG_SLOT = { slot: <X {...SLOT_ICON} color={colors.purple[600]} /> 
 const ADD_TAG_SLOT = { slot: <Plus {...SLOT_ICON} color={colors.gray[500]} /> }
 
 /**
- * The chip shape, matching the Fields step's v6 chips (TAG_SHAPE.v6) — squarical and md. The
- * two steps draw the same vocabulary, so they are kept on the same chip.
+ * The chip shape — squarical and md.
  *
  * SUBTLE in both states, and the colour is the whole of the difference: neutral while a field
  * is merely offered, purple once the report groups by it. Purple rather than a darker neutral
@@ -69,15 +68,14 @@ const SHAPE = {
 const CHIP_MIN_WIDTH = 224
 
 /**
- * Flow version 2's Grouping step — the field vocabulary asked as its own question, before the
- * columns are chosen (see flow-layout.tsx).
+ * The Grouping step — the field vocabulary asked as its own question, before the columns are
+ * chosen. Only a grouped report walks it (STEPS in index.tsx).
  *
  * ## What selecting a tag does
  *
  * Grouping by a field the report does not contain is not a thing you can deliver, so picking
- * a tag here **adds it as a column** as well as adding a grouping level. That inverts the
- * rule GroupByBar states for version 1, where the picker can only offer columns that already
- * exist — and it has to invert, because this step runs before there are any columns.
+ * a tag here **adds it as a column** as well as adding a grouping level — it has to, because
+ * this step runs before there are any columns.
  *
  * Unpicking removes the grouping level and *leaves the column*. The alternative — taking the
  * column away again — would mean a field could enter and leave the report through a step that
@@ -195,8 +193,7 @@ export function GroupingStep({
       </div>
 
       {/* Reads the rule back as the thing the user actually cares about — the shape of a row
-          in the delivered file. The same sentence GroupByBar draws under version 1's bar, so
-          the two versions say the same thing about the same answer. */}
+          in the delivered file. */}
       <PrimitiveText
         as="p"
         {...font(FOUNDATION_THEME.font.size.body.md)}

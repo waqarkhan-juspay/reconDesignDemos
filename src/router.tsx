@@ -1,12 +1,9 @@
 import { Navigate, createBrowserRouter } from 'react-router'
 import App from './App.tsx'
-import About from './pages/About.tsx'
-import Blend from './pages/Blend.tsx'
 import Configurator from './pages/Configurator.tsx'
 import CreateReportConfig from './pages/create-report-config'
-import Home from './pages/Home.tsx'
 import NotFound from './pages/NotFound.tsx'
-import { CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.tsx'
+import { CONFIGURATOR_PATH } from './layout/navigation.tsx'
 
 export const router = createBrowserRouter([
   {
@@ -18,9 +15,6 @@ export const router = createBrowserRouter([
       // otherwise Back from the Configurator returns to `/` and immediately redirects
       // forward again, trapping the user.
       { index: true, element: <Navigate to={CONFIGURATOR_PATH} replace /> },
-      { path: HOME_PATH.slice(1), element: <Home /> },
-      { path: 'about', element: <About /> },
-      { path: 'blend', element: <Blend /> },
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
     ],
   },

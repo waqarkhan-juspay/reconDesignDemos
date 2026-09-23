@@ -23,17 +23,15 @@ export type RailStep = {
  * What the rail says about one step.
  *
  * A step is ticked once the user has *committed* it — clicked the primary action on it and
- * moved on. Answers alone are not enough: several steps start out already valid (Fields
- * ships a default column set, so `isFieldsComplete` is true on first render), so reading
- * `answered` on its own ticked steps nobody had opened. Position is not enough either —
- * the rail lets you jump anywhere, so arriving at Filters says nothing about Setup.
+ * moved on. Answers alone are not enough: a step can start out already valid, and reading
+ * `answered` on its own would tick steps nobody had opened.
  *
  * `answered` still has a say, in one direction only: it can take a tick back. Commit a
  * step, walk back into it and clear a required answer, and the tick goes rather than
  * standing over questions that no longer have any.
  *
- * `skipped` is the optional step (Filters) committed with nothing filled in. Its button
- * says "Skip filters" in that state, and the rail should not then claim it was completed.
+ * `skipped` is an optional step (Grouping, Filters) committed with nothing filled in. Its
+ * button says "Skip …" in that state, and the rail should not then claim it was completed.
  */
 function statusOf({ optional, answered, confirmed }: RailStep, index: number, current: number) {
   if (index === current) return StepperV2StepStatus.CURRENT
@@ -44,17 +42,21 @@ function statusOf({ optional, answered, confirmed }: RailStep, index: number, cu
 }
 
 /**
- * The create flow's step rail — Blend's vertical `StepperV2`, replacing the breadcrumb that
- * used to sit in the topbar (node 4853:101733).
+ * The create flow's step rail — Blend's vertical `StepperV2` (node 4853:101733).
  *
- * Every step is reachable, so the whole rail is clickable and no step is `disabled`. Blend
- * gives that keyboard navigation for free: Up/Down move between steps, Home/End jump to the
- * ends, and Enter or Space activates.
+ * The rail goes **backwards only**. The current step and every step before it can be
+ * clicked; every step after it is `disabled`, so the only way forward is the footer's primary
+ * action, which is held until the step is answered. That is what guarantees Review is only
+ * ever reached with every required step complete.
  *
- * The rail carries no `status` of its own beyond what `statusOf` derives — passing `status`
- * on a step overrides Blend's own completed/current derivation (`StepperV2/utils.ts`), which
- * is exactly what we want here, and the one `current` step is also what Blend reads to decide
- * which step a keyboard user lands on.
+ * `disabled` rather than ignoring the click: StepperV2 then drops the pointer cursor, takes
+ * the step out of the tab order, skips it in its Up/Down/Home/End keyboard navigation and
+ * announces it as disabled — a step that looked clickable and did nothing would be worse.
+ * It also overrides `status` (StepperV2/utils.ts `getStepState`), so a step you have walked
+ * back past shows as disabled rather than ticked until you Continue onto it again.
+ *
+ * Every other step's `status` comes from `statusOf` — passing it overrides Blend's own
+ * completed/current derivation, which is what we want here.
  */
 export function StepRail({
   steps,
@@ -69,6 +71,7 @@ export function StepRail({
     id: index,
     title: step.label,
     status: statusOf(step, index, current),
+    disabled: index > current,
   }))
 
   return (
@@ -76,7 +79,10 @@ export function StepRail({
       steps={railSteps}
       stepperType={StepperV2Type.VERTICAL}
       clickable
-      onStepClick={onNavigate}
+      // Guarded as well as disabled, so the rule does not rest on Blend honouring the flag.
+      onStepClick={(target) => {
+        if (target <= current) onNavigate(target)
+      }}
     />
   )
 }

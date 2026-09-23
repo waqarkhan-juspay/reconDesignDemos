@@ -181,121 +181,16 @@ html {
 }
 
 /*
- * Fields step — DataTable scrolls its own columns sideways; this only fades the clipped edges,
- * so a table wider than its container reads as cut off rather than as simply ending.
+ * The create flow's content grid — one measure for every step.
  *
- * Registered so the two fade widths can be transitioned. An unregistered custom property is
- * a plain token to the engine and animates by snapping; typed as a <length> it interpolates,
- * so the edge fades in as you scroll into it rather than appearing all at once.
- */
-@property --fade-left {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-@property --fade-right {
-  syntax: '<length>';
-  inherits: false;
-  initial-value: 0px;
-}
-
-/*
- * A mask, not an overlaid gradient: the fade has to reach whatever is behind it, and the
- * table sits on the page's own white rather than on a panel, so a painted gradient would
- * need to know that colour and would stop being right the moment the surface changed.
- *
- * On FieldsStep's wrapper rather than DataTable's scroller, so the letter row and the table's
- * frame fade together. Each side's width is set from FieldsStep, 0px when that edge has
- * nothing past it — at 0 the gradient's stops coincide and the mask is a no-op.
- */
-.fields-table {
-  --fade-left: 0px;
-  --fade-right: 0px;
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    black var(--fade-left),
-    black calc(100% - var(--fade-right)),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    black var(--fade-left),
-    black calc(100% - var(--fade-right)),
-    transparent 100%
-  );
-  transition:
-    --fade-left var(--flow-feedback) var(--flow-feedback-ease),
-    --fade-right var(--flow-feedback) var(--flow-feedback-ease);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fields-table {
-    transition: none;
-  }
-}
-
-/*
- * The Fields table's column titles read gray[700] rather than DataTable's muted gray[400].
- * The token is an inline style on each <th> with no prop reaching it, hence !important. The
- * value comes from FieldsStep as --header-color, so it stays on FOUNDATION_THEME.
- */
-.fields-table th[data-element='table-header'] {
-  color: var(--header-color) !important;
-}
-
-/*
- * …and the same for their size. DataTable writes `font-size: 12px` inline on the <th> and
- * again on the <p> inside it, with no prop reaching either, so both are named here and both
- * need !important. The values arrive as --header-size / --header-leading from FieldsStep,
- * so the type stays on FOUNDATION_THEME rather than becoming two numbers in a stylesheet.
- *
- * The leading matters as much as the size: Blend's own `line-height: 1.2` on the <p> is what
- * would otherwise render 14px text at ~17px instead of the token's 20.
- */
-.fields-table th[data-element='table-header'],
-.fields-table th[data-element='table-header'] p {
-  font-size: var(--header-size) !important;
-  line-height: var(--header-leading) !important;
-}
-
-/*
- * The Fields table's ⋮ menu offers Rename and nothing else.
- *
- * DataTable has no prop for this: it only draws the ⋮ for a sortable (or filterable) column,
- * and the same condition puts Sort Ascending / Sort Descending at the top of the menu
- * (FilterComponents.tsx:1333). So the column stays sortable and the rows are hidden here.
- *
- * What is hidden is structural, not a label match: the menu's direct children are the Sort
- * group (a plain wrapper), a separator, then Rename — the only direct child with
- * role="menuitem". Keeping just that child drops Sort and the rule above Rename together.
- *
- * Scoped with :has() because the menu is portalled to <body> (Popover.tsx:117) and carries
- * only the generic data-popover="Popover" every V1 popover has — so it can't be reached from
- * the table's wrapper, and unscoped this would strip Sort from the Configurator table too.
- */
-:root:has(.fields-table) [data-popover] > [role='menu'] > :not([role='menuitem']) {
-  display: none;
-}
-
-/*
- * The create flow's content grid — one measure for every step, with an escape hatch.
- *
- * Three hand-maintained column widths used to live in index.tsx (632 / 848 / 1158), one per
- * step that disagreed with the others, so the content column jumped as you walked the flow.
- * This replaces all three: every step's content sits in the `content` track, and the one
- * thing that genuinely cannot — the Fields table — breaks out into `full` instead of
- * widening the column for everybody.
- *
- * The gutters are a `minmax(24px, 1fr)` rather than padding on the column so that a `full`
- * child can actually reach into them; `min(960px, 100% - 48px)` is what keeps the column
- * off the viewport edge once 1fr has collapsed to its 24px floor.
+ * Every step's content sits in the `content` track, so the column never jumps as you walk
+ * the flow. The gutters are named tracks rather than padding so the topbar's back button can
+ * sit in the left one (`.flow-topbar-back`); `min(960px, …)` is what keeps the column off the
+ * viewport edge once 1fr has collapsed to its floor.
  */
 .flow-grid {
-  /* The flow's one content measure, as a custom property so that content living inside a
-     `full` child can be held to the same width without a second number to keep in step. */
+  /* The flow's one content measure, as a custom property so that anything that needs the
+     column's width can read it without a second number to keep in step. */
   --flow-content: 960px;
 
   display: grid;
@@ -407,34 +302,6 @@ html {
 .flow-grid[data-fill] {
   height: 100%;
   grid-template-rows: auto minmax(0, 1fr);
-}
-
-/*
- * Wider than the column, but only as wide as it actually needs to be.
- *
- * `width: max-content` is the whole point of the rule: a table narrow enough to fit the
- * 960px column renders at its own width and stays visually inside it, so nothing breaks
- * out for the sake of it. Only a table whose content genuinely exceeds 960 spills into the
- * gutters, and `max-width: 100%` stops it at the viewport rather than forcing a page
- * scrollbar — past that the element scrolls its own content.
- */
-.flow-grid > .flow-full {
-  grid-column: full;
-  justify-self: center;
-  width: max-content;
-  max-width: 100%;
-}
-
-/*
- * The Fields step's versions 3 and 4 (fields-layout.tsx) take a 1200px measure instead of 960.
- *
- * Applied to every `.flow-grid` while the step grid is marked wide, not to the step grid
- * alone: the footer bar is a `.flow-grid` of its own outside it, and this keeps Exit and the
- * primary action on the same edges as the wider content above. `:has()` rather than lifting
- * the dial state to the flow root, which would mean threading it past every other step.
- */
-:root:has(.flow-grid[data-layout='wide']) .flow-grid {
-  --flow-content: 1200px;
 }
 
 /*

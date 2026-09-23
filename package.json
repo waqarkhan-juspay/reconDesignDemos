@@ -16,7 +16,6 @@
     "@juspay/blend-design-system": "^0.0.37",
     "@phosphor-icons/react": "^2.1.10",
     "@tailwindcss/vite": "^4.3.3",
-    "dialkit": "^2.0.0",
     "inter-ui": "^4.1.1",
     "lucide-react": "^1.41.0",
     "motion": "^13.2.0",
@@ -31,14 +30,8 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",
-    "agentation": "^3.0.2",
-    "agentation-mcp": "^1.2.0",
-    "mesurer": "^0.1.5",
     "oxlint": "^1.79.0",
     "typescript": "~6.0.2",
     "vite": "^8.2.2"
-  },
-  "allowScripts": {
-    "better-sqlite3@12.11.1": true
   }
 }

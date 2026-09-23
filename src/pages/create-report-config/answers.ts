@@ -310,7 +310,7 @@ export type FieldsAnswers = {
   columns: FieldColumn[]
   customFields: CustomField[]
   /**
-   * The fields the report groups by, outermost first — see GroupingStep and GroupByBar.
+   * The fields the report groups by, outermost first — see GroupingStep.
    * Order is the whole point: "Gateway, then Txn Type" is a different report from "Txn Type,
    * then Gateway", so this is a list and not a set.
    *
@@ -321,7 +321,7 @@ export type FieldsAnswers = {
    * field came back ungrouped. A field name survives that, and survives the rename too, since
    * `fieldOf` reads a column's `source` rather than its editable title.
    *
-   * Optional because it arrived after the other two and every version but 7 and 8 ignores it.
+   * Optional because it arrived after the other two; absent means no grouping.
    */
   groupBy?: string[]
 }

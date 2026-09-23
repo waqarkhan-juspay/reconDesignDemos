@@ -22,8 +22,6 @@ import { DeliveryStep } from './DeliveryStep'
 import { ExitFlowModal } from './ExitFlowModal'
 import { SubmitConfigModal } from './SubmitConfigModal'
 import { FieldsStep } from './FieldsStep'
-import { FieldsLayoutDials, type FieldsLayout } from './fields-layout'
-import { FlowDials, type FlowVersion } from './flow-layout'
 import { GroupingStep } from './GroupingStep'
 import { FiltersStep } from './FiltersStep'
 import { ReviewStep } from './ReviewStep'
@@ -48,8 +46,7 @@ import {
 const { colors } = FOUNDATION_THEME
 
 /**
- * One measure for the whole flow: a 960px content column, with a `full` track beside it
- * for the one thing that cannot fit (the Fields table). The tracks themselves are
+ * One measure for the whole flow: a 960px content column. The tracks themselves are
  * `.flow-grid` in index.css — see the note there; the width is `--flow-content`.
  *
  * Wider than the design's own 800px Review column (node 4530:10457) on purpose: the flow is
@@ -61,19 +58,10 @@ const { colors } = FOUNDATION_THEME
 const COLUMN = 'flow-grid'
 
 /**
- * The five steps of the create flow, with the heading each one carries.
- *
- * Every step now takes the same measure, so there is no per-step width here any more —
- * `.flow-grid` is the one column and a step's own content decides whether any part of it
- * breaks out (see `.flow-full`).
- *
- * The design draws the progress bar at 288px of 1440 on Setup, 576px on Delivery and 864px
- * on Fields: one, two and three fifths of these five.
- */
-/**
- * Identity for a step, so nothing downstream depends on its position. Flow version 2 inserts
- * Grouping in the middle of this list (flow-layout.tsx), which shifts every index after it —
- * the reason `step`, `confirmed` and the completeness checks below are all keyed on the id.
+ * Identity for a step, so nothing downstream depends on its position. Grouping is only a step
+ * for a grouped report, so it comes and goes in the middle of the list and shifts every index
+ * after it — the reason `step`, `confirmed` and the completeness checks below are all keyed on
+ * the id.
  */
 export type StepId = 'setup' | 'delivery' | 'grouping' | 'fields' | 'filters' | 'review'
 
@@ -93,6 +81,8 @@ const ALL_STEPS: {
    */
   skipLabel?: string
 }[] = [
+  // Every step, in order. Grouping is filtered out of the walked list for a transaction-level
+  // report — see STEPS in ReportFlow.
   {
     id: 'setup',
     label: 'Setup',
@@ -180,8 +170,7 @@ const MOTION = {
  * its left gutter, so the content column stays centred while the window is wide enough for
  * that, and gives ground on the left before it gives any to the rail.
  *
- * 160 = the rail's 28px inset, its 106px measured width, and enough air after it that the
- * Fields step's 1200px measure (fields-layout.tsx) does not end up butted against it.
+ * 160 = the rail's 28px inset, its 106px measured width, and some air after it.
  */
 const RAIL_GUTTER = { '--flow-rail-gutter': '160px' } as CSSProperties
 
@@ -259,7 +248,7 @@ function TopbarContent({ onExit }: { onExit: () => void }) {
  * Every step's answers live here rather than in the step, so Back is free: walking away and
  * returning finds the questions as they were, with their reveals already open.
  */
-function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
+function ReportFlow() {
   const navigate = useNavigate()
 
   const [setup, setSetup] = useState<SetupAnswers>(EMPTY_SETUP)
@@ -275,9 +264,8 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   const groupsRecords = setup.format === 'Aggregated'
 
   /**
-   * The steps this flow actually walks. Version 1 is the shipped five; version 2 adds
-   * Grouping, which ALL_STEPS carries in its natural position (flow-layout.tsx) — but only
-   * for a report that is grouped.
+   * The steps this flow actually walks: ALL_STEPS, with Grouping only for a report that is
+   * grouped.
    *
    * Conditional rather than always present, because Setup has already asked. A step offering
    * to group a transaction-level report is asking a question whose answer the user gave two
@@ -285,18 +273,16 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * with a Skip button attached. `format` is null until Setup is answered, so the flow opens
    * on the five and grows the sixth the moment "Grouped records" is picked.
    */
-  const STEPS =
-    flowVersion === 'v2' && groupsRecords
-      ? ALL_STEPS
-      : ALL_STEPS.filter(({ id }) => id !== 'grouping')
+  const STEPS = groupsRecords ? ALL_STEPS : ALL_STEPS.filter(({ id }) => id !== 'grouping')
 
   /**
-   * Which step is showing, by id rather than index: switching flow version changes what
+   * Which step is showing, by id rather than index: Grouping coming and going changes what
    * index 2 means, and a stored index would silently move the user to a different step.
    */
   const [stepId, setStepId] = useState<StepId>('setup')
-  // A step that the current version does not have — i.e. Grouping, after switching back to
-  // version 1 while standing on it. Fields is where that question goes in version 1.
+  // A step the list no longer has — Grouping, once Setup is switched back to transaction
+  // level. Setup is the only place that switch can happen, and the rail only goes backwards,
+  // so in practice this never fires; it keeps `current` defined if it ever does.
   const step = Math.max(0, STEPS.findIndex(({ id }) => id === stepId))
   const current = STEPS[step]
   const setStep = (next: number) => setStepId(STEPS[next].id)
@@ -304,16 +290,15 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * The steps the user has committed — walked up to and clicked the primary action on. This
    * is what the rail ticks off (StepRail.tsx).
    *
-   * A Set rather than a high-water mark because the rail lets you jump to any step, so the
-   * committed steps are not necessarily a prefix of the flow: jump straight to Filters,
-   * commit it, and Setup and Delivery are still untouched behind you.
+   * A Set rather than a high-water mark: Grouping can leave the list after it was committed,
+   * and walking back leaves later steps committed behind you.
    */
   const [confirmed, setConfirmed] = useState<ReadonlySet<StepId>>(() => new Set())
   const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
   const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
   const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
   const [confirmingExit, setConfirmingExit] = useState(false)
-  /** The Fields step's "Add custom column" modal — its button sits in the heading row below. */
+  /** The Fields step's "Add custom column" modal — opened from the column organiser's header. */
   const [addingColumn, setAddingColumn] = useState(false)
 
   /**
@@ -398,7 +383,7 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   /**
    * The same steps read as a gate on Continue, which is a looser question: a step with
    * nothing to answer cannot hold the flow up, so it is complete by definition. That is the
-   * one place this differs from `stepAnswered` above, and why the two are separate lists.
+   * one place this differs from `answeredFor` above.
    *
    * Review is that case too, and needs saying explicitly: `answeredFor` returns false for it
    * so the rail never ticks the step you are standing on, and without `isLastStep` here that
@@ -406,24 +391,20 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    */
   const complete = skipLabel !== undefined || isLastStep || answeredFor(current.id)
 
-  /**
-   * One step's heading and body. A function rather than inline JSX so the Fields step can
-   * render it inside FieldsLayoutDials, which hands back the spacing and layout version its
-   * dial panel is set to. Every other step calls it with nothing and keeps the defaults: the
-   * inline row-gap is absent, and the heading's custom property falls back to 8px.
-   */
-  const renderStep = (layout?: FieldsLayout) => (
+  /** One step's heading and body. */
+  const stepBody = (
     // Setup follows node 4541:16282, which sets its sections 24px apart; the other steps
     // keep the 32px rhythm their own frames were drawn at.
     <div key={current.id} className={`${COLUMN} flow-question ${current.id === 'setup' ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
-      style={layout?.style}
-      data-layout={layout?.wide ? 'wide' : undefined}
+      // Fields' title and standfirst sit 8px apart, where every other step's sit 4px — the
+      // value the step was tuned to (see the heading's gap below).
+      style={current.id === 'fields' ? ({ '--step-heading-gap': '8px' } as CSSProperties) : undefined}
       /* The column organiser is the one step body that should fit the window rather than
          grow past it — it carries two lists of its own, and a page scroll that moves the
          chrome away from them is the wrong scroll. `data-fill` makes this grid exactly as
          tall as the pane it scrolls in (index.css), which is what gives the organiser a
          definite height to cap itself against. Every other step stays content-height. */
-      data-fill={current.id === 'fields' && layout?.version === 'v8' ? '' : undefined}
+      data-fill={current.id === 'fields' ? '' : undefined}
     >
       {/* Every step's heading sits on the content column's left edge, Fields
           included. Node 4457:15485 draws that heading flush with its table's left
@@ -431,10 +412,8 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
           now the one thing that breaks out of the column, so the two no longer
           meet. Deliberate: a heading that moved with its step's widest element is
           exactly the jumping this grid removes. */}
-      {/* 4px between title and standfirst — node 4542:17173's gap. The Fields dials can
-          still override it through the custom property. */}
-      {/* The heading, with the step's own action — Fields' "Add custom column" — pushed to
-          the far right of the same row. */}
+      {/* 4px between title and standfirst — node 4542:17173's gap. Fields overrides it
+          through the custom property, on the grid above. */}
       <div className="flex items-end justify-between gap-4">
       <div className="flex flex-col" style={{ gap: 'var(--step-heading-gap, 4px)' }}>
         {/* Above the title, not beside it: it qualifies the whole step rather than
@@ -486,7 +465,6 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
           answers={fields}
           onChange={setFields}
           aggregated={groupsRecords}
-          version={layout?.version}
           addingColumn={addingColumn}
           onAddingColumnChange={setAddingColumn}
         />
@@ -537,13 +515,7 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
           <div className="flex-1 overflow-auto" data-flow-content>
             {/* Keyed on the step so moving between them replays the arrival rather than
                 cross-fading one set of questions into another. */}
-            {/* Only the Fields step gets the layout dials. Mounting FieldsLayoutDials is what
-                registers its panel, and leaving the step unmounts it and takes the panel away. */}
-            {current.id === 'fields' ? (
-              <FieldsLayoutDials>{renderStep}</FieldsLayoutDials>
-            ) : (
-              renderStep()
-            )}
+            {stepBody}
           </div>
 
           <div
@@ -637,12 +609,8 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   )
 }
 
-/**
- * The dial panel wraps the whole flow rather than one step, because what it changes is the
- * step list itself — see flow-layout.tsx.
- */
 function CreateReportConfig() {
-  return <FlowDials>{(version) => <ReportFlow flowVersion={version} />}</FlowDials>
+  return <ReportFlow />
 }
 
 export default CreateReportConfig
