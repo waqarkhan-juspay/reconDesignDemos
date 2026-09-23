@@ -572,6 +572,9 @@ export function ColumnOrganiser({
                 as="p"
                 {...font(FOUNDATION_THEME.font.size.body.sm)}
                 color={colors.gray[500]}
+                // Italic, so the count reads as a remark about the list rather than one more
+                // item in it. PrimitiveText has no fontStyle prop; `style` reaches the element.
+                style={{ fontStyle: 'italic' }}
               >
                 {caption}
               </PrimitiveText>
