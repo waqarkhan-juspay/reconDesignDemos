@@ -141,7 +141,9 @@ function SidebarFooter({ collapsed }: { collapsed: boolean }) {
       aria-label={collapsed ? PROFILE_NAME : undefined}
       title={collapsed ? PROFILE_NAME : undefined}
       style={{ ...CHROME_HOVER, borderRadius: FOUNDATION_THEME.border.radius[8] }}
-      className={`flex w-full cursor-pointer items-center border-none bg-transparent py-1.5 hover:bg-[var(--chrome-hover)] ${
+      // py-3.5 (14px) around the 24px avatar makes the row 52px — the rail's own width, so the
+      // footer is as tall as the collapsed rail is wide.
+      className={`flex w-full cursor-pointer items-center border-none bg-transparent py-3.5 hover:bg-[var(--chrome-hover)] ${
         collapsed ? 'justify-center px-0' : 'gap-2 px-2'
       }`}
     >
