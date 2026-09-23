@@ -1,6 +1,5 @@
-import { FOUNDATION_THEME } from '@juspay/blend-design-system'
-import { CircleCheck } from 'lucide-react'
-import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
+import { FOUNDATION_THEME, RadioV2, SelectorV2Size } from '@juspay/blend-design-system'
+import type { KeyboardEvent, ReactNode } from 'react'
 import { PrimitiveText, font } from '../../primitives'
 
 const { colors } = FOUNDATION_THEME
@@ -96,25 +95,30 @@ export function SelectableCard({
           >
             {title}
           </PrimitiveText>
-          {/* The mark sits 12px from the card's top and right edges (node 4541:16282).
+          {/* A Blend radio, on every card — empty until chosen — so each group reads as
+              pick-one before anything is picked. Sits 12px from the card's top and right edges
+              (node 4541:16282), pinned to the row's top; the large card pads 16px, so it lifts
+              4px to match.
 
-              Lucide's circle-check, filled: the disc is primary[600] and the tick is white.
-              Lucide strokes the circle and the tick alike from `color`, so the tick takes
-              gray[0] and the circle's own stroke is repainted to the fill through
-              --check-fill — otherwise a white ring would trim the disc on its white card.
+              Decoration only: the card is the control (role="button", aria-pressed, keys
+              above), so the input is out of the tab order and the accessibility tree, and
+              pointer events pass through to the card's own click. MD, which is 16px on
+              desktop (SM is 14) — the size the filled check it replaced was drawn at.
 
-              Pinned to the row's top rather than centred on the title, so the top inset is
-              the padding itself. The large card pads 16px, so it lifts 4px to match. Being
-              shorter than the title line, it never grows the row when it appears. */}
-          {selected && (
-            <span
-              aria-hidden
-              className={`pointer-events-none flex shrink-0 [&_circle]:[stroke:var(--check-fill)] ${large ? '-mt-1' : ''}`}
-              style={{ '--check-fill': colors.primary[600] } as CSSProperties}
-            >
-              <CircleCheck size={16} color={colors.gray[0]} fill={colors.primary[600]} />
-            </span>
-          )}
+              w-4 clips the layout to the radio itself: RadioV2 still renders its (empty)
+              label column after an 8px gap, which would push the radio 8px off the edge. */}
+          <span
+            aria-hidden
+            className={`pointer-events-none flex w-4 shrink-0 ${large ? '-mt-1' : ''}`}
+          >
+            <RadioV2
+              checked={selected}
+              readOnly
+              tabIndex={-1}
+              size={SelectorV2Size.MD}
+              aria-label={title}
+            />
+          </span>
         </div>
         <PrimitiveText
           {...font(FOUNDATION_THEME.font.size.body.md)}
