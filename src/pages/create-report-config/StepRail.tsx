@@ -1,9 +1,11 @@
 import {
+  FOUNDATION_THEME,
   StepperV2,
   StepperV2StepStatus,
   StepperV2Type,
   type StepperV2Step,
 } from '@juspay/blend-design-system'
+import { PrimitiveText, font } from '../../primitives'
 
 export type RailStep = {
   /** The short name the rail shows. */
@@ -55,9 +57,33 @@ function statusOf({ optional, answered, confirmed }: RailStep, index: number, cu
  * It also overrides `status` (StepperV2/utils.ts `getStepState`), so a step you have walked
  * back past shows as disabled rather than ticked until you Continue onto it again.
  *
+ * A disabled step keeps its number. Blend draws a lock there, but a lock says "you may not",
+ * where these steps are simply not reached yet — so `icon` (which Blend renders ahead of any
+ * status glyph, Steps.tsx `renderStepIcon`) hands back the number instead, drawn the way
+ * Blend draws a pending step's: 12px at 500, in the disabled icon colour, `gray[300]`
+ * (`icon.disabled` in stepperV2.light.tokens.ts).
+ *
  * Every other step's `status` comes from `statusOf` — passing it overrides Blend's own
  * completed/current derivation, which is what we want here.
  */
+/**
+ * A disabled step's number, in place of Blend's lock. `aria-hidden`, as Blend's own number
+ * is: the step's accessible name already carries its position.
+ */
+function DisabledStepNumber({ value }: { value: number }) {
+  return (
+    <span aria-hidden="true" className="flex">
+      <PrimitiveText
+        as="span"
+        {...font(FOUNDATION_THEME.font.size.body.sm)}
+        color={FOUNDATION_THEME.colors.gray[300]}
+      >
+        {value}
+      </PrimitiveText>
+    </span>
+  )
+}
+
 export function StepRail({
   steps,
   current,
@@ -72,6 +98,7 @@ export function StepRail({
     title: step.label,
     status: statusOf(step, index, current),
     disabled: index > current,
+    icon: index > current ? <DisabledStepNumber value={index + 1} /> : undefined,
   }))
 
   return (
