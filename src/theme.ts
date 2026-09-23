@@ -8,11 +8,13 @@ import {
   type ResponsiveDirectoryTokens,
   type ResponsiveTableTokens,
   type ResponsiveTabsV2Tokens,
+  type ResponsiveTopbarV2Tokens,
 } from '@juspay/blend-design-system'
 import { ICON_SIZE } from './layout/chrome'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
+import { TOPBARV2_TOKENS } from './tokens/TopbarV2'
 import { SINGLE_SELECT_V2_TOKENS } from './tokens/SingleSelectV2'
 import { TAGS_TOKENS } from './tokens/Tags'
 import { TAGV2_TOKENS } from './tokens/TagV2'
@@ -106,6 +108,19 @@ const TABLE = perBreakpoint(
 ) as unknown as ResponsiveTableTokens
 
 /**
+ * The topbar solid white, not Blend's 80% white.
+ *
+ * The translucency is for content scrolling underneath a bar, and nothing here does: the
+ * shell's page scrolls in its own element below the bar, and the create flow's bar sits above
+ * its scroller too. So the only thing showing through was the SidebarV2 shell's gray[25],
+ * which tinted the bar #FEFEFE beside a white page (AppShell paints the page gray[0]).
+ */
+const TOPBARV2 = perBreakpoint(TOPBARV2_TOKENS as unknown as Record<string, object>, (token) => ({
+  ...token,
+  backgroundColor: FOUNDATION_THEME.colors.gray[0],
+})) as unknown as ResponsiveTopbarV2Tokens
+
+/**
  * Only slots that actually override something are wired.
  *
  * src/tokens/ carries a full tree for all 14 V2 components this app renders, but a tree
@@ -113,7 +128,7 @@ const TABLE = perBreakpoint(
  * costs something, because these are light values and passing them replaces the dark
  * defaults too. Edit a value in that file, then add its slot here.
  */
-export const componentTokens: ComponentTokenType = { DIRECTORY, TABLE }
+export const componentTokens: ComponentTokenType = { DIRECTORY, TABLE, TOPBARV2 }
 
 /**
  * Tabs with the design's 24px between triggers, for the ONE tab set that wants it.
