@@ -212,12 +212,9 @@ export function OrganiserRow({
    * a tautology; after it, it is the only thing left saying where the column's data comes
    * from. The curly quotes are the design's.
    *
-   * Never on a custom column, whatever its `source` says. There the name *is* the field and
-   * stays so — renaming one renames the field itself, chip and grouping included (`rename`
-   * in ColumnOrganiser.tsx) — so there is no earlier name left to point back at. The only
-   * way the two can differ at all is a copy left on the old name while its twin was edited,
-   * and a `represents` line under a row the user just named is the tautology this line
-   * exists to avoid.
+   * Never on a custom column, whatever its `source` says. There the name *is* the field, and
+   * the row offers no rename (see the pencil below), so there is no earlier name left to
+   * point back at.
    */
   const origin = fieldOf(column)
   const renamed = !custom && !sameField(origin, column.title)
@@ -359,45 +356,52 @@ export function OrganiserRow({
                   </span>
                 </TooltipV2>
               )}
-              {/* Hidden until the row is hovered or something in it has focus — the rule is
-                  in index.css, because opacity has to answer to `:hover` on the row rather
-                  than to a state this component would otherwise have to hold. Focus is in
-                  that rule too, so tabbing to it still reveals it. */}
-              <button
-                type="button"
-                onClick={startEditing}
-                aria-label={`Rename ${column.title}`}
-                title="Rename"
-                className="organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0"
-              >
-                <PencilLine size={ICON_SIZE} color={colors.gray[400]} />
-              </button>
+              {/* Where the column came from, which is the one thing about a custom column that
+                  cannot be read off the row: its name is whatever the user typed, so nothing
+                  else here distinguishes it from the twenty-six the vocabulary shipped with.
+                  Beside the name because it is a fact about the name. The palette chip's
+                  orange, so the mark is the one the user already met; no `onClick`, which is
+                  what makes TagV2 draw a Block rather than a button (TagV2.tsx:53).
+
+                  `self-center`: the text column aligns on the baseline, and a tag is a box
+                  rather than a line of text. `ml-1` on top of the column's 4px gap gives it
+                  8px from the name. */}
+              {custom && (
+                <span className="ml-1 flex shrink-0 self-center">
+                  <TagV2
+                    text="Custom"
+                    size={TagV2Size.SM}
+                    subType={TagV2SubType.SQUARICAL}
+                    color={TagV2Color.WARNING}
+                    type={TagV2Type.SUBTLE}
+                  />
+                </span>
+              )}
+              {/* No rename on a custom column. Its name *is* the field — the one the user
+                  typed in "Add custom column" — so renaming the row would be renaming the
+                  field out from under its palette chip and any other copy of it.
+
+                  Otherwise hidden until the row is hovered or something in it has focus — the
+                  rule is in index.css, because opacity has to answer to `:hover` on the row
+                  rather than to a state this component would otherwise have to hold. Focus is
+                  in that rule too, so tabbing to it still reveals it. */}
+              {!custom && (
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  aria-label={`Rename ${column.title}`}
+                  title="Rename"
+                  className="organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0"
+                >
+                  <PencilLine size={ICON_SIZE} color={colors.gray[400]} />
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
 
       <div className="flex shrink-0 items-center">
-        {/* Where the column came from, which is the one thing about a custom column that
-            cannot be read off the row: its name is whatever the user typed, so nothing else
-            here distinguishes it from the twenty-six the vocabulary shipped with.
-
-            It stacks with "Grouped by" rather than competing for the slot, because the two
-            answer different questions — where the field came from, and what the report does
-            with it — and a custom field that is grouped is both. Same size, same shape and
-            the same absent `onClick` as that pill; only the hue differs, and it is the
-            palette chip's orange so the mark is the one the user already met. */}
-        {custom && (
-          <span className="pr-2">
-            <TagV2
-              text="Custom"
-              size={TagV2Size.SM}
-              subType={TagV2SubType.SQUARICAL}
-              color={TagV2Color.WARNING}
-              type={TagV2Type.SUBTLE}
-            />
-          </span>
-        )}
         {(grouped || showAggregation) && (
           /* One slot, one keyline.
 

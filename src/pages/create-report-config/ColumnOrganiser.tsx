@@ -342,49 +342,16 @@ export function ColumnOrganiser({
     setColumns(columns.map((column) => (column.id === id ? { ...column, ...patch } : column)))
 
   /**
-   * Renaming a column, which is two different operations wearing one pencil.
+   * Renaming a column: the title is a label laid over a field the report already knows
+   * about. The label moves and the field does not — `source` holds the two together, the
+   * chip stays lit, and the row reads back `represents "Gateway"` so the original name is
+   * never actually lost.
    *
-   * For a field the vocabulary shipped, the title is a label laid over a field the report
-   * already knows about. The label moves and the field does not: `source` holds the two
-   * together, the chip stays lit, and the row reads back `represents "Gateway"` so the
-   * original name is never actually lost.
-   *
-   * For a field the user invented there is nothing underneath to point back at — the name
-   * *is* the field. So the rename goes all the way down: `customFields`, which is what draws
-   * the chip; `groupBy`, which stores field names and would otherwise keep pointing at a name
-   * that no longer exists and silently ungroup the field; and `source` on every column that
-   * came from it. Renaming only the title would have split one field into a chip nobody could
-   * find and a row claiming to represent a name the user had just replaced.
-   *
-   * A duplicate follows the rename only while it still carries the field's own name. Once a
-   * copy has a title of its own, that title is a decision, and a rename of its twin is not
-   * the place to overturn it.
+   * Only vocabulary fields get here. A custom column has no pencil (OrganiserRow): its name
+   * *is* the field, and a rename would have had to move the field itself — its chip, its
+   * grouping, every copy of it — to avoid splitting one field into two.
    */
-  const rename = (column: FieldColumn, title: string) => {
-    const field = fieldOf(column)
-    if (!isCustom(field)) {
-      update(column.id, { title })
-      return
-    }
-    onChange({
-      ...answers,
-      columns: columns.map((other) =>
-        sameField(fieldOf(other), field)
-          ? {
-              ...other,
-              source: title,
-              ...(other.id === column.id || sameField(other.title, field) ? { title } : {}),
-            }
-          : other,
-      ),
-      customFields: answers.customFields.map((custom) =>
-        sameField(custom.title, field) ? { ...custom, title } : custom,
-      ),
-      ...(answers.groupBy && {
-        groupBy: answers.groupBy.map((other) => (sameField(other, field) ? title : other)),
-      }),
-    })
-  }
+  const rename = (column: FieldColumn, title: string) => update(column.id, { title })
 
   /**
    * A copy lands directly below its original rather than at the end, because the reason to
