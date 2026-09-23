@@ -7,11 +7,10 @@ import {
   SidebarV2StateChange,
   type SidebarV2StateChangeType,
 } from '@juspay/blend-design-system'
-import { ChevronsUpDown, Settings2 } from 'lucide-react'
+import { ChevronDown } from 'lucide-react'
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import avatarImage from '../assets/avatar.png'
-import codeSnippetIcon from '../assets/icons/code-snippet-01.svg'
 import searchIcon from '../assets/icons/search-md.svg'
 import starsIcon from '../assets/icons/stars-02.svg'
 import tenantIcon1 from '../assets/icons/tenant-icon-1.svg'
@@ -20,7 +19,7 @@ import tenantLogo from '../assets/icons/tenant-logo.svg'
 import merchantOrb from '../assets/merchant-hyper-recon.png'
 import MaskIcon from '../components/MaskIcon'
 import { font } from '../primitives'
-import { CHROME_HOVER, ICON_SIZE } from './chrome'
+import { CHROME_HOVER } from './chrome'
 import { CONFIGURATOR_PATH, buildNavigationData } from './navigation'
 import { TopbarStatusIcons } from './topbar'
 
@@ -126,93 +125,44 @@ function TopbarActions() {
 }
 
 /**
- * Footer rows drop their labels when the rail collapses.
+ * The signed-in user, and the whole of the sidebar footer: a round avatar, the name, and a
+ * chevron at the far end.
  *
- * SidebarV2 passes the `footer` node straight through — `SidebarV2Footer` only flips its
- * own justifyContent — so the footer has no idea the rail narrowed to ~52px. Left alone,
- * these full-width rows keep their `px-3` and their text and are simply clipped by the
- * panel's `overflow: hidden`, which is what showed as "Set" / "F" / "D" slivers.
+ * Blend's footer draws the rule above it (`footer.borderTop`), so the row needs no divider
+ * of its own. SidebarV2 passes `footer` straight through without saying the rail has
+ * collapsed, so this drops the name and chevron itself at 52px — left alone they would be
+ * clipped to a sliver by the panel's `overflow: hidden` — and takes its accessible name from
+ * aria-label instead.
  */
-function FooterMenuItem({
-  icon,
-  label,
-  collapsed,
-}: {
-  icon: ReactNode
-  label: string
-  collapsed: boolean
-}) {
+function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   return (
     <button
       type="button"
-      // The label is dropped rather than clipped when collapsed, so the accessible name
-      // has to come from aria-label — otherwise the button becomes an unnamed icon.
-      aria-label={collapsed ? label : undefined}
-      title={collapsed ? label : undefined}
-      className={`flex w-full cursor-pointer items-center rounded border-none bg-transparent py-1.5 hover:bg-[var(--chrome-hover)] ${
-        collapsed ? 'justify-center px-0' : 'gap-2 px-3 text-left'
+      aria-label={collapsed ? PROFILE_NAME : undefined}
+      title={collapsed ? PROFILE_NAME : undefined}
+      style={{ ...CHROME_HOVER, borderRadius: FOUNDATION_THEME.border.radius[8] }}
+      className={`flex w-full cursor-pointer items-center border-none bg-transparent py-1.5 hover:bg-[var(--chrome-hover)] ${
+        collapsed ? 'justify-center px-0' : 'gap-2 px-2'
       }`}
-      style={{ ...CHROME_HOVER, color: colors.gray[600] }}
     >
-      {icon}
-      {!collapsed && <span style={MENU_ROW}>{label}</span>}
+      <AvatarV2
+        src={avatarImage}
+        alt={PROFILE_NAME}
+        size={AvatarV2Size.SM}
+        shape={AvatarV2Shape.CIRCULAR}
+      />
+      {!collapsed && (
+        <>
+          <span
+            className="flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap"
+            style={{ ...MENU_ROW, color: colors.gray[700] }}
+          >
+            {PROFILE_NAME}
+          </span>
+          <ChevronDown size={16} color={colors.gray[400]} aria-hidden />
+        </>
+      )}
     </button>
-  )
-}
-
-function SidebarFooter({ collapsed }: { collapsed: boolean }) {
-  return (
-    <div className="flex w-full flex-col gap-3">
-      <div className="flex flex-col gap-2">
-        {/* ICON_SIZE, not a number of their own: these two sit in the same rail as the nav
-            rows above them, but they are our markup rather than Directory's, so nothing
-            forces a size on them and 12 simply made them the odd pair out. */}
-        <FooterMenuItem
-          icon={<Settings2 size={ICON_SIZE} />}
-          label="Settings"
-          collapsed={collapsed}
-        />
-        <FooterMenuItem
-          icon={<MaskIcon src={codeSnippetIcon} size={ICON_SIZE} />}
-          label="For Developers"
-          collapsed={collapsed}
-        />
-      </div>
-      <div
-        className="-mx-2 border-t px-2 pt-3"
-        style={{ borderColor: colors.gray[200] }}
-      >
-        <button
-          type="button"
-          aria-label={collapsed ? PROFILE_NAME : undefined}
-          title={collapsed ? PROFILE_NAME : undefined}
-          style={CHROME_HOVER}
-          className={`flex w-full cursor-pointer items-center rounded-[10px] border-none bg-transparent py-2.5 hover:bg-[var(--chrome-hover)] ${
-            collapsed ? 'justify-center px-0' : 'gap-1.5 px-3'
-          }`}
-        >
-          <AvatarV2
-            src={avatarImage}
-            alt={PROFILE_NAME}
-            size={AvatarV2Size.SM}
-            shape={AvatarV2Shape.ROUNDED}
-          />
-          {!collapsed && (
-            <>
-              <span
-                className="flex-1 overflow-hidden text-left text-ellipsis whitespace-nowrap"
-                style={{ ...MENU_ROW, color: colors.gray[600] }}
-              >
-                {PROFILE_NAME}
-              </span>
-              {/* chevron-selector-vertical in the design — the double chevron that says a
-                  row swaps for another, not one that opens downwards. */}
-              <ChevronsUpDown size={16} color={colors.gray[400]} />
-            </>
-          )}
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -272,14 +222,7 @@ function AppShell({ children }: { children?: ReactNode }) {
       onSidebarStateChange={handleSidebarState}
       footer={<SidebarFooter collapsed={isRailCollapsed} />}
     >
-      {/* The page's own surface, white. SidebarV2 paints its whole shell — the rail and the
-          area behind the page alike — from one token, `container.backgroundColor` (gray[25]),
-          so the page is painted here instead: the rail keeps its off-white and the page
-          reads as the white sheet it sits beside. `min-h-full` against the page's scroller
-          ([data-main-content]) so a short page is still white to the bottom. */}
-      <div className="min-h-full" style={{ backgroundColor: colors.gray[0] }}>
-        {children}
-      </div>
+      {children}
     </SidebarV2>
   )
 }
