@@ -427,7 +427,7 @@ export function DeliveryStep({
                     // private one) and uppercase alphanumerics. Found under the channel's
                     // details, and as the last segment of its app.slack.com URL.
                     placeholder="ex: C08KX4R2QHN"
-                    hintText="Alerts will be sent to this specific channel"
+                    hintText="Find it at the bottom of the channel’s details in Slack"
                     value={slackChannel as unknown as number}
                     // The box already draws the `#`, so a pasted "#channel" drops its own.
                     onChange={(event) =>
