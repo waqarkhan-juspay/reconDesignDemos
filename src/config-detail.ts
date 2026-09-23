@@ -75,9 +75,8 @@ const CATEGORY_FIELDS: Record<string, readonly string[]> = {
 /**
  * The report's fields: the core five, plus one or two of its category's, chosen by seed.
  *
- * A range rather than a fixed count so the "N columns selected" chip is not the same number
- * on every row — with ten rows all reading "5 columns selected" the chip stops being read at
- * all. Never more than seven, because past that the preview table stops being a preview.
+ * A range rather than a fixed count so the sheet's "Columns · N" is not the same number on
+ * every row — with ten rows all reading 5 the count stops being read at all. Never more than seven, because past that the preview table stops being a preview.
  */
 export const fieldsFor = (row: ConfigRowFacts): string[] => {
   const extra = CATEGORY_FIELDS[row.categorySource] ?? []
