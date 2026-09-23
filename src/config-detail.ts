@@ -73,10 +73,26 @@ const CATEGORY_FIELDS: Record<string, readonly string[]> = {
 }
 
 /**
- * The report's fields: the core five, plus one or two of its category's, chosen by seed.
+ * The one custom column a saved config may carry — the kind "Add custom column" makes on the
+ * Fields step. Named for what a team would actually add by hand: their own reference for the
+ * record, which no field in the vocabulary holds.
+ */
+const CUSTOM_FIELD = 'Internal Ref'
+
+/**
+ * The custom columns a config carries: about one in three, by seed, so the sheet shows the
+ * orange "(custom)" chip on some configs and not as decoration on all of them.
+ */
+export const customFieldsFor = (row: ConfigRowFacts): string[] =>
+  seedOf(row) % 3 === 0 ? [CUSTOM_FIELD] : []
+
+/**
+ * The report's fields: the core five, plus up to two of its category's, chosen by seed, then
+ * any custom column last — where the Fields step puts a column it has just added.
  *
  * A range rather than a fixed count so the sheet's "Columns · N" is not the same number on
- * every row — with ten rows all reading 5 the count stops being read at all. Never more than seven, because past that the preview table stops being a preview.
+ * every row — with ten rows all reading 5 the count stops being read at all. Never more than
+ * eight, because past that the preview table stops being a preview.
  */
 export const fieldsFor = (row: ConfigRowFacts): string[] => {
   const extra = CATEGORY_FIELDS[row.categorySource] ?? []
@@ -84,7 +100,7 @@ export const fieldsFor = (row: ConfigRowFacts): string[] => {
   const chosen = [...CORE_FIELDS, ...extra.slice(0, count)]
   // Belt and braces: if a category list is ever edited to hold a name FIELD_TAGS does not,
   // the field is dropped rather than shown as a column the Fields step cannot produce.
-  return chosen.filter((field) => FIELD_TAGS.includes(field))
+  return [...chosen.filter((field) => FIELD_TAGS.includes(field)), ...customFieldsFor(row)]
 }
 
 /**
@@ -98,6 +114,16 @@ const AGGREGATED_SOURCES = ['Overall', 'Chargeback']
 
 export const formatFor = (row: ConfigRowFacts): ReportFormat =>
   AGGREGATED_SOURCES.includes(row.sourceType) ? 'Aggregated' : 'Raw'
+
+/**
+ * The fields a config groups by, in level order — empty unless it is a grouped report.
+ *
+ * Gateway first, because it is in every config's core fields and is how a settlement team
+ * reads a summary; Txn Type as a second level on about half, by seed. Both are core fields,
+ * so a grouped field is always one of the config's own columns.
+ */
+export const groupByFor = (row: ConfigRowFacts): string[] =>
+  formatFor(row) !== 'Aggregated' ? [] : seedOf(row) % 2 ? ['Gateway', 'Txn Type'] : ['Gateway']
 
 /**
  * The same answer in the words the user chose it by.
@@ -193,6 +219,8 @@ const sampleValue = (field: string, row: ConfigRowFacts, index: number): string 
       return `2026-09-0${(index % 9) + 1}`
     case 'Settlement Currency':
       return 'INR'
+    case CUSTOM_FIELD:
+      return `OPS-${String(4100 + (seed % 800) + index * 7)}`
     default:
       return '—'
   }
