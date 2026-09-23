@@ -205,7 +205,8 @@ export function ConfigSummaryChipRow({
  * column named here and the same column named there are visibly the same object — which is
  * also why `color` is the one thing a caller can move. PURPLE/SUBTLE is the flow's mark for
  * a grouped field, worn by the chip on the Grouping step and by both the chip and the row in
- * the column organiser; a purple chip here is the same field still wearing it.
+ * the column organiser; a purple chip here is the same field still wearing it. WARNING/SUBTLE
+ * — orange — is the same idea for a custom field, the colour of its "Custom" mark.
  *
  * `title` rather than more text, for a fact the chip is not primarily about: which grouping
  * level it is. TagV2 forwards it to the rendered element, so it arrives as a tooltip.
