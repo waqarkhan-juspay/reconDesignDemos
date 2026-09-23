@@ -81,7 +81,7 @@ const CUSTOM_FIELD = 'Internal Ref'
 
 /**
  * The custom columns a config carries: about one in three, by seed, so the sheet shows the
- * orange "(custom)" chip on some configs and not as decoration on all of them.
+ * orange "[Custom]" chip on some configs and not as decoration on all of them.
  */
 export const customFieldsFor = (row: ConfigRowFacts): string[] =>
   seedOf(row) % 3 === 0 ? [CUSTOM_FIELD] : []
