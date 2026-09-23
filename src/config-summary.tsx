@@ -214,8 +214,8 @@ export function ConfigSummaryChipRow({
 /**
  * One column in a numbered column list — the Review step's and the detail sheet's.
  *
- * The mark is both colour and words: purple and "(grouped)" for a field the report groups
- * by, orange and "(custom)" for a field the user wrote. The colour matches what the same
+ * The mark is both colour and words: purple and "[Group by]" for a field the report groups
+ * by, orange and "[Custom]" for a field the user wrote. The colour matches what the same
  * field wears on the Grouping step and in the column organiser; the words say it for a
  * reader who has not met those colours, or cannot tell them apart. Grouping wins where a
  * custom field is also grouped, as it does in the palette — what the report does with a
@@ -232,11 +232,11 @@ export const columnChip = (
 ) => {
   const text = `${position} · ${name}`
   if (grouping)
-    return summaryChip(`${text} (grouped)`, key, {
+    return summaryChip(`${text} [Group by]`, key, {
       color: TagV2Color.PURPLE,
       title: grouping.of > 1 ? `Grouping level ${grouping.level} of ${grouping.of}` : undefined,
     })
-  if (custom) return summaryChip(`${text} (custom)`, key, { color: TagV2Color.WARNING })
+  if (custom) return summaryChip(`${text} [Custom]`, key, { color: TagV2Color.WARNING })
   return summaryChip(text, key)
 }
 
