@@ -650,8 +650,9 @@ export function ColumnOrganiser({
           </div>
 
           {/* The columns, scrolling under the header — `min-h-0` for the reason the palette's
-              list carries it. */}
-          <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-6 px-6 py-1">
+              list carries it. 16px at the bottom so the last row, scrolled to the end, sits
+              clear of the pane's edge rather than against it. */}
+          <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-6 px-6 pt-1 pb-4">
             {columns.length === 0 ? (
               /* blend-gap: Blend 0.0.37 publishes no EmptyState (it exists on GitHub — rule 3),
                  so this is the smallest honest version: what the panel is for, in the place its
@@ -708,9 +709,11 @@ export function ColumnOrganiser({
                     a border and a -1px bottom margin so adjacent edges collapse into one
                     hairline, and the first and last take the outer radius. `overflow-hidden`
                     is what makes the radius clip the row inside it. */}
+                {/* `pb-px` gives back the pixel the last row's -1px margin takes (the margin
+                    that collapses neighbouring borders), so the 16px under the list is 16. */}
                 <div
                   ref={listRef}
-                  className="organiser-list flex flex-col"
+                  className="organiser-list flex flex-col pb-px"
                   style={{ borderRadius: FOUNDATION_THEME.border.radius[8] }}
                 >
                   {columns.map((column, index) => (
