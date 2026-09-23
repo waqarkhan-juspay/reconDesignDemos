@@ -581,7 +581,7 @@ export function ColumnOrganiser({
         <div
           className="flex min-h-0 min-w-0 flex-1 flex-col"
           style={{
-            backgroundColor: colors.gray[25],
+            backgroundColor: colors.gray[0],
             // No left border: the palette's right border already draws the seam, and two
             // hairlines a pixel apart read as a gap rather than a division.
             borderTop: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
