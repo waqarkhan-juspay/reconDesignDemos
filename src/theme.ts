@@ -8,10 +8,13 @@ import {
   type ResponsiveDirectoryTokens,
   type ResponsiveTableTokens,
   type ResponsiveTabsV2Tokens,
+  type ResponsiveSidebarV2Tokens,
 } from '@juspay/blend-design-system'
+import { ICON_SIZE } from './layout/chrome'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
+import { SIDEBARV2_TOKENS } from './tokens/SidebarV2'
 import { SINGLE_SELECT_V2_TOKENS } from './tokens/SingleSelectV2'
 import { TAGS_TOKENS } from './tokens/Tags'
 import { TAGV2_TOKENS } from './tokens/TagV2'
@@ -52,7 +55,17 @@ const perBreakpoint = <T,>(tokens: Record<string, T>, edit: (token: T) => T) =>
  * rather than a bisect.
  *
  * Section labels keep Blend's 600 — they are headings, and the contrast is the point.
+ *
+ * And the collapsed rail's nav buttons are centred. In icon-only mode Directory hard-codes
+ * 12px of side padding on a 52px rail (Directory.tsx:79), which leaves a 28px column, then pads
+ * each item by `iconOnlyPadding` — 10px a side, so a 14px icon makes a 34px button. It
+ * overflows the column to the right and every nav icon sat 3px right of the rail's centre,
+ * out of line with the toggle above and the footer rows below. Side padding of half the
+ * column's leftover makes the button exactly 28px, the width the footer rows already are.
  */
+const RAIL_COLUMN = '28px'
+const ICON_ONLY_SIDE_PADDING = `calc((${RAIL_COLUMN} - ${ICON_SIZE}) / 2)`
+
 const DIRECTORY = perBreakpoint(
   getDirectoryTokens(FOUNDATION_THEME) as unknown as Record<string, DirectoryTokenType>,
   (token) => ({
@@ -64,6 +77,11 @@ const DIRECTORY = perBreakpoint(
         item: {
           ...token.section.itemList.item,
           fontWeight: FOUNDATION_THEME.font.weight[500],
+          iconOnlyPadding: {
+            ...token.section.itemList.item.iconOnlyPadding,
+            paddingLeft: ICON_ONLY_SIDE_PADDING,
+            paddingRight: ICON_ONLY_SIDE_PADDING,
+          },
         },
       },
     },
@@ -90,6 +108,38 @@ const TABLE = perBreakpoint(
 ) as unknown as ResponsiveTableTokens
 
 /**
+ * The sidebar white, not Blend's gray[25] (#FCFCFD).
+ *
+ * SidebarV2 paints its whole shell from these: `container` is the rail *and* the area behind
+ * the page, and the header, footer and the two narrow columns each repeat the same colour.
+ * Every one moves together, so the rail, open or collapsed, and the page are one white
+ * surface split by the rail's border. TopbarV2's 80% white then sits on white and reads white.
+ */
+const SIDEBARV2 = perBreakpoint(
+  SIDEBARV2_TOKENS as unknown as Record<string, Record<string, object>>,
+  (token) => {
+    const white = FOUNDATION_THEME.colors.gray[0]
+    return {
+      ...token,
+      container: { ...token.container, backgroundColor: white },
+      leftPanel: { ...token.leftPanel, backgroundColor: white },
+      header: { ...token.header, backgroundColor: white },
+      // No padding of its own: the profile row (AppShell's SidebarFooter) carries its own, and
+      // the footer's added a second inset around it.
+      footer: {
+        ...token.footer,
+        backgroundColor: white,
+        paddingTop: 0,
+        paddingBottom: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+      },
+      secondarySidebar: { ...token.secondarySidebar, backgroundColor: white },
+    }
+  },
+) as unknown as ResponsiveSidebarV2Tokens
+
+/**
  * Only slots that actually override something are wired.
  *
  * src/tokens/ carries a full tree for all 14 V2 components this app renders, but a tree
@@ -97,7 +147,7 @@ const TABLE = perBreakpoint(
  * costs something, because these are light values and passing them replaces the dark
  * defaults too. Edit a value in that file, then add its slot here.
  */
-export const componentTokens: ComponentTokenType = { DIRECTORY, TABLE }
+export const componentTokens: ComponentTokenType = { DIRECTORY, TABLE, SIDEBARV2 }
 
 /**
  * Tabs with the design's 24px between triggers, for the ONE tab set that wants it.

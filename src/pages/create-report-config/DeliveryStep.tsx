@@ -176,10 +176,6 @@ export function DeliveryStep({
       {/* The cadence is the step's opening question — the configuration name it used to
           open on is asked at submit now, in SubmitConfigModal. */}
       <QuestionGroup label="How often?">
-        {/* The cadence, timing and day/time rows, 16px apart — the same as the gap between
-            cards in a row, so the three read as one grid. QuestionGroup's own 8px stays
-            between the label and the first row. */}
-        <div className="flex flex-col gap-4">
         <OptionRow>
           {FREQUENCIES.map((option) => (
             <OptionCard
@@ -206,7 +202,20 @@ export function DeliveryStep({
             />
           ))}
         </OptionRow>
+      </QuestionGroup>
 
+      {/* When it goes out: the timing cards (Daily only), then the day and time. One
+          question, so its rows sit 16px apart — the gap between cards in a row, so they read
+          as one grid — and the section as a whole is the step grid's 32px from its
+          neighbours. Weekly and Monthly are answered a specified time on the user's behalf
+          (see onSelect above), so any cadence opens it. */}
+      {frequency !== null && (
+        <QuestionGroup label="When should it be sent?">
+        {/* 16px under the heading when the section opens on the day and time selects (Weekly,
+            Monthly) — QuestionGroup's 8px suits a row of cards, but above the selects' own
+            labels it stacks two lines of text with nothing to tell them apart. Daily opens on
+            the timing cards and keeps the 8px, the same as "How often?" above it. */}
+        <div className={`flex flex-col gap-4 ${frequency === DAILY ? '' : 'pt-2'}`}>
         {/* Revealed once the cadence is Daily, and only then.
 
             Weekly and Monthly skip this row entirely rather than showing it with one card
@@ -333,7 +342,8 @@ export function DeliveryStep({
           </div>
         )}
         </div>
-      </QuestionGroup>
+        </QuestionGroup>
+      )}
 
       {timing !== null && (
         <QuestionGroup label="Delivery channel">
@@ -417,8 +427,11 @@ export function DeliveryStep({
                     unit="#"
                     unitPosition={UnitPosition.LEFT}
                     type="text"
-                    placeholder="ex: juspay-troubleshoot"
-                    hintText="Alerts will be sent to this specific channel"
+                    // The shape Slack assigns: a type letter (C for a public channel, G for a
+                    // private one) and uppercase alphanumerics. Found under the channel's
+                    // details, and as the last segment of its app.slack.com URL.
+                    placeholder="ex: C08KX4R2QHN"
+                    hintText="Find it at the bottom of the channel’s details in Slack"
                     value={slackChannel as unknown as number}
                     // The box already draws the `#`, so a pasted "#channel" drops its own.
                     onChange={(event) =>

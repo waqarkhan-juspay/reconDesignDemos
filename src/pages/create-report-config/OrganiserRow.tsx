@@ -67,15 +67,23 @@ const BADGE_WIDTH = { single: 20, double: 28 }
 const NAME_GAP = { single: 16, double: 8 }
 
 /**
- * How much more readily the origin line gives up width than the column's name does.
- *
- * Flexbox has no priority order, only weights — shrinkage is shared out in proportion to
- * each item's factor times its basis — so "shorten the note, not the name" is written as a
- * factor large enough that the name's share of any realistic overflow rounds to nothing. It
- * is not infinity: past the point where the note has vanished entirely the name does start
- * to ellipsis, which is what keeps it off the row's own buttons.
+ * The least room between the row's two halves — the name and its note on the left, the
+ * aggregation and the actions on the right. `justify-between` already holds them at the
+ * card's edges; this is what stops a long name running up against COUNT when it does not.
  */
-const ORIGIN_SHRINK = 999
+const HALF_GAP = 16
+
+/**
+ * The least of a renamed column's name that stays on screen — a few letters and the
+ * ellipsis, enough to tell two renamed rows apart.
+ *
+ * The note does not shrink (see the name's comment in the row), so its cap is everything but
+ * this, the pencil, and the two 4px gaps either side of the note. On any realistic row that
+ * is more than the longest note needs, so the note reads in full; only a row too narrow to
+ * hold both does it ellipsis, and then the tooltip has the rest.
+ */
+const NAME_MIN = 56
+const NOTE_MAX = `calc(100% - ${NAME_MIN + ICON_SIZE + 4 * 2}px)`
 
 const NAME = font(FOUNDATION_THEME.font.size.body.md)
 const META = {
@@ -204,12 +212,9 @@ export function OrganiserRow({
    * a tautology; after it, it is the only thing left saying where the column's data comes
    * from. The curly quotes are the design's.
    *
-   * Never on a custom column, whatever its `source` says. There the name *is* the field and
-   * stays so — renaming one renames the field itself, chip and grouping included (`rename`
-   * in ColumnOrganiser.tsx) — so there is no earlier name left to point back at. The only
-   * way the two can differ at all is a copy left on the old name while its twin was edited,
-   * and a `represents` line under a row the user just named is the tautology this line
-   * exists to avoid.
+   * Never on a custom column, whatever its `source` says. There the name *is* the field, and
+   * the row offers no rename (see the pencil below), so there is no earlier name left to
+   * point back at.
    */
   const origin = fieldOf(column)
   const renamed = !custom && !sameField(origin, column.title)
@@ -225,6 +230,7 @@ export function OrganiserRow({
       data-dragging={dragging || undefined}
       className="organiser-row relative flex items-center justify-between"
       style={{
+        columnGap: HALF_GAP,
         backgroundColor: colors.gray[0],
         border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
         // Rows are pulled together so their borders collapse into one hairline — the design
@@ -233,7 +239,12 @@ export function OrganiserRow({
         marginBottom: -1,
       }}
     >
-      <div className="flex min-w-0 items-center">
+      {/* flex-1 here and on the text column below: NOTE_MAX is a percentage, and it needs a
+          definite width to be a percentage *of*. Content-sized, the column is only as wide as
+          the note itself, so the cap clipped a short row's note with the whole row free. Only
+          the containers grow — the name, the note and the pencil keep their own widths, so
+          the pencil still follows the text. */}
+      <div className="flex min-w-0 flex-1 items-center">
         <span
           {...handleProps}
           role="button"
@@ -268,7 +279,7 @@ export function OrganiserRow({
         </span>
 
         <div
-          className="flex min-w-0 items-baseline gap-1"
+          className="flex min-w-0 flex-1 items-baseline gap-1"
           style={{ paddingLeft: NAME_GAP[size] }}
         >
           {editing ? (
@@ -293,16 +304,14 @@ export function OrganiserRow({
             />
           ) : (
             <>
-              {/* The note gives ground first. It is the name that is the column, and the line
-                  beside it is a note *about* the column — so when the row runs out of width it
-                  is the note that shortens.
+              {/* The name gives ground; the note stays. A renamed column's name is whatever the
+                  user typed — the one they can reopen with the pencil — while the note is the
+                  only place the row says which field the data comes from. So when the row runs
+                  out of width the name ellipses and the note keeps its full text.
 
-                  Weighted shrink rather than `flex-shrink: 0` on the name, because the name
-                  has to yield eventually: a long enough one used to run on under the duplicate
-                  and ✕ buttons, which is the same thing the note was asked not to do. Flexbox
-                  distributes shrinkage by factor × basis, so ORIGIN_SHRINK against this 1
-                  means the note is effectively gone before the name loses its first pixel —
-                  a priority, expressed with the only lever flexbox gives for one. */}
+                  The note is not shrinkable at all (below), which makes this a hard order
+                  rather than a weighting: flexbox shares overflow by factor × basis, so any
+                  weighting leaves a sliver on the wrong side, and a sliver is an ellipsis. */}
               <PrimitiveText
                 as="span"
                 {...NAME}
@@ -335,54 +344,64 @@ export function OrganiserRow({
                     setShowOrigin(next && el !== null && el.scrollWidth > el.clientWidth)
                   }}
                 >
+                  {/* Never shrinks, so it always reads in full beside a name of any length.
+                      Capped by NOTE_MAX all the same, which only binds on a row too narrow to
+                      hold it — there it ellipses too, and the tooltip above has the rest. */}
                   <span
                     ref={originRef}
-                    className="min-w-0 truncate"
-                    style={{ ...META, color: colors.gray[500], flexShrink: ORIGIN_SHRINK }}
+                    className="truncate"
+                    style={{ ...META, color: colors.gray[500], flex: 'none', maxWidth: NOTE_MAX }}
                   >
                     {`represents “${origin}”`}
                   </span>
                 </TooltipV2>
               )}
-              {/* Hidden until the row is hovered or something in it has focus — the rule is
-                  in index.css, because opacity has to answer to `:hover` on the row rather
-                  than to a state this component would otherwise have to hold. Focus is in
-                  that rule too, so tabbing to it still reveals it. */}
-              <button
-                type="button"
-                onClick={startEditing}
-                aria-label={`Rename ${column.title}`}
-                title="Rename"
-                className="organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0"
-              >
-                <PencilLine size={ICON_SIZE} color={colors.gray[400]} />
-              </button>
+              {/* Where the column came from, which is the one thing about a custom column that
+                  cannot be read off the row: its name is whatever the user typed, so nothing
+                  else here distinguishes it from the twenty-six the vocabulary shipped with.
+                  Beside the name because it is a fact about the name. The palette chip's
+                  orange, so the mark is the one the user already met; no `onClick`, which is
+                  what makes TagV2 draw a Block rather than a button (TagV2.tsx:53).
+
+                  `self-center`: the text column aligns on the baseline, and a tag is a box
+                  rather than a line of text. `ml-1` on top of the column's 4px gap gives it
+                  8px from the name. */}
+              {custom && (
+                <span className="ml-1 flex shrink-0 self-center">
+                  <TagV2
+                    text="Custom"
+                    size={TagV2Size.SM}
+                    subType={TagV2SubType.SQUARICAL}
+                    color={TagV2Color.WARNING}
+                    type={TagV2Type.SUBTLE}
+                  />
+                </span>
+              )}
+              {/* No rename on a custom column. Its name *is* the field — the one the user
+                  typed in "Add custom column" — so renaming the row would be renaming the
+                  field out from under its palette chip and any other copy of it.
+
+                  Otherwise hidden until the row is hovered or something in it has focus — the
+                  rule is in index.css, because opacity has to answer to `:hover` on the row
+                  rather than to a state this component would otherwise have to hold. Focus is
+                  in that rule too, so tabbing to it still reveals it. */}
+              {!custom && (
+                <button
+                  type="button"
+                  onClick={startEditing}
+                  aria-label={`Rename ${column.title}`}
+                  title="Rename"
+                  className="organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0"
+                >
+                  <PencilLine size={ICON_SIZE} color={colors.gray[400]} />
+                </button>
+              )}
             </>
           )}
         </div>
       </div>
 
       <div className="flex shrink-0 items-center">
-        {/* Where the column came from, which is the one thing about a custom column that
-            cannot be read off the row: its name is whatever the user typed, so nothing else
-            here distinguishes it from the twenty-six the vocabulary shipped with.
-
-            It stacks with "Grouped by" rather than competing for the slot, because the two
-            answer different questions — where the field came from, and what the report does
-            with it — and a custom field that is grouped is both. Same size, same shape and
-            the same absent `onClick` as that pill; only the hue differs, and it is the
-            palette chip's orange so the mark is the one the user already met. */}
-        {custom && (
-          <span className="pr-2">
-            <TagV2
-              text="Custom"
-              size={TagV2Size.SM}
-              subType={TagV2SubType.SQUARICAL}
-              color={TagV2Color.WARNING}
-              type={TagV2Type.SUBTLE}
-            />
-          </span>
-        )}
         {(grouped || showAggregation) && (
           /* One slot, one keyline.
 

@@ -12,9 +12,20 @@ import {
   TagV2Type,
   TextInputV2,
   ThemeProvider,
+  TooltipV2,
+  TooltipV2Align,
+  TooltipV2Side,
 } from '@juspay/blend-design-system'
 import { Check, Plus, Search, X } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactElement,
+} from 'react'
 import { FEEDBACK_EASING, MICRO_MS } from '../../motion'
 import { SLOT_ICON } from '../../icons'
 import { LinkAction } from '../../link-action'
@@ -103,6 +114,39 @@ const HEADING = {
  * came from it (`isFieldSelected`), never because it remembers being clicked — so there is no
  * second list to keep in step, and no way for the two sides to disagree.
  */
+/**
+ * A palette chip's name in a tooltip — but only while the chip is cutting it short.
+ *
+ * The label ellipses inside its chip (index.css, `.organiser-palette [data-tag] > [data-id]`),
+ * and a tooltip repeating a name you can already read in full is a hover that answers with
+ * what is on screen. So it agrees to open only when the label is clipped, measured on the
+ * hover itself — `scrollWidth > clientWidth` — so it follows the pane's width without an
+ * observer. The same rule as the organiser row's origin line (OrganiserRow.tsx).
+ *
+ * `fullWidth`: TagV2 is not a host element, so TooltipV2 wraps it in a span of its own
+ * (TooltipV2.tsx:85-96), and only the full-width wrapper leaves the chip its whole row.
+ */
+function ClippedNameTooltip({ name, children }: { name: string; children: ReactElement }) {
+  const wrapperRef = useRef<HTMLSpanElement>(null)
+  const [open, setOpen] = useState(false)
+  return (
+    <TooltipV2
+      ref={wrapperRef}
+      content={name}
+      side={TooltipV2Side.TOP}
+      align={TooltipV2Align.START}
+      fullWidth
+      open={open}
+      onOpenChange={(next) => {
+        const label = wrapperRef.current?.querySelector<HTMLElement>('[data-id]')
+        setOpen(next && label != null && label.scrollWidth > label.clientWidth)
+      }}
+    >
+      {children}
+    </TooltipV2>
+  )
+}
+
 export function ColumnOrganiser({
   answers,
   onChange,
@@ -298,49 +342,16 @@ export function ColumnOrganiser({
     setColumns(columns.map((column) => (column.id === id ? { ...column, ...patch } : column)))
 
   /**
-   * Renaming a column, which is two different operations wearing one pencil.
+   * Renaming a column: the title is a label laid over a field the report already knows
+   * about. The label moves and the field does not — `source` holds the two together, the
+   * chip stays lit, and the row reads back `represents "Gateway"` so the original name is
+   * never actually lost.
    *
-   * For a field the vocabulary shipped, the title is a label laid over a field the report
-   * already knows about. The label moves and the field does not: `source` holds the two
-   * together, the chip stays lit, and the row reads back `represents "Gateway"` so the
-   * original name is never actually lost.
-   *
-   * For a field the user invented there is nothing underneath to point back at — the name
-   * *is* the field. So the rename goes all the way down: `customFields`, which is what draws
-   * the chip; `groupBy`, which stores field names and would otherwise keep pointing at a name
-   * that no longer exists and silently ungroup the field; and `source` on every column that
-   * came from it. Renaming only the title would have split one field into a chip nobody could
-   * find and a row claiming to represent a name the user had just replaced.
-   *
-   * A duplicate follows the rename only while it still carries the field's own name. Once a
-   * copy has a title of its own, that title is a decision, and a rename of its twin is not
-   * the place to overturn it.
+   * Only vocabulary fields get here. A custom column has no pencil (OrganiserRow): its name
+   * *is* the field, and a rename would have had to move the field itself — its chip, its
+   * grouping, every copy of it — to avoid splitting one field into two.
    */
-  const rename = (column: FieldColumn, title: string) => {
-    const field = fieldOf(column)
-    if (!isCustom(field)) {
-      update(column.id, { title })
-      return
-    }
-    onChange({
-      ...answers,
-      columns: columns.map((other) =>
-        sameField(fieldOf(other), field)
-          ? {
-              ...other,
-              source: title,
-              ...(other.id === column.id || sameField(other.title, field) ? { title } : {}),
-            }
-          : other,
-      ),
-      customFields: answers.customFields.map((custom) =>
-        sameField(custom.title, field) ? { ...custom, title } : custom,
-      ),
-      ...(answers.groupBy && {
-        groupBy: answers.groupBy.map((other) => (sameField(other, field) ? title : other)),
-      }),
-    })
-  }
+  const rename = (column: FieldColumn, title: string) => update(column.id, { title })
 
   /**
    * A copy lands directly below its original rather than at the end, because the reason to
@@ -384,30 +395,32 @@ export function ColumnOrganiser({
      * "Grouped by" row on the right.
      */
     return (
-      <TagV2
-        key={tag}
-        text={tag}
-        size={TagV2Size.MD}
-        subType={TagV2SubType.SQUARICAL}
-        color={
-          groupedField
-            ? TagV2Color.PURPLE
-            : isCustom(tag)
-              ? TagV2Color.WARNING
-              : TagV2Color.NEUTRAL
-        }
-        // SUBTLE when in, NO_FILL when out. Node 4911:111688 gives both states the same
-        // #ECEFF3 hairline — that is what fieldTagTokens' border override is for
-        // (src/theme.ts) — and separates them by their fill alone: a chosen chip on gray[50],
-        // an unchosen one on the pane's own white, whatever colour its label is. ATTENTIVE,
-        // which is what the v1 chips use for the same state, is far too loud down a column of
-        // twenty-nine.
-        type={selected ? TagV2Type.SUBTLE : TagV2Type.NO_FILL}
-        rightSlot={selected ? (groupedField ? GROUPED_SLOT : ADDED_SLOT) : ADD_SLOT}
-        aria-pressed={selected}
-        title={selected ? `Remove ${tag} from the report` : `Add ${tag} to the report`}
-        onClick={() => toggleField(tag)}
-      />
+      <ClippedNameTooltip key={tag} name={tag}>
+        <TagV2
+          text={tag}
+          size={TagV2Size.MD}
+          subType={TagV2SubType.SQUARICAL}
+          color={
+            groupedField
+              ? TagV2Color.PURPLE
+              : isCustom(tag)
+                ? TagV2Color.WARNING
+                : TagV2Color.NEUTRAL
+          }
+          // SUBTLE when in, NO_FILL when out. Node 4911:111688 gives both states the same
+          // #ECEFF3 hairline — that is what fieldTagTokens' border override is for
+          // (src/theme.ts) — and separates them by their fill alone: a chosen chip on gray[50],
+          // an unchosen one on the pane's own white, whatever colour its label is. ATTENTIVE,
+          // which is what the v1 chips use for the same state, is far too loud down a column of
+          // twenty-nine.
+          type={selected ? TagV2Type.SUBTLE : TagV2Type.NO_FILL}
+          rightSlot={selected ? (groupedField ? GROUPED_SLOT : ADDED_SLOT) : ADD_SLOT}
+          aria-pressed={selected}
+          // No native `title`: it would stack a second, browser-drawn tooltip on the one above
+          // whenever the name is clipped. The ✓ and + already say what a click does.
+          onClick={() => toggleField(tag)}
+        />
+      </ClippedNameTooltip>
     )
   }
 
@@ -526,6 +539,9 @@ export function ColumnOrganiser({
                 as="p"
                 {...font(FOUNDATION_THEME.font.size.body.sm)}
                 color={colors.gray[500]}
+                // Italic, so the count reads as a remark about the list rather than one more
+                // item in it. PrimitiveText has no fontStyle prop; `style` reaches the element.
+                style={{ fontStyle: 'italic' }}
               >
                 {caption}
               </PrimitiveText>
@@ -581,7 +597,7 @@ export function ColumnOrganiser({
         <div
           className="flex min-h-0 min-w-0 flex-1 flex-col"
           style={{
-            backgroundColor: colors.gray[25],
+            backgroundColor: colors.gray[0],
             // No left border: the palette's right border already draws the seam, and two
             // hairlines a pixel apart read as a gap rather than a division.
             borderTop: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
@@ -634,8 +650,9 @@ export function ColumnOrganiser({
           </div>
 
           {/* The columns, scrolling under the header — `min-h-0` for the reason the palette's
-              list carries it. */}
-          <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-6 px-6 py-1">
+              list carries it. 16px at the bottom so the last row, scrolled to the end, sits
+              clear of the pane's edge rather than against it. */}
+          <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-6 px-6 pt-1 pb-4">
             {columns.length === 0 ? (
               /* blend-gap: Blend 0.0.37 publishes no EmptyState (it exists on GitHub — rule 3),
                  so this is the smallest honest version: what the panel is for, in the place its
@@ -692,9 +709,11 @@ export function ColumnOrganiser({
                     a border and a -1px bottom margin so adjacent edges collapse into one
                     hairline, and the first and last take the outer radius. `overflow-hidden`
                     is what makes the radius clip the row inside it. */}
+                {/* `pb-px` gives back the pixel the last row's -1px margin takes (the margin
+                    that collapses neighbouring borders), so the 16px under the list is 16. */}
                 <div
                   ref={listRef}
-                  className="organiser-list flex flex-col"
+                  className="organiser-list flex flex-col pb-px"
                   style={{ borderRadius: FOUNDATION_THEME.border.radius[8] }}
                 >
                   {columns.map((column, index) => (

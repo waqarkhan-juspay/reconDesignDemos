@@ -39,11 +39,6 @@ import {
   FOUNDATION_THEME,
   SnackbarV2Variant,
   addSnackbarV2,
-  TagV2,
-  TagV2Color,
-  TagV2Size,
-  TagV2SubType,
-  TagV2Type,
   ThemeProvider,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
@@ -52,10 +47,12 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import {
+  customFieldsFor,
   detailRowsFor,
   fieldsFor,
   fileNameFor,
   filtersFor,
+  groupByFor,
   runsFor,
   sampleRowsFor,
   type ConfigRowFacts,
@@ -65,6 +62,7 @@ import {
   ConfigSummaryCard,
   ConfigSummaryChipRow,
   ConfigSummaryRow,
+  columnChip,
   summaryChip,
 } from '../config-summary'
 import { DeliveryHistoryPanel } from './DeliveryHistoryPanel'
@@ -154,6 +152,8 @@ export function ConfigDetailSheet({
    */
   const detailRows = useMemo(() => (row ? detailRowsFor(row) : []), [row])
   const fields = useMemo(() => (row ? fieldsFor(row) : []), [row])
+  const groupBy = useMemo(() => (row ? groupByFor(row) : []), [row])
+  const customFields = useMemo(() => (row ? customFieldsFor(row) : []), [row])
   const sampleRows = useMemo(() => (row ? sampleRowsFor(row) : []), [row])
   const runs = useMemo(() => (row ? runsFor(row) : []), [row])
 
@@ -492,32 +492,25 @@ export function ConfigDetailSheet({
                     {filterRule ? summaryChip(filterRule) : null}
                   </ConfigSummaryChipRow>
 
+                  {/* The same chips as the create flow's Review step (`columnChip`), so a
+                      grouped or custom column reads the same before and after it is saved. */}
                   <ConfigSummaryChipRow label={`Columns · ${fields.length}`}>
-                    {fields.map((name, index) => summaryChip(`${index + 1} · ${name}`, name))}
+                    {fields.map((name, index) => {
+                      const level = groupBy.indexOf(name)
+                      return columnChip(index + 1, name, name, {
+                        grouping: level === -1 ? undefined : { level: level + 1, of: groupBy.length },
+                        custom: customFields.includes(name),
+                      })
+                    })}
                   </ConfigSummaryChipRow>
 
                   <ConfigSummaryRow label="File name template" value={template} />
                 </ConfigSummaryCard>
 
                 <section className="flex flex-col gap-4">
-                  {/* The count sits here rather than on the Configuration card, because it
-                      is a fact about the file: these are the columns the preview below is
-                      showing. On the card it read as a property of the configuration list
-                      it was heading, which it is not. */}
-                  <div className="flex items-center justify-between gap-3">
-                    <SectionHeading>Sample Output Preview</SectionHeading>
-                    {/* TagV2 omits className (rule 2), and at its natural basis in a flex
-                        row the label breaks after every word. */}
-                    <span className="whitespace-nowrap">
-                      <TagV2
-                        text={`${fields.length} columns selected`}
-                        color={TagV2Color.PRIMARY}
-                        type={TagV2Type.SUBTLE}
-                        size={TagV2Size.SM}
-                        subType={TagV2SubType.SQUARICAL}
-                      />
-                    </span>
-                  </div>
+                  {/* No column count beside the heading: the Configuration card's
+                      "Columns · N" row already says it, one scroll up. */}
+                  <SectionHeading>Sample Output Preview</SectionHeading>
                   {/* Three rows and no chrome: the footer, toolbar and column manager all
                     describe a set you can act on, and this is an illustration. */}
                   <div className="config-sheet-preview">

@@ -4,6 +4,8 @@ import {
   ButtonV2SubType,
   ButtonV2Type,
   FOUNDATION_THEME,
+  SnackbarV2Position,
+  SnackbarV2Variant,
   TagV2,
   TagV2Color,
   TagV2Size,
@@ -11,6 +13,7 @@ import {
   TagV2Type,
   ThemeProvider,
   TopbarV2,
+  addSnackbarV2,
 } from '@juspay/blend-design-system'
 import { ArrowLeft } from 'lucide-react'
 import { useState, type CSSProperties } from 'react'
@@ -413,9 +416,9 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * inline row-gap is absent, and the heading's custom property falls back to 8px.
    */
   const renderStep = (layout?: FieldsLayout) => (
-    // Setup follows node 4541:16282, which sets its sections 24px apart; the other steps
-    // keep the 32px rhythm their own frames were drawn at.
-    <div key={current.id} className={`${COLUMN} flow-question ${current.id === 'setup' ? 'gap-y-6' : 'gap-y-8'} pt-8 pb-12`}
+    // 32px between a step's sections. Setup was drawn at 24 (node 4541:16282) and opened up
+    // to match the other steps' rhythm.
+    <div key={current.id} className={`${COLUMN} flow-question gap-y-8 pt-8 pb-12`}
       style={layout?.style}
       data-layout={layout?.wide ? 'wide' : undefined}
       /* The column organiser is the one step body that should fit the window rather than
@@ -631,7 +634,21 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
       <SubmitConfigModal
         isOpen={submitting}
         onClose={() => setSubmitting(false)}
-        onSubmit={() => navigate('/configurator')}
+        onSubmit={() => {
+          // Raised before leaving: the one SnackbarV2 host is mounted at the app root
+          // (main.tsx), outside the routes, so the toast outlives this page and lands on the
+          // Configurator the flow returns to.
+          //
+          // Bottom right, overriding the host's bottom-left. The host sits left because the
+          // detail sheet covers the right; nothing is open over the Configurator when this
+          // toast arrives, so it takes the usual corner.
+          addSnackbarV2({
+            header: 'Submitted successfully',
+            variant: SnackbarV2Variant.SUCCESS,
+            position: SnackbarV2Position.BOTTOM_RIGHT,
+          })
+          navigate('/configurator')
+        }}
       />
     </div>
   )
