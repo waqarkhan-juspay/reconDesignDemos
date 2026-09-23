@@ -1,5 +1,6 @@
-import { CheckboxV2, FOUNDATION_THEME, SelectorV2Size } from '@juspay/blend-design-system'
-import type { KeyboardEvent, ReactNode } from 'react'
+import { FOUNDATION_THEME } from '@juspay/blend-design-system'
+import { CircleCheck } from 'lucide-react'
+import type { CSSProperties, KeyboardEvent, ReactNode } from 'react'
 import { PrimitiveText, font } from '../../primitives'
 
 const { colors } = FOUNDATION_THEME
@@ -15,20 +16,21 @@ export type Option = { id: string; title?: string; description: string }
  * The flow's one selection surface — every single-choice card in it, with or without an
  * illustration on top (node 4541:16282).
  *
- * Selected is a primary[500] border plus a CheckboxV2 inline with the title, pushed to the
- * far end of that row. The checkbox only appears on the chosen card, as the design draws it;
- * the card stays white either way.
+ * Selected is a primary[500] border plus a filled circle check inline with the title, pushed
+ * to the far end of that row. The mark only appears on the chosen card; the card stays white
+ * either way.
+ *
+ * A circle rather than a square checkbox: every group of these cards takes one answer, and a
+ * square box reads as "tick as many as you like" — which is what the Delivery channels, the
+ * one multi-select in the flow, still use.
  *
  * blend-gap: no selectable option card. CardV2 is the near miss — it derives role="button",
  * tabIndex and aria-pressed from `interactive`/`selected` exactly as this does — but its
  * selected state is a 1px primary border plus a 3px primary[50] ring
  * (cardV2.light.tokens.ts:33-36), which is not the design's border-plus-checkbox.
  *
- * The card is a `div role="button"` rather than a `<button>` because CheckboxV2 renders a
- * button of its own, and a button inside a button is invalid markup the browser silently
- * rearranges. The checkbox is therefore decoration here: out of the tab order, hidden from
- * assistive tech (aria-pressed on the card already says selected), and click-through, so a
- * click on it lands on the card like a click anywhere else.
+ * The mark is decoration: hidden from assistive tech, since aria-pressed on the card already
+ * says selected, and click-through, so a click on it lands on the card like anywhere else.
  *
  * `dimmed` is the de-emphasis the prototype asks for: once a group has an answer, its other
  * options recede so the eye lands on the question that is still open. They stay clickable,
@@ -94,11 +96,12 @@ export function SelectableCard({
           >
             {title}
           </PrimitiveText>
-          {/* The checkbox sits 12px from the card's top and right edges (node 4541:16282).
+          {/* The mark sits 12px from the card's top and right edges (node 4541:16282).
 
-              size-4 + overflow-hidden clips it to the 16px box. CheckboxV2 always renders an
-              empty label container beside the box, 8px gap included, and takes no className
-              or style to remove it — unclipped, that gap pushed the box 20px off the edge.
+              Lucide's circle-check, filled: the disc is primary[600] and the tick is white.
+              Lucide strokes the circle and the tick alike from `color`, so the tick takes
+              gray[0] and the circle's own stroke is repainted to the fill through
+              --check-fill — otherwise a white ring would trim the disc on its white card.
 
               Pinned to the row's top rather than centred on the title, so the top inset is
               the padding itself. The large card pads 16px, so it lifts 4px to match. Being
@@ -106,9 +109,10 @@ export function SelectableCard({
           {selected && (
             <span
               aria-hidden
-              className={`pointer-events-none flex size-4 shrink-0 overflow-hidden ${large ? '-mt-1' : ''}`}
+              className={`pointer-events-none flex shrink-0 [&_circle]:[stroke:var(--check-fill)] ${large ? '-mt-1' : ''}`}
+              style={{ '--check-fill': colors.primary[600] } as CSSProperties}
             >
-              <CheckboxV2 checked size={SelectorV2Size.MD} tabIndex={-1} />
+              <CircleCheck size={16} color={colors.gray[0]} fill={colors.primary[600]} />
             </span>
           )}
         </div>
