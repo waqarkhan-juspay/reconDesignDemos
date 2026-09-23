@@ -8,13 +8,13 @@ import {
   type ResponsiveDirectoryTokens,
   type ResponsiveTableTokens,
   type ResponsiveTabsV2Tokens,
-  type ResponsiveTopbarV2Tokens,
+  type ResponsiveSidebarV2Tokens,
 } from '@juspay/blend-design-system'
 import { ICON_SIZE } from './layout/chrome'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
-import { TOPBARV2_TOKENS } from './tokens/TopbarV2'
+import { SIDEBARV2_TOKENS } from './tokens/SidebarV2'
 import { SINGLE_SELECT_V2_TOKENS } from './tokens/SingleSelectV2'
 import { TAGS_TOKENS } from './tokens/Tags'
 import { TAGV2_TOKENS } from './tokens/TagV2'
@@ -108,17 +108,27 @@ const TABLE = perBreakpoint(
 ) as unknown as ResponsiveTableTokens
 
 /**
- * The topbar solid white, not Blend's 80% white.
+ * The sidebar white, not Blend's gray[25] (#FCFCFD).
  *
- * The translucency is for content scrolling underneath a bar, and nothing here does: the
- * shell's page scrolls in its own element below the bar, and the create flow's bar sits above
- * its scroller too. So the only thing showing through was the SidebarV2 shell's gray[25],
- * which tinted the bar #FEFEFE beside a white page (AppShell paints the page gray[0]).
+ * SidebarV2 paints its whole shell from these: `container` is the rail *and* the area behind
+ * the page, and the header, footer and the two narrow columns each repeat the same colour.
+ * Every one moves together, so the rail, open or collapsed, and the page are one white
+ * surface split by the rail's border. TopbarV2's 80% white then sits on white and reads white.
  */
-const TOPBARV2 = perBreakpoint(TOPBARV2_TOKENS as unknown as Record<string, object>, (token) => ({
-  ...token,
-  backgroundColor: FOUNDATION_THEME.colors.gray[0],
-})) as unknown as ResponsiveTopbarV2Tokens
+const SIDEBARV2 = perBreakpoint(
+  SIDEBARV2_TOKENS as unknown as Record<string, Record<string, object>>,
+  (token) => {
+    const white = FOUNDATION_THEME.colors.gray[0]
+    return {
+      ...token,
+      container: { ...token.container, backgroundColor: white },
+      leftPanel: { ...token.leftPanel, backgroundColor: white },
+      header: { ...token.header, backgroundColor: white },
+      footer: { ...token.footer, backgroundColor: white },
+      secondarySidebar: { ...token.secondarySidebar, backgroundColor: white },
+    }
+  },
+) as unknown as ResponsiveSidebarV2Tokens
 
 /**
  * Only slots that actually override something are wired.
@@ -128,7 +138,7 @@ const TOPBARV2 = perBreakpoint(TOPBARV2_TOKENS as unknown as Record<string, obje
  * costs something, because these are light values and passing them replaces the dark
  * defaults too. Edit a value in that file, then add its slot here.
  */
-export const componentTokens: ComponentTokenType = { DIRECTORY, TABLE, TOPBARV2 }
+export const componentTokens: ComponentTokenType = { DIRECTORY, TABLE, SIDEBARV2 }
 
 /**
  * Tabs with the design's 24px between triggers, for the ONE tab set that wants it.
