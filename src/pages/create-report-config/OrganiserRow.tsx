@@ -73,6 +73,18 @@ const NAME_GAP = { single: 16, double: 8 }
  */
 const HALF_GAP = 16
 
+/**
+ * The least of a renamed column's name that stays on screen — a few letters and the
+ * ellipsis, enough to tell two renamed rows apart.
+ *
+ * The note does not shrink (see the name's comment in the row), so its cap is everything but
+ * this, the pencil, and the two 4px gaps either side of the note. On any realistic row that
+ * is more than the longest note needs, so the note reads in full; only a row too narrow to
+ * hold both does it ellipsis, and then the tooltip has the rest.
+ */
+const NAME_MIN = 56
+const NOTE_MAX = `calc(100% - ${NAME_MIN + ICON_SIZE + 4 * 2}px)`
+
 const NAME = font(FOUNDATION_THEME.font.size.body.md)
 const META = {
   ...font(FOUNDATION_THEME.font.size.body.sm),
@@ -230,7 +242,12 @@ export function OrganiserRow({
         marginBottom: -1,
       }}
     >
-      <div className="flex min-w-0 items-center">
+      {/* flex-1 here and on the text column below: NOTE_MAX is a percentage, and it needs a
+          definite width to be a percentage *of*. Content-sized, the column is only as wide as
+          the note itself, so the cap clipped a short row's note with the whole row free. Only
+          the containers grow — the name, the note and the pencil keep their own widths, so
+          the pencil still follows the text. */}
+      <div className="flex min-w-0 flex-1 items-center">
         <span
           {...handleProps}
           role="button"
@@ -265,7 +282,7 @@ export function OrganiserRow({
         </span>
 
         <div
-          className="flex min-w-0 items-baseline gap-1"
+          className="flex min-w-0 flex-1 items-baseline gap-1"
           style={{ paddingLeft: NAME_GAP[size] }}
         >
           {editing ? (
@@ -290,16 +307,14 @@ export function OrganiserRow({
             />
           ) : (
             <>
-              {/* The note gives ground first. It is the name that is the column, and the line
-                  beside it is a note *about* the column — so when the row runs out of width it
-                  is the note that shortens, all the way to nothing, before the name loses a
-                  pixel. The name still yields after that, so a long one ellipses rather than
-                  running on under the buttons.
+              {/* The name gives ground; the note stays. A renamed column's name is whatever the
+                  user typed — the one they can reopen with the pencil — while the note is the
+                  only place the row says which field the data comes from. So when the row runs
+                  out of width the name ellipses and the note keeps its full text.
 
-                  That order lives on the note (below): it asks for no width at all and only
-                  grows into what the name leaves. A weighted shrink on both — the note at 999,
-                  the name at 1 — was not a priority: flexbox shares overflow by factor × basis,
-                  so the name always lost a sliver, and any sliver is enough for an ellipsis. */}
+                  The note is not shrinkable at all (below), which makes this a hard order
+                  rather than a weighting: flexbox shares overflow by factor × basis, so any
+                  weighting leaves a sliver on the wrong side, and a sliver is an ellipsis. */}
               <PrimitiveText
                 as="span"
                 {...NAME}
@@ -332,13 +347,13 @@ export function OrganiserRow({
                     setShowOrigin(next && el !== null && el.scrollWidth > el.clientWidth)
                   }}
                 >
-                  {/* Basis 0 and grow 1: it takes no part in sizing the name, then fills the
-                      space left over — capped at its own text by max-content, so the pencil
-                      still follows the note rather than being pushed to the row's far edge. */}
+                  {/* Never shrinks, so it always reads in full beside a name of any length.
+                      Capped by NOTE_MAX all the same, which only binds on a row too narrow to
+                      hold it — there it ellipses too, and the tooltip above has the rest. */}
                   <span
                     ref={originRef}
-                    className="min-w-0 truncate"
-                    style={{ ...META, color: colors.gray[500], flex: '1 1 0', maxWidth: 'max-content' }}
+                    className="truncate"
+                    style={{ ...META, color: colors.gray[500], flex: 'none', maxWidth: NOTE_MAX }}
                   >
                     {`represents “${origin}”`}
                   </span>
