@@ -176,10 +176,6 @@ export function DeliveryStep({
       {/* The cadence is the step's opening question — the configuration name it used to
           open on is asked at submit now, in SubmitConfigModal. */}
       <QuestionGroup label="How often?">
-        {/* The cadence, timing and day/time rows, 32px apart — each is its own question, so
-            they take the same gap as the sections on Setup. QuestionGroup's own 8px stays
-            between the label and the first row. */}
-        <div className="flex flex-col gap-8">
         <OptionRow>
           {FREQUENCIES.map((option) => (
             <OptionCard
@@ -206,7 +202,16 @@ export function DeliveryStep({
             />
           ))}
         </OptionRow>
+      </QuestionGroup>
 
+      {/* When it goes out: the timing cards (Daily only), then the day and time. One
+          question, so its rows sit 16px apart — the gap between cards in a row, so they read
+          as one grid — and the section as a whole is the step grid's 32px from its
+          neighbours. Weekly and Monthly are answered a specified time on the user's behalf
+          (see onSelect above), so any cadence opens it. */}
+      {frequency !== null && (
+        <QuestionGroup label="What time?">
+        <div className="flex flex-col gap-4">
         {/* Revealed once the cadence is Daily, and only then.
 
             Weekly and Monthly skip this row entirely rather than showing it with one card
@@ -333,7 +338,8 @@ export function DeliveryStep({
           </div>
         )}
         </div>
-      </QuestionGroup>
+        </QuestionGroup>
+      )}
 
       {timing !== null && (
         <QuestionGroup label="Delivery channel">
