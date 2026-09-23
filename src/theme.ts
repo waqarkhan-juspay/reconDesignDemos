@@ -9,6 +9,7 @@ import {
   type ResponsiveTableTokens,
   type ResponsiveTabsV2Tokens,
 } from '@juspay/blend-design-system'
+import { ICON_SIZE } from './layout/chrome'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
@@ -52,7 +53,17 @@ const perBreakpoint = <T,>(tokens: Record<string, T>, edit: (token: T) => T) =>
  * rather than a bisect.
  *
  * Section labels keep Blend's 600 — they are headings, and the contrast is the point.
+ *
+ * And the collapsed rail's nav buttons are centred. In icon-only mode Directory hard-codes
+ * 12px of side padding on a 52px rail (Directory.tsx:79), which leaves a 28px column, then pads
+ * each item by `iconOnlyPadding` — 10px a side, so a 14px icon makes a 34px button. It
+ * overflows the column to the right and every nav icon sat 3px right of the rail's centre,
+ * out of line with the toggle above and the footer rows below. Side padding of half the
+ * column's leftover makes the button exactly 28px, the width the footer rows already are.
  */
+const RAIL_COLUMN = '28px'
+const ICON_ONLY_SIDE_PADDING = `calc((${RAIL_COLUMN} - ${ICON_SIZE}) / 2)`
+
 const DIRECTORY = perBreakpoint(
   getDirectoryTokens(FOUNDATION_THEME) as unknown as Record<string, DirectoryTokenType>,
   (token) => ({
@@ -64,6 +75,11 @@ const DIRECTORY = perBreakpoint(
         item: {
           ...token.section.itemList.item,
           fontWeight: FOUNDATION_THEME.font.weight[500],
+          iconOnlyPadding: {
+            ...token.section.itemList.item.iconOnlyPadding,
+            paddingLeft: ICON_ONLY_SIDE_PADDING,
+            paddingRight: ICON_ONLY_SIDE_PADDING,
+          },
         },
       },
     },
