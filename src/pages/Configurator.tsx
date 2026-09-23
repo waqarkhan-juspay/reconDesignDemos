@@ -102,7 +102,7 @@ const COLUMNS = [
   { field: 'frequency', header: 'Frequency' },
   { field: 'channel', header: 'Channel' },
   { field: 'status', header: 'Status' },
-  { field: 'createdDate', header: 'Created Date' },
+  { field: 'createdDate', header: 'Created on' },
   { field: 'actions', header: 'Actions' },
 ] as const
 
@@ -113,7 +113,7 @@ const COLUMNS = [
  * `supportsFiltering` off the ColumnType alone, and TEXT is false — so a TEXT column offers
  * sorting only, however it is configured. SELECT is the type that opens the filter list.
  *
- * Configuration Name, Frequency and Created Date are deliberately not here: a list of ten
+ * Configuration Name, Frequency and Created on are deliberately not here: a list of ten
  * distinct sentences is not a filter, it is the table again. They stay TEXT, and sortable.
  */
 const SELECT_FILTER_FIELDS = ['categorySource', 'sourceType', 'paymentEntity', 'channel']
