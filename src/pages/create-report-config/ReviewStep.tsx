@@ -1,15 +1,17 @@
 import {
   ButtonV2,
   ButtonV2Size,
+  ButtonV2SubType,
   ButtonV2Type,
   ColumnType,
   DataTable,
   InputSizeV2,
   TagV2Color,
   TextAreaV2,
+  ThemeProvider,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { Pencil, Trash2 } from 'lucide-react'
+import { Pencil } from 'lucide-react'
 import { useState } from 'react'
 import { SAMPLE_ROW_COUNT, sampleFor } from '../../field-samples'
 import {
@@ -20,6 +22,7 @@ import {
   summaryChip,
 } from '../../config-summary'
 import { REPORT_FORMATS } from '../../report-config'
+import { neutralLinkTokens } from '../../theme'
 import {
   activeGroupBy,
   fieldOf,
@@ -194,7 +197,7 @@ export function ReviewStep({
             />
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
+          <div className="relative">
             <TextAreaV2
               label="Report header"
               // TextAreaV2 computes its accessible name from `label` alone — `filteredRest`
@@ -212,21 +215,30 @@ export function ReviewStep({
               onChange={(event) => setHeaderText(event.target.value)}
             />
 
-            {/* Below the field and trailing, rather than floating beside it: TextAreaV2 puts
-                a label above and a footer below, so anything aligned to its side lands
-                against one of those instead of against the box. Labelled rather than a bare
-                glyph, because "delete" with nothing named is a question. */}
-            <div className="flex justify-end">
-              <ButtonV2
-                buttonType={ButtonV2Type.SECONDARY}
-                size={ButtonV2Size.SMALL}
-                text="Delete header"
-                leftSlot={{ slot: <Trash2 size={14} /> }}
-                // Back to null, which both removes the field and restores the button. The
-                // text goes with it: a header you deleted and then added again is a new
-                // header, not the old one waiting where you left it.
-                onClick={() => setHeaderText(null)}
-              />
+            {/* On the label's row, trailing — the one place the control costs no height.
+                Below the field it put a 32px row between the header and the table it
+                describes; beside the field it would have narrowed the box off the table's
+                edges. The label row is otherwise empty to the right.
+
+                blend-gap: TextAreaV2 has no slot beside its label, so this is positioned
+                over that row: `h-5` is the label's 20px line, the height RecipientsInput's
+                ✕ measures against too. Secondary + INLINE tinted by neutralLinkTokens is the
+                same borderless link as "Cc" / "Bcc", which fold their fields away the same
+                way; ButtonV2 hard-codes `cursor: default`, hence the wrapper. */}
+            <div className="absolute top-0 right-0 flex h-5 items-center [&_button]:cursor-pointer [&_button:hover_span]:underline [&_button:hover_span]:underline-offset-2">
+              <ThemeProvider componentTokens={neutralLinkTokens}>
+                <ButtonV2
+                  buttonType={ButtonV2Type.SECONDARY}
+                  subType={ButtonV2SubType.INLINE}
+                  size={ButtonV2Size.SMALL}
+                  text="Remove"
+                  aria-label="Remove report header"
+                  // Back to null, which both removes the field and restores the button. The
+                  // text goes with it: a header you removed and then added again is a new
+                  // header, not the old one waiting where you left it.
+                  onClick={() => setHeaderText(null)}
+                />
+              </ThemeProvider>
             </div>
           </div>
         )}
