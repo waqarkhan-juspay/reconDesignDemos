@@ -211,6 +211,35 @@ export function ConfigSummaryChipRow({
  * `title` rather than more text, for a fact the chip is not primarily about: which grouping
  * level it is. TagV2 forwards it to the rendered element, so it arrives as a tooltip.
  */
+/**
+ * One column in a numbered column list — the Review step's and the detail sheet's.
+ *
+ * The mark is both colour and words: purple and "(grouped)" for a field the report groups
+ * by, orange and "(custom)" for a field the user wrote. The colour matches what the same
+ * field wears on the Grouping step and in the column organiser; the words say it for a
+ * reader who has not met those colours, or cannot tell them apart. Grouping wins where a
+ * custom field is also grouped, as it does in the palette — what the report does with a
+ * field outranks where it came from. The grouping level, which neither carries, is the
+ * tooltip, and only when there is more than one level to tell apart.
+ */
+export type ColumnMark = { grouping?: { level: number; of: number }; custom?: boolean }
+
+export const columnChip = (
+  position: number,
+  name: string,
+  key: string,
+  { grouping, custom }: ColumnMark = {},
+) => {
+  const text = `${position} · ${name}`
+  if (grouping)
+    return summaryChip(`${text} (grouped)`, key, {
+      color: TagV2Color.PURPLE,
+      title: grouping.of > 1 ? `Grouping level ${grouping.level} of ${grouping.of}` : undefined,
+    })
+  if (custom) return summaryChip(`${text} (custom)`, key, { color: TagV2Color.WARNING })
+  return summaryChip(text, key)
+}
+
 export const summaryChip = (
   text: string,
   key?: string,

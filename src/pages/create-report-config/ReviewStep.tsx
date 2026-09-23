@@ -6,7 +6,6 @@ import {
   ColumnType,
   DataTable,
   InputSizeV2,
-  TagV2Color,
   TextAreaV2,
   ThemeProvider,
   type ColumnDefinition,
@@ -19,6 +18,7 @@ import {
   ConfigSummaryChipRow,
   ConfigSummaryRow,
   UNSET,
+  columnChip,
   summaryChip,
 } from '../../config-summary'
 import { REPORT_FORMATS } from '../../report-config'
@@ -310,44 +310,19 @@ export function ReviewStep({
              * Numbered, because this row is about order and nothing else — the same names
              * carry no rank on their own. A grouped column keeps its place and is marked
              * rather than moved: the order is one fact, the grouping is a second fact about
-             * one of them.
-             *
-             * The grouping is the chip's *colour*, not more words in it. Purple is already
-             * what a grouped field wears on the Grouping step and in the column organiser,
-             * so by the time a reader reaches this card they have met it twice; spelling it
-             * out a third time costs the row a third of its width and tells them nothing the
-             * colour has not. The level, which the colour cannot carry, is in the tooltip.
+             * one of them. See `columnChip` for the marks.
              *
              * Matched by field, because `groupBy` holds fields rather than column ids
              * (answers.ts), so a column that was removed and re-added still reads as the
-             * level the user set on the Grouping step.
+             * level the user set on the Grouping step. Custom is read off `customFields`, as
+             * the column organiser reads it, rather than off the vocabulary's complement.
              */
-            const level = groupBy.findIndex((field) => sameField(field, fieldOf(column)))
-            /*
-             * Orange for a field the user wrote — the palette chip's and the organiser row's
-             * "Custom" mark, carried here the same way purple carries grouping. Read off
-             * `customFields`, as the organiser does, rather than off the vocabulary's
-             * complement. Grouping wins where the two meet, as it does in the palette: what
-             * the report does with a field outranks where the field came from.
-             */
-            const custom = fields.customFields.some((field) =>
-              sameField(field.title, fieldOf(column)),
-            )
-            return summaryChip(
-              `${index + 1} · ${column.title}`,
-              column.id,
-              level !== -1
-                ? {
-                    color: TagV2Color.PURPLE,
-                    title:
-                      groupBy.length > 1
-                        ? `Grouping level ${level + 1} of ${groupBy.length}`
-                        : 'Grouped by',
-                  }
-                : custom
-                  ? { color: TagV2Color.WARNING, title: 'Custom column' }
-                  : undefined,
-            )
+            const field = fieldOf(column)
+            const level = groupBy.findIndex((other) => sameField(other, field))
+            return columnChip(index + 1, column.title, column.id, {
+              grouping: level === -1 ? undefined : { level: level + 1, of: groupBy.length },
+              custom: fields.customFields.some((other) => sameField(other.title, field)),
+            })
           })}
         </ConfigSummaryChipRow>
       </ConfigSummaryCard>

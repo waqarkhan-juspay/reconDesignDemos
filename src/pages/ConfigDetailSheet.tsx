@@ -47,10 +47,12 @@ import { useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import {
+  customFieldsFor,
   detailRowsFor,
   fieldsFor,
   fileNameFor,
   filtersFor,
+  groupByFor,
   runsFor,
   sampleRowsFor,
   type ConfigRowFacts,
@@ -60,6 +62,7 @@ import {
   ConfigSummaryCard,
   ConfigSummaryChipRow,
   ConfigSummaryRow,
+  columnChip,
   summaryChip,
 } from '../config-summary'
 import { DeliveryHistoryPanel } from './DeliveryHistoryPanel'
@@ -149,6 +152,8 @@ export function ConfigDetailSheet({
    */
   const detailRows = useMemo(() => (row ? detailRowsFor(row) : []), [row])
   const fields = useMemo(() => (row ? fieldsFor(row) : []), [row])
+  const groupBy = useMemo(() => (row ? groupByFor(row) : []), [row])
+  const customFields = useMemo(() => (row ? customFieldsFor(row) : []), [row])
   const sampleRows = useMemo(() => (row ? sampleRowsFor(row) : []), [row])
   const runs = useMemo(() => (row ? runsFor(row) : []), [row])
 
@@ -487,8 +492,16 @@ export function ConfigDetailSheet({
                     {filterRule ? summaryChip(filterRule) : null}
                   </ConfigSummaryChipRow>
 
+                  {/* The same chips as the create flow's Review step (`columnChip`), so a
+                      grouped or custom column reads the same before and after it is saved. */}
                   <ConfigSummaryChipRow label={`Columns · ${fields.length}`}>
-                    {fields.map((name, index) => summaryChip(`${index + 1} · ${name}`, name))}
+                    {fields.map((name, index) => {
+                      const level = groupBy.indexOf(name)
+                      return columnChip(index + 1, name, name, {
+                        grouping: level === -1 ? undefined : { level: level + 1, of: groupBy.length },
+                        custom: customFields.includes(name),
+                      })
+                    })}
                   </ConfigSummaryChipRow>
 
                   <ConfigSummaryRow label="File name template" value={template} />
