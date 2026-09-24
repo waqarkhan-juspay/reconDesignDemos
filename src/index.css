@@ -742,3 +742,81 @@ button[aria-label='Close modal'] {
     transition: none;
   }
 }
+
+/*
+ * The FAQ panel's list (FaqLauncher.tsx) — AccordionV2, reached through the `data-element`
+ * hooks Blend puts on its own nodes, since AccordionV2Item takes neither `className` nor
+ * `style`. Every value arrives as a variable from FaqLauncher, so this file keeps none of its
+ * own (rule 1).
+ */
+
+/*
+ * The open question and its answer on one filled card. blend-gap: AccordionV2 has a token for
+ * an open *trigger* but none for the item, so the answer under it would stay white; and the
+ * trigger's token is skipped below `md`, where PopoverV2 is a drawer. So the fill goes on the
+ * item, by Radix's own `data-state`.
+ *
+ * `position: relative` anchors the divider below; Blend sets no position on the item.
+ */
+.faq-list [data-element='accordion-item'] {
+  position: relative;
+  transition: background-color var(--faq-ms) var(--faq-ease);
+}
+
+.faq-list [data-element='accordion-item'][data-state='open'] {
+  background-color: var(--faq-open-bg);
+}
+
+/*
+ * A hairline between questions, on the text's keyline rather than the card's edge — so it
+ * reads as separating two lines of text, and stops short of the rounded corners a filled card
+ * has there. Lighter than the stroke under the heading, which divides the panel; these only
+ * divide a list.
+ *
+ * Drawn on the lower item's top edge. It fades out beside a filled card — the open one, or the
+ * one under the pointer — where the card's own edge already does the separating, and a line
+ * touching a fill reads as a crease in it.
+ */
+.faq-list [data-element='accordion-item'] + [data-element='accordion-item']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--faq-inset);
+  right: var(--faq-inset);
+  height: var(--faq-divider-width);
+  background-color: var(--faq-divider);
+  transition: opacity var(--faq-ms) var(--faq-ease);
+}
+
+.faq-list [data-element='accordion-item'][data-state='open']::before,
+.faq-list [data-element='accordion-item'][data-state='open'] + [data-element='accordion-item']::before,
+.faq-list [data-element='accordion-item']:hover::before,
+.faq-list [data-element='accordion-item']:hover + [data-element='accordion-item']::before {
+  opacity: 0;
+}
+
+/*
+ * The chevron in a column of its own, beside the question rather than over it.
+ *
+ * blend-gap: AccordionV2 draws a right chevron `position: absolute` across the whole trigger
+ * (AccordionV2TriggerContent.tsx, ChevronContainer), with nothing reserving its width — so a
+ * question long enough to reach the right edge ran underneath it. Put back in the flow, it is
+ * a flex sibling of the question's column in the row Blend already lays out, and takes that
+ * row's own `content.gap` (8) from the text. `margin-left: auto` holds it at the right edge when
+ * the question is short. And the height of one line of the question, so it centres on the
+ * first line rather than floating between two.
+ *
+ * !important because Block writes both as styled-components rules of its own.
+ */
+.faq-list [data-element='chevron-icon'] {
+  position: static !important;
+  height: var(--faq-line) !important;
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-list [data-element='accordion-item'],
+  .faq-list [data-element='accordion-item'] + [data-element='accordion-item']::before {
+    transition: none;
+  }
+}

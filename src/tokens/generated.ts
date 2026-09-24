@@ -1,12 +1,15 @@
 /**
  * Every component-token tree this app carries. GENERATED — see scripts/gen-tokens.mjs.
  */
+export { ACCORDIONV2_TOKENS } from './AccordionV2'
 export { ALERTV2_TOKENS } from './AlertV2'
 export { AVATARV2_TOKENS } from './AvatarV2'
 export { BUTTONV2_TOKENS } from './ButtonV2'
 export { CARDV2_TOKENS } from './CardV2'
 export { CHECKBOXV2_TOKENS } from './CheckboxV2'
+export { MENU_V2_TOKENS } from './MenuV2'
 export { MODALV2_TOKENS } from './ModalV2'
+export { POPOVERV2_TOKENS } from './PopoverV2'
 export { PROGRESS_BARV2_TOKENS } from './ProgressBarV2'
 export { SIDEBARV2_TOKENS } from './SidebarV2'
 export { SINGLE_SELECT_V2_TOKENS } from './SingleSelectV2'

@@ -28,9 +28,11 @@ import {
 } from 'react'
 import { FEEDBACK_EASING, MICRO_MS } from '../../motion'
 import { SLOT_ICON } from '../../icons'
+import { DataTransformModal } from './DataTransformModal'
+import { DataTransformDials } from './data-transform-layout'
 import { LinkAction } from '../../link-action'
 import { PrimitiveText, font } from '../../primitives'
-import { columnOrganiserTokens, headerGhostButtonTokens, organiserRowTokens } from '../../theme'
+import { columnOrganiserTokens, organiserRowTokens } from '../../theme'
 import {
   columnLetter,
   fieldOf,
@@ -39,6 +41,7 @@ import {
   isFieldSelected,
   isGroupedField,
   newFieldColumn,
+  transformKindOf,
   sameField,
   withoutField,
   type Aggregation,
@@ -173,6 +176,15 @@ export function ColumnOrganiser({
   const [query, setQuery] = useState('')
   const { columns } = answers
 
+  /**
+   * The column the Data Transform modal is editing, and whether it is open — two pieces so the
+   * id outlives the close: the modal keeps its title through its exit animation instead of
+   * going blank as it leaves.
+   */
+  const [transformingId, setTransformingId] = useState<string | null>(null)
+  const [transformOpen, setTransformOpen] = useState(false)
+  const transformingColumn = columns.find((column) => column.id === transformingId)
+
   const setColumns = useCallback(
     (next: FieldColumn[]) => onChange({ ...answers, columns: next }),
     [answers, onChange],
@@ -209,7 +221,8 @@ export function ColumnOrganiser({
    * many short names mostly returns the ones you did not mean.
    */
   const needle = query.trim().toLowerCase()
-  const matches = needle === '' ? vocabulary : vocabulary.filter((tag) => tag.toLowerCase().includes(needle))
+  const matches =
+    needle === '' ? vocabulary : vocabulary.filter((tag) => tag.toLowerCase().includes(needle))
 
   /**
    * Whether the report groups by a field — the user's answer from the Grouping step, which
@@ -302,8 +315,7 @@ export function ColumnOrganiser({
   const addImportant = () => setColumns([...columns, ...missingImportant.map(columnFor)])
   // Folded one field at a time rather than filtered in one pass, so duplicates of a field go
   // with it — the same rule `toggleField` applies to a single chip.
-  const clearAll = () =>
-    setColumns(picked.reduce((kept, tag) => withoutField(kept, tag), columns))
+  const clearAll = () => setColumns(picked.reduce((kept, tag) => withoutField(kept, tag), columns))
 
   /**
    * Reordering reads the latest columns from a ref rather than from the closure.
@@ -344,8 +356,8 @@ export function ColumnOrganiser({
   /**
    * Renaming a column: the title is a label laid over a field the report already knows
    * about. The label moves and the field does not — `source` holds the two together, the
-   * chip stays lit, and the row reads back `represents "Gateway"` so the original name is
-   * never actually lost.
+   * chip stays lit, and the row's info glyph reads back `represents "Gateway"` on hover, so
+   * the original name is never actually lost.
    *
    * Only vocabulary fields get here. A custom column has no pencil (OrganiserRow): its name
    * *is* the field, and a rename would have had to move the field itself — its chip, its
@@ -363,7 +375,11 @@ export function ColumnOrganiser({
    */
   const duplicate = (index: number) => {
     const original = columns[index]
-    const copy: FieldColumn = { ...original, ...newFieldColumn(original.title), source: original.source }
+    const copy: FieldColumn = {
+      ...original,
+      ...newFieldColumn(original.title),
+      source: original.source,
+    }
     setColumns([...columns.slice(0, index + 1), copy, ...columns.slice(index + 1)])
   }
 
@@ -425,325 +441,345 @@ export function ColumnOrganiser({
   }
 
   return (
-    <ThemeProvider componentTokens={columnOrganiserTokens}>
-      <div
-        className="flex w-full items-stretch"
-        style={
-          {
-            borderRadius: FOUNDATION_THEME.border.radius[8],
-            /*
-             * Capped so that each pane scrolls its own list instead of the step growing to
-             * twenty-nine chips' worth of height and taking the page with it.
-             *
-             * 100% of the filling grid row (`.flow-grid[data-fill]`, index.css), which is the
-             * flow's content pane: `flex-1` inside an `h-screen` column. So the cap *is*
-             * viewport height, less the topbar and footer that have to stay on screen for it
-             * to be any use. A literal `100dvh` was the first attempt and does not bind — it
-             * is larger than the pane it sits in, so on a tall window the box just grew past
-             * the fold exactly as before.
-             */
-            maxHeight: '100%',
-            // Handed to index.css, which keeps no values of its own (rule 1). No fallbacks
-            // on purpose: a property that stops being set here should fail visibly rather
-            // than resolve to a literal the stylesheet had quietly kept a copy of.
-            '--organiser-micro': `${MICRO_MS}ms`,
-            '--organiser-ease': FEEDBACK_EASING,
-            '--organiser-hover': colors.gray[50],
-            '--organiser-scrollbar': colors.gray[300],
-            // The search's clear control, at rest and under the pointer. gray[400] is the
-            // placeholder colour every icon in an input slot takes (rule 11) — it belongs to
-            // the field's furniture, not to the value.
-            '--organiser-clear': colors.gray[400],
-            '--organiser-clear-hover': colors.gray[600],
-          } as CSSProperties
-        }
-      >
-        {/* ── The palette ─────────────────────────────────────────────────────────────── */}
+    <>
+      <ThemeProvider componentTokens={columnOrganiserTokens}>
         <div
-          className="organiser-palette flex min-h-0 shrink-0 flex-col"
-          style={{
-            width: PALETTE_PANE,
-            border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
-            borderTopLeftRadius: FOUNDATION_THEME.border.radius[8],
-            borderBottomLeftRadius: FOUNDATION_THEME.border.radius[8],
-          }}
+          className="flex w-full items-stretch"
+          style={
+            {
+              borderRadius: FOUNDATION_THEME.border.radius[8],
+              /*
+               * Capped so that each pane scrolls its own list instead of the step growing to
+               * twenty-nine chips' worth of height and taking the page with it.
+               *
+               * 100% of the filling grid row (`.flow-grid[data-fill]`, index.css), which is the
+               * flow's content pane: `flex-1` inside an `h-screen` column. So the cap *is*
+               * viewport height, less the topbar and footer that have to stay on screen for it
+               * to be any use. A literal `100dvh` was the first attempt and does not bind — it
+               * is larger than the pane it sits in, so on a tall window the box just grew past
+               * the fold exactly as before.
+               */
+              maxHeight: '100%',
+              // Handed to index.css, which keeps no values of its own (rule 1). No fallbacks
+              // on purpose: a property that stops being set here should fail visibly rather
+              // than resolve to a literal the stylesheet had quietly kept a copy of.
+              '--organiser-micro': `${MICRO_MS}ms`,
+              '--organiser-ease': FEEDBACK_EASING,
+              '--organiser-hover': colors.gray[50],
+              '--organiser-scrollbar': colors.gray[300],
+              // The search's clear control, at rest and under the pointer. gray[400] is the
+              // placeholder colour every icon in an input slot takes (rule 11) — it belongs to
+              // the field's furniture, not to the value.
+              '--organiser-clear': colors.gray[400],
+              '--organiser-clear-hover': colors.gray[600],
+            } as CSSProperties
+          }
         >
-          {/* The header: what you search and select *with*, held still while what you search
-              and select *over* scrolls beneath it. The hairline is what makes that read as a
-              header rather than as the first two things in a long list.
-
-              `p-5` all round, and the box hugs what is in it — 20px is the same inset the
-              chips below keep from the pane's edges, so the padding is one decision rather
-              than a horizontal one and a vertical one that happen to agree. It used to be a
-              fixed height with the stack centred inside, which produced the identical 20px
-              but only for as long as the constant and the stack stayed in step. */}
+          {/* ── The palette ─────────────────────────────────────────────────────────────── */}
           <div
-            className="flex shrink-0 flex-col gap-3 p-5"
+            className="organiser-palette flex min-h-0 shrink-0 flex-col"
             style={{
-              borderBottom: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+              width: PALETTE_PANE,
+              border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+              borderTopLeftRadius: FOUNDATION_THEME.border.radius[8],
+              borderBottomLeftRadius: FOUNDATION_THEME.border.radius[8],
             }}
           >
-            <TextInputV2
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search columns"
-              size={InputSizeV2.MD}
-              // gray[400], the placeholder colour — an icon in an input slot inherits the
-              // *value* colour otherwise, and an untinted glyph reads as black shouting
-              // beside grey text (rule 11).
-              leftSlot={{ slot: <Search size={SLOT_SIZE} color={colors.gray[400]} /> }}
-              /*
-               * Shown once there is something to clear, rather than on focus: an ✕ over an
-               * empty field is the no-op control "Clear all" below was just taken off the
-               * page for (src/link-action.tsx). Gating on the value also survives a blur —
-               * clicking a chip takes focus out of the field, and a focus-gated ✕ would
-               * vanish while its own search was still filtering the list.
-               */
-              rightSlot={
-                query
-                  ? {
-                      slot: (
-                        <button
-                          type="button"
-                          aria-label="Clear search"
-                          title="Clear search"
-                          /* The caret never leaves the field: `mousedown` is what would blur
-                             it, and the click still fires, so you can carry straight on
-                             typing after clearing. */
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => setQuery('')}
-                          className="organiser-clear flex cursor-pointer items-center justify-center border-none bg-transparent p-0"
-                        >
-                          <X size={SLOT_SIZE} />
-                        </button>
-                      ),
-                    }
-                  : undefined
-              }
-              aria-label="Search columns"
-            />
+            {/* The header: what you search and select *with*, held still while what you search
+                and select *over* scrolls beneath it. The hairline is what makes that read as a
+                header rather than as the first two things in a long list.
 
-            {/* The bulk action sits with the search rather than with the chips: it acts on
-                the whole list, and it has to stay reachable once that list is scrolled.
+                `p-5` all round, and the box hugs what is in it — 20px is the same inset the
+                chips below keep from the pane's edges, so the padding is one decision rather
+                than a horizontal one and a vertical one that happen to agree. It used to be a
+                fixed height with the stack centred inside, which produced the identical 20px
+                but only for as long as the constant and the stack stayed in step. */}
+            <div
+              className="flex shrink-0 flex-col gap-3 p-5"
+              style={{
+                borderBottom: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+              }}
+            >
+              <TextInputV2
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search columns"
+                size={InputSizeV2.MD}
+                // gray[400], the placeholder colour — an icon in an input slot inherits the
+                // *value* colour otherwise, and an untinted glyph reads as black shouting
+                // beside grey text (rule 11).
+                leftSlot={{ slot: <Search size={SLOT_SIZE} color={colors.gray[400]} /> }}
+                /*
+                 * Shown once there is something to clear, rather than on focus: an ✕ over an
+                 * empty field is the no-op control "Clear all" below was just taken off the
+                 * page for (src/link-action.tsx). Gating on the value also survives a blur —
+                 * clicking a chip takes focus out of the field, and a focus-gated ✕ would
+                 * vanish while its own search was still filtering the list.
+                 */
+                rightSlot={
+                  query
+                    ? {
+                        slot: (
+                          <button
+                            type="button"
+                            aria-label="Clear search"
+                            title="Clear search"
+                            /* The caret never leaves the field: `mousedown` is what would blur
+                               it, and the click still fires, so you can carry straight on
+                               typing after clearing. */
+                            onMouseDown={(event) => event.preventDefault()}
+                            onClick={() => setQuery('')}
+                            className="organiser-clear flex cursor-pointer items-center justify-center border-none bg-transparent p-0"
+                          >
+                            <X size={SLOT_SIZE} />
+                          </button>
+                        ),
+                      }
+                    : undefined
+                }
+                aria-label="Search columns"
+              />
 
-                Split left and right, with the count on the left: the row reads as a caption
-                for the list under it — what you are looking at, then what you can do to all
-                of it — and the action ends up in the corner rather than adrift in the middle
-                of an otherwise empty line. */}
-            <div className="flex items-center justify-between gap-4">
-              {/* Two facts sharing one line, because they are never both wanted at once —
-                  see `caption` above for which wins when. It earns the space either way: the
-                  chips scroll, so neither number can be arrived at by counting what is on
-                  screen. */}
-              <PrimitiveText
-                as="p"
-                {...font(FOUNDATION_THEME.font.size.body.sm)}
-                color={colors.gray[500]}
-                // Italic, so the count reads as a remark about the list rather than one more
-                // item in it. PrimitiveText has no fontStyle prop; `style` reaches the element.
-                style={{ fontStyle: 'italic' }}
-              >
-                {caption}
-              </PrimitiveText>
+              {/* The bulk action sits with the search rather than with the chips: it acts on
+                  the whole list, and it has to stay reachable once that list is scrolled.
 
-              {/* One control, not two, and which one it is answers the only question the
-                  corner can usefully answer: the list is untouched, so take all of it — or
-                  you have taken some, so put it back.
+                  Split left and right, with the count on the left: the row reads as a caption
+                  for the list under it — what you are looking at, then what you can do to all
+                  of it — and the action ends up in the corner rather than adrift in the middle
+                  of an otherwise empty line. */}
+              <div className="flex items-center justify-between gap-4">
+                {/* Two facts sharing one line, because they are never both wanted at once —
+                    see `caption` above for which wins when. It earns the space either way: the
+                    chips scroll, so neither number can be arrived at by counting what is on
+                    screen. */}
+                <PrimitiveText
+                  as="p"
+                  {...font(FOUNDATION_THEME.font.size.body.sm)}
+                  color={colors.gray[500]}
+                  // Italic, so the count reads as a remark about the list rather than one more
+                  // item in it. PrimitiveText has no fontStyle prop; `style` reaches the element.
+                  style={{ fontStyle: 'italic' }}
+                >
+                  {caption}
+                </PrimitiveText>
 
-                  Both at once made the pair read as a choice between two bulk actions, when
-                  in practice the second is only ever the undo of the first. Swapping in
-                  place also means the corner never grows a control while you are looking
-                  somewhere else, which is what a "Clear all" appearing beside a still-live
-                  "Select all" did.
+                {/* One control, not two, and which one it is answers the only question the
+                    corner can usefully answer: the list is untouched, so take all of it — or
+                    you have taken some, so put it back.
 
-                  `picked` and not `columns`, so the control is search-scoped like the two
-                  handlers it calls. Type a filter that excludes everything you have already
-                  taken and it says "Select all" again — correctly, because "Clear all" there
-                  would reach none of the visible fields and answer the click with nothing.
-                  The caption on the left is what still reports the whole selection.
+                    Both at once made the pair read as a choice between two bulk actions, when
+                    in practice the second is only ever the undo of the first. Swapping in
+                    place also means the corner never grows a control while you are looking
+                    somewhere else, which is what a "Clear all" appearing beside a still-live
+                    "Select all" did.
 
-                  Nothing at all when the search has emptied the list: the action trails,
-                  with nothing after it to slide into the gap, so hiding beats a drawn no-op
-                  — the rule in src/link-action.tsx. The row still says "Showing 0 columns"
-                  and the pane below still says what missed, so nothing goes unexplained. */}
-              {matches.length > 0 &&
-                (picked.length === 0 ? (
-                  <LinkAction text="Select all" onClick={selectAll} />
-                ) : (
-                  <LinkAction text="Clear all" onClick={clearAll} />
-                ))}
+                    `picked` and not `columns`, so the control is search-scoped like the two
+                    handlers it calls. Type a filter that excludes everything you have already
+                    taken and it says "Select all" again — correctly, because "Clear all" there
+                    would reach none of the visible fields and answer the click with nothing.
+                    The caption on the left is what still reports the whole selection.
+
+                    Nothing at all when the search has emptied the list: the action trails,
+                    with nothing after it to slide into the gap, so hiding beats a drawn no-op
+                    — the rule in src/link-action.tsx. The row still says "Showing 0 columns"
+                    and the pane below still says what missed, so nothing goes unexplained. */}
+                {matches.length > 0 &&
+                  (picked.length === 0 ? (
+                    <LinkAction text="Select all" onClick={selectAll} />
+                  ) : (
+                    <LinkAction text="Clear all" onClick={clearAll} />
+                  ))}
+              </div>
+            </div>
+
+            {/* The chips, and the only part of this pane that moves. `min-h-0` is what makes it
+                scroll rather than push: a flex item's default `min-height: auto` refuses to
+                shrink below its content, so without it the pane grows past the cap above and
+                nothing ever overflows to scroll. */}
+            <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-2 p-5">
+              {matches.map(chip)}
+              {matches.length === 0 && (
+                <PrimitiveText
+                  as="p"
+                  {...font(FOUNDATION_THEME.font.size.body.sm)}
+                  color={colors.gray[500]}
+                >
+                  {`No field matches “${query.trim()}”.`}
+                </PrimitiveText>
+              )}
             </div>
           </div>
 
-          {/* The chips, and the only part of this pane that moves. `min-h-0` is what makes it
-              scroll rather than push: a flex item's default `min-height: auto` refuses to
-              shrink below its content, so without it the pane grows past the cap above and
-              nothing ever overflows to scroll. */}
-          <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-2 p-5">
-            {matches.map(chip)}
-            {matches.length === 0 && (
-              <PrimitiveText
-                as="p"
-                {...font(FOUNDATION_THEME.font.size.body.sm)}
-                color={colors.gray[500]}
-              >
-                {`No field matches “${query.trim()}”.`}
-              </PrimitiveText>
-            )}
-          </div>
-        </div>
-
-        {/* ── The organiser ───────────────────────────────────────────────────────────── */}
-        <div
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
-          style={{
-            backgroundColor: colors.gray[0],
-            // No left border: the palette's right border already draws the seam, and two
-            // hairlines a pixel apart read as a gap rather than a division.
-            borderTop: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
-            borderRight: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
-            borderBottom: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
-            borderTopRightRadius: FOUNDATION_THEME.border.radius[8],
-            borderBottomRightRadius: FOUNDATION_THEME.border.radius[8],
-          }}
-        >
-          {/* No hairline under this one. The pane already carries three borders and a vertical
-              seam against the palette, and a fourth line here cut the heading off from the
-              rows it names — with the two headers no longer the same height it had nothing on
-              the other side of the seam to meet anyway.
-
-              24px in from the sides, the inset this pane's rows keep. The vertical is the
-              palette's 20px rather than 24, because ORGANISER_HEADER is built out of the
-              palette's own search row: that is what puts this heading on the same centre line
-              as "Search columns" instead of merely at the same top edge. */}
+          {/* ── The organiser ───────────────────────────────────────────────────────────── */}
           <div
-            // `pr-4` and not `pr-6`: the button below now carries 8px of its own horizontal
-            // padding so its hover fill has somewhere to be, and the header hands back exactly
-            // that much on the right. The label therefore still ends on the 24px keyline the
-            // rows under it use — the padding moved from the parent to the child rather than
-            // being added on top of it.
-            className="flex shrink-0 items-center justify-between py-5 pl-6 pr-4"
-            style={{ minHeight: ORGANISER_HEADER }}
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+            style={{
+              backgroundColor: colors.gray[0],
+              // No left border: the palette's right border already draws the seam, and two
+              // hairlines a pixel apart read as a gap rather than a division.
+              borderTop: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+              borderRight: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+              borderBottom: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+              borderTopRightRadius: FOUNDATION_THEME.border.radius[8],
+              borderBottomRightRadius: FOUNDATION_THEME.border.radius[8],
+            }}
           >
-            <PrimitiveText as="h3" {...HEADING} color={colors.gray[700]}>
-              Column organiser
-            </PrimitiveText>
-            {/* blend-gap: ButtonV2 hard-codes `cursor: default` on every enabled button
-                (ButtonV2/utils.ts:269) and no prop or token reaches it, so a control that
-                answers a click reads as text under the pointer. The rule goes on a wrapper
-                we own, since ButtonV2 omits className. */}
-            <span className="[&_button]:cursor-pointer">
-              {/* INLINE gives no padding and no hover fill of its own — see
-                  headerGhostButtonTokens (src/theme.ts) for both, and for why the scope is
-                  this one button rather than the pane. */}
-              <ThemeProvider componentTokens={headerGhostButtonTokens}>
+            {/* No hairline under this one. The pane already carries three borders and a vertical
+                seam against the palette, and a fourth line here cut the heading off from the
+                rows it names — with the two headers no longer the same height it had nothing on
+                the other side of the seam to meet anyway.
+
+                24px in from the sides, the inset this pane's rows keep. The vertical is the
+                palette's 20px rather than 24, because ORGANISER_HEADER is built out of the
+                palette's own search row: that is what puts this heading on the same centre line
+                as "Search columns" instead of merely at the same top edge. */}
+            {/* How to use the pane — drag, rename, the menu — lives in the FAQ panel (faqs.ts,
+                the Fields step's first question) rather than under this heading: it is
+                something a user reads once, and two permanent lines of it pushed the rows down
+                on every visit after that. */}
+            <div
+              className="flex shrink-0 items-center justify-between gap-4 px-6 py-5"
+              style={{ minHeight: ORGANISER_HEADER }}
+            >
+              <PrimitiveText as="h3" {...HEADING} color={colors.gray[700]}>
+                Column organiser
+              </PrimitiveText>
+              {/* blend-gap: ButtonV2 hard-codes `cursor: default` on every enabled button
+                  (ButtonV2/utils.ts:269) and no prop or token reaches it, so a control that
+                  answers a click reads as text under the pointer. The rule goes on a wrapper
+                  we own, since ButtonV2 omits className. */}
+              <span className="shrink-0 whitespace-nowrap [&_button]:cursor-pointer">
+                {/* A bordered secondary, so its edge — not a label floating in padding — sits on
+                    the 24px keyline the rows below it end on. */}
                 <ButtonV2
                   buttonType={ButtonV2Type.SECONDARY}
                   size={ButtonV2Size.SMALL}
-                  subType={ButtonV2SubType.INLINE}
+                  subType={ButtonV2SubType.DEFAULT}
                   text="Add custom column"
                   leftSlot={{ slot: <Plus size={SLOT_SIZE} /> }}
                   onClick={onAddCustomColumn}
                 />
-              </ThemeProvider>
-            </span>
-          </div>
+              </span>
+            </div>
 
-          {/* The columns, scrolling under the header — `min-h-0` for the reason the palette's
-              list carries it. 16px at the bottom so the last row, scrolled to the end, sits
-              clear of the pane's edge rather than against it. */}
-          <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-6 px-6 pt-1 pb-4">
-            {columns.length === 0 ? (
-              /* blend-gap: Blend 0.0.37 publishes no EmptyState (it exists on GitHub — rule 3),
-                 so this is the smallest honest version: what the panel is for, in the place its
-                 first row will appear. */
-              <div
-                className="flex flex-col items-center justify-center gap-4 py-12"
-                style={{
-                  border: `${FOUNDATION_THEME.border.width[1]} dashed ${colors.gray[300]}`,
-                  borderRadius: FOUNDATION_THEME.border.radius[8],
-                }}
-              >
-                {/* Title and subtitle as their own stack, so the 4px between them is not the
-                    16px that separates the whole message from the button. */}
-                <div className="flex flex-col items-center gap-1">
-                  <PrimitiveText
-                    as="p"
-                    {...font(FOUNDATION_THEME.font.size.body.md)}
-                    color={colors.gray[600]}
-                  >
-                    No columns yet
-                  </PrimitiveText>
-                  <PrimitiveText
-                    as="p"
-                    {...font(FOUNDATION_THEME.font.size.body.sm)}
-                    color={colors.gray[500]}
-                  >
-                    Pick a field on the left, or add a custom column.
-                  </PrimitiveText>
-                </div>
-                {/* The one shortcut out of the empty state, so the panel offers a way forward
-                    rather than only describing one — the same button, the same list and the
-                    same wiring as the v1 step's empty table.
-
-                    MEDIUM rather than the SMALL of "Add custom column" in the heading above:
-                    that one sits in a row of panel chrome and is sized against it, where this
-                    one stands alone inside the dashed frame.
-
-                    No `missingImportant.length` guard: this renders only when `columns` is
-                    empty, so every important field is missing and the button always has
-                    something to do. */}
-                <ButtonV2
-                  buttonType={ButtonV2Type.SECONDARY}
-                  size={ButtonV2Size.MEDIUM}
-                  text="Add important columns"
-                  leftSlot={{ slot: <Plus size={14} /> }}
-                  onClick={addImportant}
-                />
-              </div>
-            ) : (
-              /* The rows run on their own tag colours — organiserRowTokens (src/theme.ts) —
-                 for why a pill in here keeps the wash a chip in the palette gives up. */
-              <ThemeProvider componentTokens={organiserRowTokens}>
-                {/* One frame around the whole list, drawn by the rows themselves: each carries
-                    a border and a -1px bottom margin so adjacent edges collapse into one
-                    hairline, and the first and last take the outer radius. `overflow-hidden`
-                    is what makes the radius clip the row inside it. */}
-                {/* `pb-px` gives back the pixel the last row's -1px margin takes (the margin
-                    that collapses neighbouring borders), so the 16px under the list is 16. */}
+            {/* The columns, scrolling under the header — `min-h-0` for the reason the palette's
+                list carries it. 16px at the bottom so the last row, scrolled to the end, sits
+                clear of the pane's edge rather than against it. */}
+            <div className="organiser-scroll flex min-h-0 flex-1 flex-col gap-6 px-6 pt-1 pb-4">
+              {columns.length === 0 ? (
+                /* blend-gap: Blend 0.0.37 publishes no EmptyState (it exists on GitHub — rule 3),
+                   so this is the smallest honest version: what the panel is for, in the place its
+                   first row will appear. */
                 <div
-                  ref={listRef}
-                  className="organiser-list flex flex-col pb-px"
-                  style={{ borderRadius: FOUNDATION_THEME.border.radius[8] }}
+                  className="flex flex-col items-center justify-center gap-4 py-12"
+                  style={{
+                    border: `${FOUNDATION_THEME.border.width[1]} dashed ${colors.gray[300]}`,
+                    borderRadius: FOUNDATION_THEME.border.radius[8],
+                  }}
                 >
-                  {columns.map((column, index) => (
-                    <OrganiserRow
-                      key={column.id}
-                      column={column}
-                      letter={columnLetter(index)}
-                      grouped={isGrouped(fieldOf(column))}
-                      // By field, like the chip — a custom column that has been renamed is
-                      // still one the user invented, and `fieldOf` is what remembers that.
-                      custom={isCustom(fieldOf(column))}
-                      showAggregation={aggregated}
-                      dragging={draggingIndex === index}
-                      handleProps={handleProps(index)}
-                      onRename={(title) => rename(column, title)}
-                      onAggregate={(aggregate: Aggregation) => update(column.id, { aggregate })}
-                      onDuplicate={() => duplicate(index)}
-                      onRemove={() =>
-                        // By id, not by field: a duplicated column's ✕ takes that copy only,
-                        // and the chip stays lit while the other one is still there.
-                        setColumns(columns.filter((other) => other.id !== column.id))
-                      }
-                    />
-                  ))}
+                  {/* Title and subtitle as their own stack, so the 4px between them is not the
+                      16px that separates the whole message from the button. */}
+                  <div className="flex flex-col items-center gap-1">
+                    <PrimitiveText
+                      as="p"
+                      {...font(FOUNDATION_THEME.font.size.body.md)}
+                      color={colors.gray[600]}
+                    >
+                      No columns yet
+                    </PrimitiveText>
+                    <PrimitiveText
+                      as="p"
+                      {...font(FOUNDATION_THEME.font.size.body.sm)}
+                      color={colors.gray[500]}
+                    >
+                      Pick a field on the left, or add a custom column.
+                    </PrimitiveText>
+                  </div>
+                  {/* The one shortcut out of the empty state, so the panel offers a way forward
+                      rather than only describing one — the same button, the same list and the
+                      same wiring as the v1 step's empty table.
+
+                      MEDIUM rather than the SMALL of "Add custom column" in the heading above:
+                      that one sits in a row of panel chrome and is sized against it, where this
+                      one stands alone inside the dashed frame.
+
+                      No `missingImportant.length` guard: this renders only when `columns` is
+                      empty, so every important field is missing and the button always has
+                      something to do. */}
+                  <ButtonV2
+                    buttonType={ButtonV2Type.SECONDARY}
+                    size={ButtonV2Size.MEDIUM}
+                    text="Add important columns"
+                    leftSlot={{ slot: <Plus size={14} /> }}
+                    onClick={addImportant}
+                  />
                 </div>
-              </ThemeProvider>
-            )}
+              ) : (
+                /* The rows run on their own tag colours — organiserRowTokens (src/theme.ts) —
+                   for why a pill in here keeps the wash a chip in the palette gives up. */
+                <ThemeProvider componentTokens={organiserRowTokens}>
+                  {/* One frame around the whole list, drawn by the rows themselves: each carries
+                      a border and a -1px bottom margin so adjacent edges collapse into one
+                      hairline, and the first and last take the outer radius. `overflow-hidden`
+                      is what makes the radius clip the row inside it. */}
+                  {/* `pb-px` gives back the pixel the last row's -1px margin takes (the margin
+                      that collapses neighbouring borders), so the 16px under the list is 16. */}
+                  <div
+                    ref={listRef}
+                    className="organiser-list flex flex-col pb-px"
+                    style={{ borderRadius: FOUNDATION_THEME.border.radius[8] }}
+                  >
+                    {columns.map((column, index) => (
+                      <OrganiserRow
+                        key={column.id}
+                        column={column}
+                        letter={columnLetter(index)}
+                        grouped={isGrouped(fieldOf(column))}
+                        // By field, like the chip — a custom column that has been renamed is
+                        // still one the user invented, and `fieldOf` is what remembers that.
+                        custom={isCustom(fieldOf(column))}
+                        showAggregation={aggregated}
+                        dragging={draggingIndex === index}
+                        handleProps={handleProps(index)}
+                        onRename={(title) => rename(column, title)}
+                        onAggregate={(aggregate: Aggregation) => update(column.id, { aggregate })}
+                        onDuplicate={() => duplicate(index)}
+                        onOpenTransform={() => {
+                          setTransformingId(column.id)
+                          setTransformOpen(true)
+                        }}
+                        onRemove={() =>
+                          // By id, not by field: a duplicated column's ✕ takes that copy only,
+                          // and the chip stays lit while the other one is still there.
+                          setColumns(columns.filter((other) => other.id !== column.id))
+                        }
+                      />
+                    ))}
+                  </div>
+                </ThemeProvider>
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    </ThemeProvider>
+      </ThemeProvider>
+      {/* Outside the organiser's ThemeProvider on purpose: columnOrganiserTokens greys every
+          select's chosen value for the aggregation column (theme.ts), and context reaches
+          through the modal's portal — so inside it, the modal's own selects read as empty. */}
+      <DataTransformDials>
+        {(layout) => (
+          <DataTransformModal
+            layout={layout}
+            isOpen={transformOpen && transformingColumn !== undefined}
+            columnTitle={transformingColumn?.title ?? ''}
+            kind={transformingColumn && transformKindOf(fieldOf(transformingColumn))}
+            transform={transformingColumn?.transform}
+            onClose={() => setTransformOpen(false)}
+            onApply={(transform) =>
+              transformingColumn && update(transformingColumn.id, { transform })
+            }
+          />
+        )}
+      </DataTransformDials>
+    </>
   )
 }

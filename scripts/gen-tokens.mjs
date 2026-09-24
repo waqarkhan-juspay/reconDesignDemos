@@ -23,12 +23,15 @@ const COMPONENTS = join(LIB, 'components')
  * all — see ConfigDetailSheet.tsx) and so is the V1 exception rule 4 allows.
  */
 const RENDERED = [
+  'AccordionV2',
   'AlertV2',
   'AvatarV2',
   'ButtonV2',
   'CardV2',
   'SelectorV2/CheckboxV2',
+  'MenuV2',
   'ModalV2',
+  'PopoverV2',
   'ProgressBarV2',
   'SidebarV2',
   'SingleSelectV2',
