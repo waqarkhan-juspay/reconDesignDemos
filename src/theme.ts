@@ -1,4 +1,5 @@
 import {
+  AccordionV2Type,
   FOUNDATION_THEME,
   getDirectoryTokens,
   getKeyValuePairV2Tokens,
@@ -11,8 +12,11 @@ import {
   type ResponsiveSidebarV2Tokens,
 } from '@juspay/blend-design-system'
 import { ICON_SIZE } from './layout/chrome'
+import { ACCORDIONV2_TOKENS } from './tokens/AccordionV2'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
+import { MENU_V2_TOKENS } from './tokens/MenuV2'
+import { POPOVERV2_TOKENS } from './tokens/PopoverV2'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
 import { SIDEBARV2_TOKENS } from './tokens/SidebarV2'
 import { SINGLE_SELECT_V2_TOKENS } from './tokens/SingleSelectV2'
@@ -147,7 +151,13 @@ const SIDEBARV2 = perBreakpoint(
  * costs something, because these are light values and passing them replaces the dark
  * defaults too. Edit a value in that file, then add its slot here.
  */
-export const componentTokens: ComponentTokenType = { DIRECTORY, TABLE, SIDEBARV2 }
+export const componentTokens: ComponentTokenType = {
+  DIRECTORY,
+  TABLE,
+  SIDEBARV2,
+  // Top padding halved to undo Blend applying it twice — see src/tokens/MenuV2.ts.
+  MENU_V2: MENU_V2_TOKENS,
+}
 
 /**
  * Tabs with the design's 24px between triggers, for the ONE tab set that wants it.
@@ -327,19 +337,143 @@ export const ghostButtonTokens = ghostButton('lg', {
 })
 
 /**
- * The organiser header's "Add custom column" — the same ghost, sized for a header rather than
- * a footer.
+ * The FAQ panel's horizontal rhythm, in three numbers that have to agree:
  *
- * 8px/4px is deliberately smaller than the LARGE ghost's 16px/10px: this one sits on a line
- * with a heading rather than in a row of buttons, so the fill is there to acknowledge the
- * pointer, not to draw a control. The header gives back the 8px it takes on the right
- * (ColumnOrganiser.tsx), so the label stays on the keyline the rows below it use.
+ * - FAQ_LIST_GUTTER — the list's own side padding, so a filled (open or hovered) question
+ *   sits inside the panel as a rounded card rather than bleeding to its edges.
+ * - FAQ_INSET — the question's side padding inside that card, and the answer's.
+ * - FAQ_PANEL_PADDING — the two added up, and the panel's side padding. So the heading, the
+ *   questions and the answers all start on one keyline, 24 in from the panel's edge.
  */
-export const headerGhostButtonTokens = ghostButton('sm', {
-  x: '8px',
-  y: '4px',
-  radius: FOUNDATION_THEME.border.radius[6],
-})
+export const FAQ_LIST_GUTTER = 12
+export const FAQ_INSET = 12
+export const FAQ_PANEL_PADDING = FAQ_LIST_GUTTER + FAQ_INSET
+
+type FaqAccordionToken = {
+  trigger: {
+    padding: Record<AccordionV2Type, unknown>
+    text: {
+      title: {
+        fontSize: unknown
+        fontWeight: unknown
+        lineHeight: unknown
+        color: Record<'default' | 'hover' | 'active' | 'disabled' | 'open', unknown>
+      }
+    }
+  }
+}
+
+type FaqPopoverToken = {
+  padding: Record<'left' | 'right', Record<'sm' | 'md' | 'lg', unknown>>
+  TopContainer: { heading: { fontWeight: Record<'sm' | 'md' | 'lg', unknown> } }
+}
+
+type FabButtonToken = {
+  borderRadius: Record<GhostSize, { secondary: { iconOnly: unknown } }>
+}
+
+/**
+ * The flow's help button (FaqLauncher) — a secondary LARGE icon-only ButtonV2 drawn as a
+ * floating action button: fully round.
+ *
+ * Secondary — white, bordered, gray glyph — rather than primary: help is on every step and
+ * wanted on few of them, and a blue disc in the corner would out-shout Continue, the one
+ * button on the page that should be the loudest. Round is the one shape that reads as
+ * "floating" rather than as a toolbar button someone forgot to put in a toolbar.
+ *
+ * No drop shadow here: ButtonV2 reads its `shadow` token only for `:active`
+ * (ButtonV2/utils.ts:239) — the resting and hover slots exist in the tree and are never
+ * applied — so FaqLauncher casts `shadows.lg` from a round wrapper around the button instead.
+ *
+ * And the FAQ list inside it — AccordionV2, borderless:
+ *
+ * - The question's side padding FAQ_INSET (12, the `lg` value; `sm` is 16), which with the
+ *   list's FAQ_LIST_GUTTER puts it on the panel heading's keyline — and the answers, which
+ *   FaqLauncher pads by the same FAQ_INSET.
+ * - The question as `body.md` at 600 in gray[700] — the same size and leading as its answer
+ *   (FaqLauncher), so weight alone sets the two apart: 600 over 400. Blend draws `lg` titles
+ *   at 16px in gray[800]. Disabled keeps Blend's gray[500].
+ * - Its line height `body.md`'s own 20, not Blend's 16: a 16px line under 14px type is fine for
+ *   a one-line label and cramped for a question that wraps — and most of these do, at the
+ *   panel's width.
+ *
+ * And the panel's heading, "Frequently asked questions", at 500 rather than PopoverV2's 600 —
+ * still 16px, Blend's `md` heading size, which is the size FaqLauncher opens at. A deliberate
+ * exception to AGENTS.md rule 10's 600 headings, by request: beside questions set at 500 the
+ * semibold title was the one loud thing in a panel that is meant to be quiet. And its side
+ * padding 16 → FAQ_PANEL_PADDING (24), so the heading lands on the questions' keyline now that
+ * they sit inside the list's gutter.
+ *
+ * All scoped by one nested ThemeProvider around the launcher, for the reason
+ * sectionTabsTokens gives: every other secondary icon-only button keeps Blend's square
+ * corners, and any other accordion keeps Blend's spacing.
+ */
+export const faqLauncherTokens: ComponentTokenType = {
+  ...componentTokens,
+  BUTTONV2: perBreakpoint(BUTTONV2_TOKENS as unknown as Record<string, FabButtonToken>, (token) => ({
+    ...token,
+    borderRadius: {
+      ...token.borderRadius,
+      lg: {
+        ...token.borderRadius.lg,
+        secondary: {
+          ...token.borderRadius.lg.secondary,
+          iconOnly: FOUNDATION_THEME.border.radius.full,
+        },
+      },
+    },
+  })) as unknown as ComponentTokenType['BUTTONV2'],
+  ACCORDIONV2: perBreakpoint(
+    ACCORDIONV2_TOKENS as unknown as Record<string, FaqAccordionToken>,
+    (token) => ({
+      ...token,
+      trigger: {
+        ...token.trigger,
+        padding: {
+          ...token.trigger.padding,
+          [AccordionV2Type.NO_BORDER]: `${FOUNDATION_THEME.unit[16]} ${FAQ_INSET}px`,
+        },
+        text: {
+          ...token.trigger.text,
+          title: {
+            ...token.trigger.text.title,
+            fontSize: FOUNDATION_THEME.font.size.body.md.fontSize,
+            fontWeight: FOUNDATION_THEME.font.weight[600],
+            lineHeight: FOUNDATION_THEME.font.size.body.md.lineHeight,
+            color: {
+              ...token.trigger.text.title.color,
+              default: FOUNDATION_THEME.colors.gray[700],
+              hover: FOUNDATION_THEME.colors.gray[700],
+              active: FOUNDATION_THEME.colors.gray[700],
+              open: FOUNDATION_THEME.colors.gray[700],
+            },
+          },
+        },
+      },
+    }),
+  ) as unknown as ComponentTokenType['ACCORDIONV2'],
+  POPOVERV2: perBreakpoint(
+    POPOVERV2_TOKENS as unknown as Record<string, FaqPopoverToken>,
+    (token) => ({
+      ...token,
+      padding: {
+        ...token.padding,
+        left: { ...token.padding.left, md: `${FAQ_PANEL_PADDING}px` },
+        right: { ...token.padding.right, md: `${FAQ_PANEL_PADDING}px` },
+      },
+      TopContainer: {
+        ...token.TopContainer,
+        heading: {
+          ...token.TopContainer.heading,
+          fontWeight: {
+            ...token.TopContainer.heading.fontWeight,
+            md: FOUNDATION_THEME.font.weight[500],
+          },
+        },
+      },
+    }),
+  ) as unknown as ComponentTokenType['POPOVERV2'],
+}
 
 type ButtonTextColors = {
   text: {
