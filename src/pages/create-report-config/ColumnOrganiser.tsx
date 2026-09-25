@@ -710,9 +710,13 @@ export function ColumnOrganiser({
               {columns.length === 0 ? (
                 /* blend-gap: Blend 0.0.37 publishes no EmptyState (it exists on GitHub — rule 3),
                    so this is the smallest honest version: what the panel is for, in the place its
-                   first row will appear. */
+                   first row will appear.
+
+                   `flex-1` so the frame fills the pane's whole height rather than sitting as a
+                   band at the top of it, with the message centred both ways inside; `py-12`
+                   stays as its floor on a short window, where the pane scrolls instead. */
                 <div
-                  className="flex flex-col items-center justify-center gap-4 py-12"
+                  className="flex flex-1 flex-col items-center justify-center gap-4 py-12 text-center"
                   style={{
                     border: `${FOUNDATION_THEME.border.width[1]} dashed ${colors.gray[300]}`,
                     borderRadius: FOUNDATION_THEME.border.radius[8],
