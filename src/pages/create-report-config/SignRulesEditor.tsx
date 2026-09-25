@@ -8,9 +8,16 @@ import {
   MultiSelectV2Size,
   SingleSelectV2,
   SingleSelectV2Size,
+  TagV2,
+  TagV2Color,
+  TagV2Size,
+  TagV2SubType,
+  TagV2Type,
+  ThemeProvider,
 } from '@juspay/blend-design-system'
-import { Minus, Plus, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, Minus, Plus, Trash2 } from 'lucide-react'
 import { PrimitiveText, font } from '../../primitives'
+import { fieldTagTokens, ghostSmallButtonTokens } from '../../theme'
 import { ConditionIcon } from './condition-icons'
 import {
   FIELD_TAGS,
@@ -29,6 +36,10 @@ import type { DataTransformLayout } from './data-transform-layout'
 
 const { colors } = FOUNDATION_THEME
 
+/** The section's two lines, under the title and under the last rule — gray[150], the stroke of
+    the ELSE IF pill the lower one runs into. */
+const DIVIDER = `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[150]}`
+
 /**
  * The sign logic for an amount column, as an if / else-if chain with an else at the end —
  * the Filters step's rule grid (FiltersStep.tsx) with a fourth answer on every row: which way
@@ -39,6 +50,9 @@ const { colors } = FOUNDATION_THEME
  * built a filter already knows how to build one of these.
  */
 
+/** The section card's inset, on every side. */
+const CARD_PADDING = FOUNDATION_THEME.unit[20]
+
 /** Same as the Filters step's column menu: ten rows, then it scrolls. */
 const COLUMN_MENU_MAX_HEIGHT = 10 * 33 + 36 + 2
 
@@ -47,10 +61,6 @@ const SIGN_TRACK = 'w-36'
 
 /** "ELSE IF" at the mono 14px is ~59px; 64 holds it on the 4px grid. */
 const MARKER_TRACK = 'w-16'
-
-/** Stands in for "keep the sign it arrived with" in the else row's select, which reads '' as
-    nothing chosen. */
-const AS_RECEIVED = 'AS_RECEIVED'
 
 const toggleValue = (values: string[], value: string) =>
   values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
@@ -84,14 +94,7 @@ const SIGN_ITEMS = [
   },
 ]
 
-/** The else row also offers leaving the sign alone — the answer a column with no logic gives. */
-const OTHERWISE_ITEMS = [
-  {
-    items: [{ label: 'As received', value: AS_RECEIVED }, ...SIGN_ITEMS[0].items],
-  },
-]
-
-/** A row's keyword gutter — IF, ELSE IF, ELSE. */
+/** A row's keyword gutter — IF, ELSE IF. */
 function Marker({ children }: { children?: React.ReactNode }) {
   return (
     <div className={`flex h-8 ${MARKER_TRACK} shrink-0 items-center`}>
@@ -112,7 +115,7 @@ function Marker({ children }: { children?: React.ReactNode }) {
 
 /**
  * The delete button's track, held by a hidden copy of the button — the Filters step's trick,
- * so the header and the else row stay aligned if Blend's icon button ever changes size.
+ * so the header stays aligned with the rows if Blend's icon button ever changes size.
  */
 function DeleteSpacer() {
   return (
@@ -143,7 +146,7 @@ function Headers({ layout }: { layout: DataTransformLayout }) {
         ))}
         <div className={`${SIGN_TRACK} shrink-0`}>
           <PrimitiveText {...HEADER} color={colors.gray[700]}>
-            Parsed as
+            Transform it to
           </PrimitiveText>
         </div>
       </div>
@@ -182,7 +185,7 @@ function RuleRow({
         <div className="min-w-0 flex-1">
           <SingleSelectV2
             aria-label={`${branch} column, rule ${index + 1}`}
-            placeholder="Choose a column"
+            placeholder="Column"
             size={SingleSelectV2Size.SM}
             // Every field, not just the report's columns: the sign is decided on the source
             // row, which carries all of them.
@@ -271,7 +274,7 @@ function RuleRow({
         </div>
         <div className={`${SIGN_TRACK} shrink-0`}>
           <SingleSelectV2
-            aria-label={`${branch} parsed as, rule ${index + 1}`}
+            aria-label={`${branch} transform it to, rule ${index + 1}`}
             placeholder="Sign"
             size={SingleSelectV2Size.SM}
             items={SIGN_ITEMS}
@@ -307,30 +310,71 @@ export function SignRulesEditor({
   layout: DataTransformLayout
   onChange: (next: SignRules) => void
 }) {
-  const { rules, otherwise } = value
+  const { rules } = value
   const setRules = (next: SignRule[]) => onChange({ ...value, rules: next })
 
   return (
-    <div className="flex flex-col" style={{ gap: layout.headingToControls }}>
-      <div className="flex flex-col gap-1">
-        {/* 16px medium gray[700] — `font()` carries the 500. */}
-        <PrimitiveText
-          as="h3"
-          {...font(FOUNDATION_THEME.font.size.body.lg)}
-          color={colors.gray[700]}
+    // One bordered card around the title and the rule builder, so the section sits on a
+    // surface of its own inside the modal rather than floating in its padding. A card, so
+    // DESIGN.md's radius 12; gray[200], the modal's own header and footer stroke.
+    <div
+      className="flex flex-col"
+      style={{
+        padding: CARD_PADDING,
+        border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+        borderRadius: FOUNDATION_THEME.border.radius[12],
+      }}
+    >
+      {/* The Data Transform glyph from the organiser row's menu (OrganiserRow.tsx), so the
+          section wears the icon of the item that opened it. A 40px tile at radius 10 — between
+          an input's 8 and a card's 12, as a 40px object is — neutral: a gray[50] wash and a
+          gray[150] hairline, the glyph at 20 in gray[600]. Colour is left to the controls. */}
+      <div className="flex items-center gap-3">
+        <div
+          aria-hidden
+          className="flex size-10 shrink-0 items-center justify-center"
+          style={{
+            backgroundColor: colors.gray[50],
+            border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[150]}`,
+            borderRadius: FOUNDATION_THEME.border.radius[10],
+          }}
         >
-          Sign rules
-        </PrimitiveText>
-        {/* gray[600], not 500: 500 on white is 4.49:1, a hair under AA's 4.5. */}
-        <PrimitiveText
-          {...font(FOUNDATION_THEME.font.size.body.md)}
-          fontWeight={FOUNDATION_THEME.font.weight[400]}
-          color={colors.gray[600]}
-        >
-          Checked from the top — the first rule a row matches decides if its value is positive or
-          negative.
-        </PrimitiveText>
+          <ArrowRightLeft size={20} color={colors.gray[600]} />
+        </div>
+        <div className="flex min-w-0 flex-col gap-1">
+          {/* 16px medium gray[700] — `font()` carries the 500. */}
+          <PrimitiveText
+            as="h3"
+            {...font(FOUNDATION_THEME.font.size.body.lg)}
+            color={colors.gray[700]}
+          >
+            Choose which data needs to be transformed
+          </PrimitiveText>
+          {/* gray[600], not 500: 500 on white is 4.49:1, a hair under AA's 4.5. */}
+          <PrimitiveText
+            {...font(FOUNDATION_THEME.font.size.body.md)}
+            fontWeight={FOUNDATION_THEME.font.weight[400]}
+            color={colors.gray[600]}
+          >
+            For example, make refunds negative. If a row matches more than one rule, the top one
+            applies.
+          </PrimitiveText>
+        </div>
       </div>
+
+      {/* Between the section's title and the rule builder, in the same stroke as the ELSE IF
+          line below, so the title reads as introducing the grid rather than as its first row.
+          It runs out to the card's edges and sits the card's own padding under the title, so
+          the title reads as the card's header, padded evenly above and below; the grid then
+          starts `headingToControls` under it.
+          blend-gap: no divider component, so a plain rule on a token border. */}
+      <hr
+        className="border-0"
+        style={{
+          borderTop: DIVIDER,
+          margin: `${CARD_PADDING} -${CARD_PADDING} ${layout.headingToControls}px`,
+        }}
+      />
 
       {/* The headers sit closer to the first row than the rows sit to each other, as on the
           Filters step — they label the grid rather than being a row of it. */}
@@ -355,52 +399,44 @@ export function SignRulesEditor({
             />
           ))}
 
-          {/* The chain's last word: a row no rule matched. Always present, so a user can see
-            what happens to the rest without having to reason about it. */}
-          <div className="flex items-center" style={{ gap: layout.markerGap }}>
-            <Marker>ELSE</Marker>
-            <div className="flex min-w-0 flex-1 items-center" style={{ gap: layout.trackGap }}>
-              <div className="flex h-8 min-w-0 flex-1 items-center">
-                <PrimitiveText
-                  {...font(FOUNDATION_THEME.font.size.body.md)}
-                  color={colors.gray[600]}
-                >
-                  Every other value
-                </PrimitiveText>
-              </div>
-              <div className={`${SIGN_TRACK} shrink-0`}>
-                <SingleSelectV2
-                  aria-label="Else parsed as"
-                  placeholder="Sign"
-                  size={SingleSelectV2Size.SM}
-                  items={OTHERWISE_ITEMS}
-                  selected={otherwise ?? AS_RECEIVED}
-                  onSelect={(next) =>
-                    onChange({
-                      ...value,
-                      otherwise: next === AS_RECEIVED ? undefined : (next as ValueSign),
-                    })
-                  }
-                  triggerDimensions={{ width: '100%' }}
-                  slot={otherwise ? SIGN_ICON[otherwise] : undefined}
-                />
-              </div>
-            </div>
-            <DeleteSpacer />
-          </div>
+          {/* Below the last rule, under a hairline that closes the chain, and centred under the
+              whole list, so the button reads as adding to the rules as a set rather than as part
+              of the last one. The list's own row gap spaces the line from both.
 
-          {/* Below the ELSE, in the gutter-less track where "Every other value" starts, so the
-              button reads as adding to the chain above rather than as part of the else row. */}
-          <div className="flex items-center" style={{ gap: layout.markerGap }}>
-            <div className={`${MARKER_TRACK} shrink-0`} />
-            <ButtonV2
-              buttonType={ButtonV2Type.SECONDARY}
-              size={ButtonV2Size.SMALL}
-              subType={ButtonV2SubType.DEFAULT}
-              text="Add another condition"
-              leftSlot={{ slot: <Plus size={14} /> }}
-              onClick={() => setRules([...rules, newSignRule()])}
-            />
+              The line carries the keyword the next rule joins with, on a pill that breaks it:
+              the Fields palette's resting chip (NO_FILL under fieldTagTokens), whose gray[150]
+              hairline the line matches so the two read as one stroke. Hidden from assistive
+              tech — the button's own label says what it adds.
+              blend-gap: no divider component, so two plain rules on a token border. */}
+          <div aria-hidden className="flex items-center">
+            <hr className="m-0 flex-1 border-0" style={{ borderTop: DIVIDER }} />
+            <ThemeProvider componentTokens={fieldTagTokens}>
+              <TagV2
+                text="ELSE IF"
+                size={TagV2Size.MD}
+                type={TagV2Type.NO_FILL}
+                subType={TagV2SubType.ROUNDED}
+                color={TagV2Color.NEUTRAL}
+              />
+            </ThemeProvider>
+            <hr className="m-0 flex-1 border-0" style={{ borderTop: DIVIDER }} />
+          </div>
+          {/* Borderless: the pill above already draws a stroke, and a second one directly under
+              it stacked two outlined shapes. Ghost rather than bare INLINE so it keeps a 32px
+              hit area and a fill on hover (see ghostButton in theme.ts).
+              blend-gap: ButtonV2 sets `cursor: default` with no prop or token to change it, so
+              the pointer comes from this wrapper — same as the footer's Exit. */}
+          <div className="flex justify-center [&_button]:cursor-pointer">
+            <ThemeProvider componentTokens={ghostSmallButtonTokens}>
+              <ButtonV2
+                buttonType={ButtonV2Type.SECONDARY}
+                size={ButtonV2Size.SMALL}
+                subType={ButtonV2SubType.INLINE}
+                text="Add new rule group"
+                leftSlot={{ slot: <Plus size={14} /> }}
+                onClick={() => setRules([...rules, newSignRule()])}
+              />
+            </ThemeProvider>
           </div>
         </div>
       </div>

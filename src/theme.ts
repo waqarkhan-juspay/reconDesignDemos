@@ -337,6 +337,16 @@ export const ghostButtonTokens = ghostButton('lg', {
 })
 
 /**
+ * The Data Transform modal's "Add new rule group" — the same move at SMALL: the secondary
+ * button's 5px / 16px plus its 1px border, so dropping the border keeps it 32px tall.
+ */
+export const ghostSmallButtonTokens = ghostButton('sm', {
+  x: '16px',
+  y: '6px',
+  radius: FOUNDATION_THEME.border.radius[10],
+})
+
+/**
  * The FAQ panel's horizontal rhythm, in three numbers that have to agree:
  *
  * - FAQ_LIST_GUTTER — the list's own side padding, so a filled (open or hovered) question
@@ -592,15 +602,19 @@ export const recipientTagTokens: ComponentTokenType = {
  * #ECEFF3 hairline with its fill switched off, so in the design the two states differ by
  * their fill and their glyph and by nothing else.
  *
- * Two more colours draw under these tokens now, and both are undone the same way. A field the
- * user wrote is WARNING and a field the report groups by is PURPLE (ColumnOrganiser.tsx), and
- * Blend paints each of those across the entire chip: orange[500] all the way round an
- * unfilled one, orange[50]/purple[50] under a filled one. That reads as three kinds of chip
- * rather than one chip saying three things — and the wash also swallows the gray[50] that is
- * the only mark of a chosen field, so a grouped chip on purple[50] (#FAF5FF) sat there
- * looking unchosen beside its neighbours. Both fall back to the neutral fill and the neutral
- * hairline. What is left carrying the colour is the word itself — orange[500] unfilled and
- * orange[600] filled, purple[600] for grouped — which is the part being read.
+ * Two more colours draw under these tokens, and they are treated differently.
+ *
+ * A field the user wrote is WARNING (ColumnOrganiser.tsx), and Blend paints it across the
+ * whole chip: orange[500] all the way round an unfilled one, orange[50] under a filled one.
+ * Custom is where a field came from, not anything the report does with it, so it falls back to
+ * the neutral fill and hairline and the word alone carries the orange — orange[500] unfilled,
+ * orange[600] filled.
+ *
+ * A field the report groups by is PURPLE, and a *chosen* grouped chip keeps Blend's wash:
+ * purple[50] under it and a purple[100] hairline, exactly as the Grouping step draws a picked
+ * chip. That is the one mark meant to carry from that step into this one, so it is drawn the
+ * same in both. Only an unfilled grouped chip — a grouped field whose column has since been
+ * removed — takes the neutral hairline, since Blend would otherwise ring it in purple[500].
  *
  * The Fields step's older round chips — the flow's only other NO_FILL — render unwrapped
  * (FieldsStep.tsx:862) and keep Blend's border.
@@ -622,7 +636,6 @@ export const fieldTagTokens: ComponentTokenType = {
         subtle: {
           ...token.backgroundColor.subtle,
           warning: token.backgroundColor.subtle.neutral,
-          purple: token.backgroundColor.subtle.neutral,
         },
       },
       border: {
@@ -637,7 +650,6 @@ export const fieldTagTokens: ComponentTokenType = {
           ...token.border.subtle,
           neutral: TAG_HAIRLINE,
           warning: TAG_HAIRLINE,
-          purple: TAG_HAIRLINE,
         },
       },
     }),
@@ -688,9 +700,9 @@ export const columnOrganiserTokens: ComponentTokenType = {
 /**
  * The organiser's right-hand list — the palette's tokens with Blend's tag colours put back.
  *
- * `fieldTagTokens` sends WARNING and PURPLE to the neutral fill because a palette chip is one
- * of twenty-nine, and down a column that long a coloured wash stops being a mark and becomes
- * the weather. A row's pill is the opposite case. There is one of it, it sits alone in the
+ * `fieldTagTokens` sends WARNING to the neutral fill because a palette chip is one of
+ * twenty-nine, and down a column that long a coloured wash stops being a mark and becomes the
+ * weather. A row's pill is the opposite case. There is one of it, it sits alone in the
  * slot the aggregation select would have taken, and it is naming the treatment the row is
  * under rather than being an item in a list — so the wash is doing the work there, and
  * "Grouped by" keeps its purple, "Custom" its orange.

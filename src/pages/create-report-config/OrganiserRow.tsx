@@ -470,14 +470,18 @@ export function OrganiserRow({
                   Otherwise hidden until the row is hovered or something in it has focus — the
                   rule is in index.css, because opacity has to answer to `:hover` on the row
                   rather than to a state this component would otherwise have to hold. Focus is
-                  in that rule too, so tabbing to it still reveals it. */}
+                  in that rule too, so tabbing to it still reveals it.
+
+                  After a renamed row's info glyph, `ml-1` puts 8px between the two rather than
+                  the row's 4px gap — the same 8 the glyph keeps from the name — so the pencil
+                  reads as its own action rather than as half of a pair with the glyph. */}
                 {!custom && (
                   <button
                     type="button"
                     onClick={startEditing}
                     aria-label={`Rename ${column.title}`}
                     title="Rename"
-                    className="organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0"
+                    className={`organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0 ${renamed ? 'ml-1' : ''}`}
                   >
                     <PencilLine size={ICON_SIZE} color={colors.gray[400]} />
                   </button>

@@ -16,7 +16,7 @@ import { MODALV2_TOKENS } from '../../tokens/ModalV2'
 export type DataTransformLayout = {
   /** Handed to a ThemeProvider around the modal — MODALV2 with the chrome paddings applied. */
   tokens: ComponentTokenType
-  /** The sign rules' explainer line to the grid under it. */
+  /** The divider under the sign rules' title to the grid under it. */
   headingToControls: number
   /** The controls to the preview strip under them. */
   controlsToPreview: number
@@ -53,19 +53,19 @@ const DEFAULTS = {
   chrome: {
     headerX: 20,
     headerY: 20,
-    bodyX: 20,
-    bodyY: 20,
+    bodyX: 40,
+    bodyY: 32,
     footerX: 20,
     footerY: 20,
     footerButtonGap: 16,
   },
   content: {
-    headingToControls: 16,
+    headingToControls: 20,
     controlsToPreview: 16,
     selectColumnGap: 16,
-    ruleGap: 20,
+    ruleGap: 24,
     trackGap: 12,
-    markerGap: 20,
+    markerGap: 4,
   },
   preview: { paddingX: 12, paddingY: 8, iconGap: 12, itemGap: 8 },
 }

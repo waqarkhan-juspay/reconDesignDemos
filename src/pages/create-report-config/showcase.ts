@@ -13,14 +13,14 @@ import {
 
 /**
  * A pre-filled flow that opens on the Fields step with every state a column row can be in —
- * a design review fixture, not a product default. Flip this to false and the flow opens on an
- * empty Setup again, as it ships.
+ * a design review fixture, not a product default.
  *
- * Temporary by intent ("the default view for now"): the flow still works end to end from
- * here — Back walks into answered Setup and Delivery steps, and every row can be edited — so
- * it doubles as a way to test the organiser without clicking through two steps first.
+ * Off: the flow opens on an empty Setup, as it ships, and a grouped report grows its Grouping
+ * step the moment "Grouped records" is picked. Flip this to true to review the organiser's row
+ * states without clicking through the steps before it — the flow still works end to end from
+ * there, since Back walks into answered Setup and Delivery steps and every row can be edited.
  */
-export const OPEN_ON_SHOWCASE = true
+export const OPEN_ON_SHOWCASE = false
 
 /** A grouped reconciliation report — grouped, so rows carry aggregations and Grouped-by tags. */
 export const SHOWCASE_SETUP: SetupAnswers = {
@@ -87,7 +87,7 @@ export const SHOWCASE_FIELDS: FieldsAnswers = {
     // A rate, with an aggregation only rates and measures offer.
     field('Success Rate', { aggregate: 'AVERAGE' }),
 
-    // Amount + transformed with a two-branch sign chain and an otherwise.
+    // Amount + transformed with a two-branch sign chain.
     field('Txn Amount', {
       aggregate: 'SUM',
       transform: {
@@ -96,7 +96,6 @@ export const SHOWCASE_FIELDS: FieldsAnswers = {
             rule('in', ['Refund', 'Chargeback'], 'NEGATIVE'),
             rule('equal to', ['Order'], 'POSITIVE'),
           ],
-          otherwise: 'POSITIVE',
         },
       },
     }),
@@ -104,7 +103,7 @@ export const SHOWCASE_FIELDS: FieldsAnswers = {
     renamed('Txn Amount', 'Gross Txn Amount', { aggregate: 'AVERAGE' }),
     // Renamed measure, short name.
     renamed('Fee', 'Processing Fee', { aggregate: 'SUM' }),
-    // Amount transformed by a single rule and no otherwise.
+    // Amount transformed by a single rule.
     field('Refund Amount', {
       aggregate: 'MIN',
       transform: { signs: { rules: [rule('equal to', ['Refund'], 'NEGATIVE')] } },

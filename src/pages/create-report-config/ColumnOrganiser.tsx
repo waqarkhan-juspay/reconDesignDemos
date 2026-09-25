@@ -16,11 +16,10 @@ import {
   TooltipV2Align,
   TooltipV2Side,
 } from '@juspay/blend-design-system'
-import { Check, Plus, Search, X } from 'lucide-react'
+import { Check, Info, Plus, Search, X } from 'lucide-react'
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -150,6 +149,42 @@ function ClippedNameTooltip({ name, children }: { name: string; children: ReactE
   )
 }
 
+/**
+ * The names a field's columns were renamed to, as one phrase — “Taxes”, or “A” and “B” when
+ * the field was duplicated and each copy renamed.
+ */
+function renamedPhrase(titles: string[]) {
+  const quoted = titles.map((title) => `“${title}”`)
+  return quoted.length === 1
+    ? quoted[0]
+    : `${quoted.slice(0, -1).join(', ')} and ${quoted[quoted.length - 1]}`
+}
+
+/** The info glyph's size in a chip: 14, between the chip's 12px `+`/✓ and the row's 16px info. */
+const RENAMED_ICON_SIZE = 14
+
+/**
+ * The palette's half of the organiser row's info glyph (OrganiserRow.tsx). A row renamed away
+ * from its field says which field it represents; the field's chip says what it was renamed to,
+ * so the link reads from either side.
+ *
+ * Inside the chip, which is itself the toggle — so the click stops here: hovering to read the
+ * note should never be the thing that takes the field out of the report. Not focusable, since
+ * a control inside a button is not one a keyboard can reach cleanly; the chip's own
+ * `aria-label` carries the same note instead.
+ */
+function RenamedGlyph({ note }: { note: string }) {
+  return (
+    <span className="flex" onClick={(event) => event.stopPropagation()}>
+      <TooltipV2 content={note} side={TooltipV2Side.TOP} align={TooltipV2Align.START}>
+        <span className="flex cursor-default">
+          <Info size={RENAMED_ICON_SIZE} color={colors.gray[400]} />
+        </span>
+      </TooltipV2>
+    </span>
+  )
+}
+
 export function ColumnOrganiser({
   answers,
   onChange,
@@ -191,29 +226,15 @@ export function ColumnOrganiser({
   )
 
   /**
-   * The whole vocabulary: the shipped field list and the user's own, in one alphabetical run.
+   * The palette: the shipped field list, and only that.
    *
-   * A custom field takes its place in the list rather than landing after it, because the way
-   * you look for a field you named is the way you look for any other — you go to its letter.
-   * Appending put it where nothing else would ever be looked for, and past twenty-nine chips
-   * that is below the fold. The orange chip is what keeps it findable *as* yours (see `chip`
-   * below), which is the job the position was doing badly.
-   *
-   * `sensitivity: 'base'` so a title typed in lower case sorts by its letter and not by its
-   * case — the same indifference to spelling that `sameField` applies everywhere else here.
-   * Verified against FIELD_TAGS: the comparator reproduces the shipped order exactly, so
-   * sorting moves nothing that was already in place.
+   * A custom column is not in it. It is made from the organiser's own "Add custom column" and
+   * lives on the right like any other column, but it is not a field the source data has — so
+   * a chip for it among the twenty-six would put something the user invented in a list of what
+   * the data offers. Removing one therefore removes it outright (`removeColumn` below): there
+   * is no chip to bring it back from, and "Add custom column" is how to make another.
    */
-  const vocabulary = useMemo(
-    () =>
-      [
-        ...FIELD_TAGS,
-        ...answers.customFields
-          .map(({ title }) => title)
-          .filter((title) => !FIELD_TAGS.some((tag) => sameField(tag, title))),
-      ].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' })),
-    [answers.customFields],
-  )
+  const vocabulary = FIELD_TAGS
 
   /**
    * Substring, case-insensitive, and nothing cleverer. The list is twenty-six known nouns, so
@@ -248,13 +269,31 @@ export function ColumnOrganiser({
     answers.customFields.some((field) => sameField(field.title, tag))
 
   /**
-   * A new column for a vocabulary tag, carrying a custom field's default value when it has
-   * one. Shared by the single toggle and "Select all" so a field added twenty-nine at a time
-   * is the same column as a field added on its own.
+   * A new column for a palette field. Shared by the single toggle and "Select all" so a field
+   * added twenty-nine at a time is the same column as a field added on its own.
    */
-  const columnFor = (tag: string) => {
-    const custom = answers.customFields.find((field) => sameField(field.title, tag))
-    return newFieldColumn(tag, custom?.defaultValue)
+  const columnFor = (tag: string) => newFieldColumn(tag)
+
+  /**
+   * A row's ✕. By id, not by field: a duplicated column's ✕ takes that copy only, and the
+   * chip stays lit while the other one is still there.
+   *
+   * The last column of a *custom* field takes the field out of `customFields` with it. It has
+   * no chip in the palette to return from, so keeping it would leave a field nothing on any
+   * page can reach.
+   */
+  const removeColumn = (column: FieldColumn) => {
+    const rest = columns.filter((other) => other.id !== column.id)
+    const field = fieldOf(column)
+    if (!isCustom(field) || rest.some((other) => sameField(fieldOf(other), field))) {
+      setColumns(rest)
+      return
+    }
+    onChange({
+      ...answers,
+      columns: rest,
+      customFields: answers.customFields.filter(({ title }) => !sameField(title, field)),
+    })
   }
 
   const toggleField = (tag: string) => {
@@ -386,9 +425,9 @@ export function ColumnOrganiser({
   const chip = (tag: string) => {
     const selected = isFieldSelected(columns, tag)
     /*
-     * Purple whether or not the field is currently a column, for the reason the custom chip
-     * is orange either way: both say where a field stands in this configuration, and neither
-     * stops being true while the field sits out of the list.
+     * Purple whether or not the field is currently a column: it says where the field stands in
+     * this configuration, and that does not stop being true while the field sits out of the
+     * list.
      *
      * `isGrouped` reads `groupBy`, which records fields and not column ids, so pulling a
      * grouped column out with its ✕ does not ungroup anything — put it back and the row says
@@ -396,33 +435,25 @@ export function ColumnOrganiser({
      * opposite, on the one screen where you are deciding what to remove.
      */
     const groupedField = isGrouped(tag)
+    /* The titles this field's columns now carry, where they differ from the field's own name. */
+    const renamedTo = columns
+      .filter((column) => sameField(fieldOf(column), tag) && !sameField(column.title, tag))
+      .map((column) => column.title)
+    const renamedNote = renamedTo.length > 0 ? `Renamed to ${renamedPhrase(renamedTo)}` : null
     /*
-     * Orange for a field the user wrote themselves, so it is findable in a list of
-     * twenty-nine nouns that otherwise all look alike — WARNING is the palette's orange
-     * (tagV2.light.tokens.ts), and it is a mark of origin here rather than of anything wrong.
-     * `color` here only moves the *word*. Blend's WARNING and PURPLE each wash the whole chip;
-     * `fieldTagTokens` (src/theme.ts) sends both back to the neutral fill and the neutral
-     * hairline, so every chip in the column is the same shape and the label is the only thing
-     * that differs.
-     *
-     * Grouping still wins where the two meet: purple says what this report *does* with the
-     * field, which is a fact about the current configuration, and that outranks where the
-     * field came from. A custom field that is grouped is already unmistakable from its
-     * "Grouped by" row on the right.
+     * PURPLE keeps its wash once the field is in the report — purple[50] under it, a
+     * purple[100] hairline — which is how the Grouping step draws a picked chip, so a field
+     * grouped there is recognisably the same chip here.
      */
     return (
       <ClippedNameTooltip key={tag} name={tag}>
         <TagV2
           text={tag}
-          size={TagV2Size.MD}
+          // LG — 28px tall on 6/12 padding with an 8px radius, the Grouping step's chip, so a
+          // field is the same size of target on both steps. The label stays 14px/500.
+          size={TagV2Size.LG}
           subType={TagV2SubType.SQUARICAL}
-          color={
-            groupedField
-              ? TagV2Color.PURPLE
-              : isCustom(tag)
-                ? TagV2Color.WARNING
-                : TagV2Color.NEUTRAL
-          }
+          color={groupedField ? TagV2Color.PURPLE : TagV2Color.NEUTRAL}
           // SUBTLE when in, NO_FILL when out. Node 4911:111688 gives both states the same
           // #ECEFF3 hairline — that is what fieldTagTokens' border override is for
           // (src/theme.ts) — and separates them by their fill alone: a chosen chip on gray[50],
@@ -431,6 +462,16 @@ export function ColumnOrganiser({
           // twenty-nine.
           type={selected ? TagV2Type.SUBTLE : TagV2Type.NO_FILL}
           rightSlot={selected ? (groupedField ? GROUPED_SLOT : ADDED_SLOT) : ADD_SLOT}
+          // TagV2 has no slot after its label, so the glyph goes in the left one and index.css
+          // moves it to sit after the name (`.organiser-palette [data-tag]`).
+          {...(renamedNote && {
+            leftSlot: {
+              slot: <RenamedGlyph note={renamedNote} />,
+              maxHeight: `${RENAMED_ICON_SIZE}px`,
+            },
+            // Blend's own name is the tag plus ", pressed"; aria-pressed already says the second.
+            'aria-label': `${tag}, ${renamedNote.charAt(0).toLowerCase()}${renamedNote.slice(1)}`,
+          })}
           aria-pressed={selected}
           // No native `title`: it would stack a second, browser-drawn tooltip on the one above
           // whenever the name is clipped. The ✓ and + already say what a click does.
@@ -748,11 +789,7 @@ export function ColumnOrganiser({
                           setTransformingId(column.id)
                           setTransformOpen(true)
                         }}
-                        onRemove={() =>
-                          // By id, not by field: a duplicated column's ✕ takes that copy only,
-                          // and the chip stays lit while the other one is still there.
-                          setColumns(columns.filter((other) => other.id !== column.id))
-                        }
+                        onRemove={() => removeColumn(column)}
                       />
                     ))}
                   </div>

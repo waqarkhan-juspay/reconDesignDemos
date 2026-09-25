@@ -6,6 +6,11 @@ import {
   SingleSelectV2,
   SingleSelectV2Size,
   SingleSelectV2Variant,
+  TagV2,
+  TagV2Color,
+  TagV2Size,
+  TagV2SubType,
+  TagV2Type,
   ThemeProvider,
 } from '@juspay/blend-design-system'
 import { ArrowRightLeft } from 'lucide-react'
@@ -140,12 +145,12 @@ export function DataTransformModal({
     setWasOpen(isOpen)
     if (isOpen) {
       setOrder(transform?.date?.order)
-      // A column with no logic yet opens on one IF, already asking about Txn Type — the
-      // question most amount columns want answered first.
+      // A column with no logic yet opens on one empty IF, so the grid is there to fill in
+      // without a column chosen on the user's behalf.
       setSigns(
         transform?.signs && transform.signs.rules.length > 0
           ? transform.signs
-          : { rules: [newSignRule()], otherwise: transform?.signs?.otherwise },
+          : { rules: [newSignRule()] },
       )
     }
   }
@@ -163,10 +168,33 @@ export function DataTransformModal({
       <ModalV2
         isOpen={isOpen}
         onClose={onClose}
-        title="Data Transform"
-        subtitle={`How should "${columnTitle}" be written in the report?`}
+        // "Data Transform for", then the column itself as a tag — the same neutral chip the
+        // Fields palette draws a chosen field in, so the name reads as the column being acted
+        // on rather than as part of the sentence. No subtitle: the controls under the header
+        // already ask the question, and the tag says which column it is asked of.
+        //
+        // The tag rides in `headerSlot`, which ModalV2Header puts on the title's own line
+        // with the header's 8px slot gap. Its label ellipses on a name too long for the header
+        // (index.css, `.transform-column-tag`), and the whole name stays on hover.
+        title="Data Transform for"
+        headerSlot={
+          <span className="transform-column-tag" title={columnTitle}>
+            <TagV2
+              text={columnTitle}
+              size={TagV2Size.MD}
+              subType={TagV2SubType.SQUARICAL}
+              type={TagV2Type.SUBTLE}
+              color={TagV2Color.NEUTRAL}
+            />
+          </span>
+        }
+        // The dialog's name would otherwise be the title alone — "Data Transform for" — since
+        // ModalV2 labels it by the title's id and the tag sits outside that element.
+        aria-label={`Data Transform for ${columnTitle}`}
         showCloseButton
-        closeOnBackdropClick
+        // Only Cancel and ✕ close it: a stray click on the scrim would throw away a half-built
+        // rule chain without a word. Escape still closes, as the keyboard's Cancel.
+        closeOnBackdropClick={false}
         // The rule grid is four answers across; a date is one.
         dimensions={{ width: kind === 'AMOUNT' ? 880 : 520 }}
         secondaryAction={{

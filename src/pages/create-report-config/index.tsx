@@ -584,9 +584,12 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
                 column's own edges. The design draws this bar at 632px (node 4530:10452)
                 while its content column is wider — inset from it on both sides, which reads as
                 a mistake once the two are on screen together. Aligning them is the point of
-                a single measure. */}
+                a single measure.
+
+                16px above and below the 40px buttons — a 72px bar. It is chrome the flow's
+                content scrolls behind, so every pixel it gives back is one more of the step. */}
           <div className={COLUMN}>
-            <div className="flex items-center justify-between py-6">
+            <div className="flex items-center justify-between py-4">
               {/* A ghost button (ghostButtonTokens, src/theme.ts): padded to the Back button's
                   height so the whole pill is clickable. Pulled 16px left so its label still
                   sits on the column edge, as the inline version did.
