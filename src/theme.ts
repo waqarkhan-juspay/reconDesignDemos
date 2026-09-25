@@ -337,16 +337,6 @@ export const ghostButtonTokens = ghostButton('lg', {
 })
 
 /**
- * The Data Transform modal's "Add new rule group" — the same move at SMALL: the secondary
- * button's 5px / 16px plus its 1px border, so dropping the border keeps it 32px tall.
- */
-export const ghostSmallButtonTokens = ghostButton('sm', {
-  x: '16px',
-  y: '6px',
-  radius: FOUNDATION_THEME.border.radius[10],
-})
-
-/**
  * The FAQ panel's horizontal rhythm, in three numbers that have to agree:
  *
  * - FAQ_LIST_GUTTER — the list's own side padding, so a filled (open or hovered) question
