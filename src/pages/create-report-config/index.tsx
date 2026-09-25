@@ -121,7 +121,8 @@ const ALL_STEPS: {
     // what one row of the delivered file ends up meaning.
     description:
       'Pick the fields to summarise by. Each one you pick becomes a column, and the report keeps one row per combination.',
-    skipLabel: 'Skip grouping',
+    // Required, unlike Filters: this step only exists because Setup chose "Grouped records",
+    // and a grouped report with nothing to group by is not one. Continue waits for a field.
   },
   {
     id: 'fields',
@@ -370,9 +371,10 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * tick back off a step whose answers have since been cleared — but the tick itself is
    * earned by committing the step, not by this (StepRail.tsx).
    *
-   * Grouping and Filters each count as answered once there is one level or one rule to carry
-   * forward, which is also what flips their primary action off "Skip". Review has no questions
-   * of its own, so it is never ticked: the flow ends by submitting it, not by completing it.
+   * Grouping counts as answered once there is one level to carry forward, and Filters once
+   * there is one rule, which is also what flips its primary action off "Skip". Review has no
+   * questions of its own, so it is never ticked: the flow ends by submitting it, not by
+   * completing it.
    *
    * A switch over the id rather than an array by position, so inserting Grouping into the
    * middle of the flow cannot quietly hand one step another's answer.
@@ -395,15 +397,14 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   }
 
   /**
-   * Grouping and Filters are the steps nothing has to be answered on, so their primary action
-   * is not
-   * quite the button the other steps get: it never disables, and while the step is still
-   * untouched it says what clicking it will actually do.
+   * Filters is the step nothing has to be answered on, so its primary action is not quite the
+   * button the other steps get: it never disables, and while the step is still untouched it
+   * says what clicking it will actually do.
    *
    * "Continue" over an optional step nobody has touched claims something was configured.
    * "Skip filters" is a promise about the click, and it stops being true the moment there
    * is a filter to carry forward — which is why the label flips back rather than staying a
-   * skip for the rest of the step. Grouping works the same way.
+   * skip for the rest of the step.
    */
   const optional = skipLabel !== undefined
   const skipping = optional && !answeredFor(current.id)
