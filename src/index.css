@@ -150,23 +150,9 @@ html {
   animation: flow-question-enter var(--flow-reveal) var(--flow-reveal-ease) both;
 }
 
-/*
- * Once a group has an answer its other options recede, so the eye lands on the question
- * still open. Hover returns a dimmed option to full — changing an earlier answer should not
- * become a hunt for something that faded.
- */
+/* The picked option's border arrives rather than snapping on. */
 .flow-card {
-  transition:
-    opacity var(--flow-feedback) var(--flow-feedback-ease),
-    border-color var(--flow-feedback) var(--flow-feedback-ease);
-}
-
-.flow-card[data-dimmed='true'] {
-  opacity: 0.5;
-}
-
-.flow-card[data-dimmed='true']:hover {
-  opacity: 1;
+  transition: border-color var(--flow-feedback) var(--flow-feedback-ease);
 }
 
 /* Reveal-only, so plain `none` is safe here — nothing waits on an animationend to unmount. */
@@ -634,6 +620,23 @@ button[aria-label='Close modal'] {
 }
 
 /*
+ * A renamed field's info glyph (ColumnOrganiser.tsx, RenamedGlyph), right after its name.
+ *
+ * TagV2 has a slot before its label and one after, and the one after is the chip's + / ✓. So
+ * the glyph rides in the left slot and is reordered here to follow the label, with
+ * `margin-right: auto` taking the chip's spare width so the + / ✓ stays at the far edge. Only
+ * a chip with a left slot has one, and nothing else in the palette uses it.
+ */
+.organiser-palette [data-tag] > [data-element='left-slot'] {
+  order: 1;
+  margin-right: auto;
+}
+
+.organiser-palette [data-tag] > [data-element='right-slot'] {
+  order: 2;
+}
+
+/*
  * The Grouping step's chips: a vertical list with one width floor.
  *
  * Same hook and the same reason as the rule above — TagV2 takes neither `className` nor
@@ -819,4 +822,26 @@ button[aria-label='Close modal'] {
   .faq-list [data-element='accordion-item'] + [data-element='accordion-item']::before {
     transition: none;
   }
+}
+
+/*
+ * The Data Transform modal's column tag (DataTransformModal.tsx), which ellipses rather than
+ * wraps. TagV2 fixes its height but lets its label wrap, and a column name can run to the
+ * length of a sentence — so the tag may shrink to the header's width, and its label clips
+ * inside it. The full name is the wrapper's `title`.
+ */
+.transform-column-tag {
+  display: flex;
+  min-width: 0;
+}
+
+.transform-column-tag [data-tag] {
+  max-width: 100%;
+}
+
+.transform-column-tag [data-tag] > [data-id] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

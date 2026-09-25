@@ -5,27 +5,28 @@ import {
   TagV2Size,
   TagV2SubType,
   TagV2Type,
+  ThemeProvider,
 } from '@juspay/blend-design-system'
-import { Plus, X } from 'lucide-react'
+import { Check, Plus } from 'lucide-react'
 import type { CSSProperties } from 'react'
 import { SLOT_ICON } from '../../icons'
 import { PrimitiveText, font } from '../../primitives'
-import {
-  GROUPABLE_FIELDS,
-  newFieldColumn,
-  fieldOf,
-  sameField,
-  type FieldsAnswers,
-} from './answers'
+import { fieldTagTokens } from '../../theme'
+import { GROUPABLE_FIELDS, newFieldColumn, fieldOf, sameField, type FieldsAnswers } from './answers'
 
 const { colors } = FOUNDATION_THEME
 
 /**
- * The remove glyph on a picked chip — the same 12px `X` the Fields step uses, drawn purple[600]
- * to match the label beside it. SUBTLE/PURPLE colours its text purple[600]
- * (tagV2.light.tokens.ts), so a gray glyph would be the one cold thing inside a warm chip.
+ * The mark on a picked chip — a 12px check, drawn purple[600] to match the label beside it.
+ * SUBTLE/PURPLE colours its text purple[600] (tagV2.light.tokens.ts), so a gray glyph would be
+ * the one cold thing inside a warm chip.
+ *
+ * A check rather than an `X`: the chip says what state the field is in — the report groups by
+ * it — rather than what clicking it does next. Beside the `+` on an unpicked chip, the pair
+ * reads as off and on, like a checkbox. Clicking a picked chip still ungroups it, and its
+ * title says so.
  */
-const REMOVE_TAG_SLOT = { slot: <X {...SLOT_ICON} color={colors.purple[600]} /> }
+const PICKED_TAG_SLOT = { slot: <Check {...SLOT_ICON} color={colors.purple[600]} /> }
 
 /**
  * The other half of that pair: `+` on a field the report does not group by yet, gray[500]
@@ -36,20 +37,23 @@ const REMOVE_TAG_SLOT = { slot: <X {...SLOT_ICON} color={colors.purple[600]} /> 
 const ADD_TAG_SLOT = { slot: <Plus {...SLOT_ICON} color={colors.gray[500]} /> }
 
 /**
- * The chip shape — squarical and md.
+ * The chip shape — squarical, like the Fields step's chips, but lg rather than their md: 28px
+ * tall on 6/12 padding with an 8px radius, where md is 24 on 4/10 at 6. The label stays
+ * 14px/500 either way. This step is a short list asked on its own, so each chip is a target
+ * worth a little more room; the Fields palette runs to twenty-nine and keeps md.
  *
- * SUBTLE in both states, and the colour is the whole of the difference: neutral while a field
- * is merely offered, purple once the report groups by it. Purple rather than a darker neutral
- * because this mark has to survive the trip to the next step — the Fields step repeats it on
- * the chip and on the row (ColumnOrganiser, OrganiserRow), which is how a grouped record stays
- * recognisable after you have stopped looking at the step that made it one. A second shade of
- * grey could not carry that; it would read as "selected", which every chip over there already
- * is.
+ * An offered field is drawn exactly as the column organiser's palette draws a field not yet in
+ * the report (ColumnOrganiser.tsx): NO_FILL under `fieldTagTokens`, so a gray[150] hairline on
+ * the page's own white with a gray[500] `+`. A picked one is SUBTLE and purple. Purple rather
+ * than a darker neutral because this mark has to survive the trip to the next step — the
+ * Fields step repeats it on the chip and on the row (ColumnOrganiser, OrganiserRow), which is
+ * how a grouped record stays recognisable after you have stopped looking at the step that made
+ * it one. A second shade of grey could not carry that; it would read as "selected", which every
+ * chip over there already is.
  */
 const SHAPE = {
-  size: TagV2Size.MD,
+  size: TagV2Size.LG,
   subType: TagV2SubType.SQUARICAL,
-  type: TagV2Type.SUBTLE,
 } as const
 
 /**
@@ -58,14 +62,14 @@ const SHAPE = {
  *
  * Sized against the whole field vocabulary rather than the eight or nine dimensions this
  * step happens to offer today (FIELD_TAGS, answers.ts). Its longest name, Recon Secondary
- * Sub Status, sets the measure at 182px of label; a chip adds 20px of padding, 2px of border
- * and 18px for the gap and the right slot, which lands on 222 and rounds up the 4px grid to
- * 224. GROUPABLE_FIELDS is a subset that has already grown once, and a floor that has to be
+ * Sub Status, sets the measure at 182px of label; an lg chip adds 24px of padding, 2px of
+ * border and 18px for the gap and the right slot, which lands on 226 and rounds up the 4px grid
+ * to 228. GROUPABLE_FIELDS is a subset that has already grown once, and a floor that has to be
  * re-measured every time a dimension is added is a floor nobody will re-measure.
  *
  * A custom field longer than that simply grows past it; this is a floor, not a column width.
  */
-const CHIP_MIN_WIDTH = 224
+const CHIP_MIN_WIDTH = 228
 
 /**
  * The Grouping step — the field vocabulary asked as its own question, before the columns are
@@ -141,41 +145,45 @@ export function GroupingStep({
 
   const chip = (tag: string) => {
     const grouped = isGrouped(tag)
-    return (
+    const tagV2 = (
       <TagV2
-        key={tag}
         text={tag}
         size={SHAPE.size}
         subType={SHAPE.subType}
         color={grouped ? TagV2Color.PURPLE : TagV2Color.NEUTRAL}
-        type={SHAPE.type}
+        type={grouped ? TagV2Type.SUBTLE : TagV2Type.NO_FILL}
         aria-pressed={grouped}
         title={grouped ? `Stop grouping by ${tag}` : `Group the report by ${tag}`}
-        rightSlot={grouped ? REMOVE_TAG_SLOT : ADD_TAG_SLOT}
+        rightSlot={grouped ? PICKED_TAG_SLOT : ADD_TAG_SLOT}
         onClick={() => (grouped ? ungroup(tag) : group(tag))}
       />
+    )
+    // Only an offered chip takes the palette's tokens. They would also send a picked chip's
+    // purple wash back to the neutral fill (see fieldTagTokens), and here the wash is what
+    // says the report groups by it.
+    return grouped ? (
+      <span key={tag} className="contents">
+        {tagV2}
+      </span>
+    ) : (
+      <ThemeProvider key={tag} componentTokens={fieldTagTokens}>
+        {tagV2}
+      </ThemeProvider>
     )
   }
 
   /**
-   * The dimensions worth grouping by (GROUPABLE_FIELDS), plus anything already added as a
-   * custom field.
+   * The dimensions worth grouping by (GROUPABLE_FIELDS), and only those.
    *
    * Narrower than the Fields step's vocabulary on purpose, and the reasoning is in
    * answers.ts: a measure and an identifier are both answerable here and neither produces a
-   * report anyone wanted. Custom fields are still offered in full — their cardinality is not
-   * ours to guess.
+   * report anyone wanted.
+   *
+   * No custom fields, for the reason the Fields step's palette has none (ColumnOrganiser.tsx):
+   * a custom column is one the user made, not a field the data carries, so it is not offered
+   * as something to group the data by.
    */
-  const vocabulary = [
-    ...GROUPABLE_FIELDS,
-    ...answers.customFields
-      .map(({ title }) => title)
-      .filter((title) => !GROUPABLE_FIELDS.some((tag) => sameField(tag, title))),
-    // Alphabetical across the whole list rather than the design-system fields first and the
-    // user's own appended after: a custom field is a field, and a name the user typed is the
-    // one they are most likely to be looking for. Case-insensitively, matching `sameField` —
-    // a chip typed in lower case belongs beside its neighbours, not in a block after Z.
-  ].sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+  const vocabulary = GROUPABLE_FIELDS
 
   const picked = groupedFields
 
@@ -193,16 +201,20 @@ export function GroupingStep({
       </div>
 
       {/* Reads the rule back as the thing the user actually cares about — the shape of a row
-          in the delivered file. */}
-      <PrimitiveText
-        as="p"
-        {...font(FOUNDATION_THEME.font.size.body.md)}
-        color={colors.gray[500]}
-      >
-        {picked.length === 0
-          ? 'No grouping — the report keeps one row per record.'
-          : `One row per ${picked.join(' + ')}.`}
-      </PrimitiveText>
+          in the delivered file.
+
+          Only once something is picked. On an untouched step the sentence could only say
+          there is no grouping yet, which the step's own heading and Skip grouping already
+          say — so it arrives with the first pick instead, as that pick's consequence. */}
+      {picked.length > 0 && (
+        <PrimitiveText
+          as="p"
+          {...font(FOUNDATION_THEME.font.size.body.md)}
+          color={colors.gray[500]}
+        >
+          One row per {picked.join(' + ')}.
+        </PrimitiveText>
+      )}
     </div>
   )
 }

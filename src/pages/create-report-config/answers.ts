@@ -313,9 +313,8 @@ export type ValueSign = 'POSITIVE' | 'NEGATIVE'
  * of a row.
  *
  * The column can be any field in the vocabulary, whether or not the report includes it: the
- * sign is decided on the source row, which carries every field. Txn Type is where a new rule
- * starts, because what kind of transaction it is — an order, a refund, a chargeback — is
- * what decides which way money moved.
+ * sign is decided on the source row, which carries every field. A new rule starts with no
+ * column chosen, so the user picks it rather than inheriting one.
  */
 export type SignRule = {
   id: string
@@ -326,11 +325,10 @@ export type SignRule = {
 }
 
 /**
- * An if / else-if chain read top to bottom — the first rule a row matches decides its sign —
- * and `otherwise` for a row that matches none. Absent `otherwise` keeps the sign the value
- * arrived with.
+ * An if / else-if chain read top to bottom — the first rule a row matches decides its sign. A
+ * row that matches none keeps the sign it arrived with.
  */
-export type SignRules = { rules: SignRule[]; otherwise?: ValueSign }
+export type SignRules = { rules: SignRule[] }
 
 export type DataTransform = {
   /** Absent means as received — SOURCE_DATE_FORMAT. */
@@ -339,13 +337,13 @@ export type DataTransform = {
   signs?: SignRules
 }
 
-/** The rule the column is asked about first — see SignRule. */
+/** The column whose values decide which way money moved — see signRuleValuesFor. */
 export const SIGN_RULE_COLUMN = 'Txn Type'
 
 let nextSignRuleId = 0
 export const newSignRule = (): SignRule => ({
   id: `sign-rule-${(nextSignRuleId += 1)}`,
-  column: SIGN_RULE_COLUMN,
+  column: null,
   condition: null,
   value: [],
   sign: null,
@@ -353,10 +351,7 @@ export const newSignRule = (): SignRule => ({
 
 /** Untouched since it was added — dropped on Apply rather than blocking it. */
 export const isSignRuleBlank = (rule: SignRule) =>
-  rule.column === SIGN_RULE_COLUMN &&
-  rule.condition === null &&
-  rule.value.length === 0 &&
-  rule.sign === null
+  rule.column === null && rule.condition === null && rule.value.length === 0 && rule.sign === null
 
 /**
  * Values a sign rule offers for a column. Txn Type gets the three kinds that decide which way
@@ -403,11 +398,8 @@ export function reformatDate(value: string, format: DateFormat) {
 export function normaliseTransform(transform: DataTransform): DataTransform | undefined {
   const date =
     transform.date && transform.date.order !== SOURCE_DATE_FORMAT.order ? transform.date : undefined
-  // Sign logic with no rule and no fallback says "as received" as surely as no logic at all.
-  const signs =
-    transform.signs && (transform.signs.rules.length > 0 || transform.signs.otherwise)
-      ? transform.signs
-      : undefined
+  // Sign logic with no rule says "as received" as surely as no logic at all.
+  const signs = transform.signs && transform.signs.rules.length > 0 ? transform.signs : undefined
   const next: DataTransform = { ...(date ? { date } : {}), ...(signs ? { signs } : {}) }
   return next.date || next.signs ? next : undefined
 }
@@ -424,15 +416,16 @@ export function describeTransform(transform: DataTransform) {
 
 const SIGN_WORD: Record<ValueSign, string> = { POSITIVE: 'positive', NEGATIVE: 'negative' }
 
-/** "Txn Type in Refund, Chargeback → negative; otherwise positive". */
-function describeSigns({ rules, otherwise }: SignRules) {
-  const branches = rules.map(
-    ({ column, condition, value, sign }) =>
-      [column, condition && conditionLabel(condition), value.join(', ')].filter(Boolean).join(' ') +
-      (sign ? ` → ${SIGN_WORD[sign]}` : ''),
-  )
-  if (otherwise) branches.push(`otherwise ${SIGN_WORD[otherwise]}`)
-  return branches.join('; ')
+/** "Txn Type in Refund, Chargeback → negative; Txn Type equal to Order → positive". */
+function describeSigns({ rules }: SignRules) {
+  return rules
+    .map(
+      ({ column, condition, value, sign }) =>
+        [column, condition && conditionLabel(condition), value.join(', ')]
+          .filter(Boolean)
+          .join(' ') + (sign ? ` → ${SIGN_WORD[sign]}` : ''),
+    )
+    .join('; ')
 }
 
 /** The default title a freshly inserted column carries until it is renamed. */
