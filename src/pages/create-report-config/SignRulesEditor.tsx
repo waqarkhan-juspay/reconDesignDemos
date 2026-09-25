@@ -36,7 +36,7 @@ import type { DataTransformLayout } from './data-transform-layout'
 
 const { colors } = FOUNDATION_THEME
 
-/** The section's two lines, under the title and under the last rule — gray[150], the stroke of
+/** The section's two lines, under the title and under the ELSE row — gray[150], the stroke of
     the ELSE IF pill the lower one runs into. */
 const DIVIDER = `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[150]}`
 
@@ -61,6 +61,10 @@ const SIGN_TRACK = 'w-36'
 
 /** "ELSE IF" at the mono 14px is ~59px; 64 holds it on the 4px grid. */
 const MARKER_TRACK = 'w-16'
+
+/** Stands in for "keep the sign it arrived with" in the else row's select, which reads '' as
+    nothing chosen. */
+const AS_RECEIVED = 'AS_RECEIVED'
 
 const toggleValue = (values: string[], value: string) =>
   values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
@@ -94,7 +98,14 @@ const SIGN_ITEMS = [
   },
 ]
 
-/** A row's keyword gutter — IF, ELSE IF. */
+/** The else row also offers leaving the sign alone — the answer a column with no logic gives. */
+const OTHERWISE_ITEMS = [
+  {
+    items: [{ label: 'As received', value: AS_RECEIVED }, ...SIGN_ITEMS[0].items],
+  },
+]
+
+/** A row's keyword gutter — IF, ELSE IF, ELSE. */
 function Marker({ children }: { children?: React.ReactNode }) {
   return (
     <div className={`flex h-8 ${MARKER_TRACK} shrink-0 items-center`}>
@@ -115,7 +126,7 @@ function Marker({ children }: { children?: React.ReactNode }) {
 
 /**
  * The delete button's track, held by a hidden copy of the button — the Filters step's trick,
- * so the header stays aligned with the rows if Blend's icon button ever changes size.
+ * so the header and the else row stay aligned if Blend's icon button ever changes size.
  */
 function DeleteSpacer() {
   return (
@@ -310,7 +321,7 @@ export function SignRulesEditor({
   layout: DataTransformLayout
   onChange: (next: SignRules) => void
 }) {
-  const { rules } = value
+  const { rules, otherwise } = value
   const setRules = (next: SignRule[]) => onChange({ ...value, rules: next })
 
   return (
@@ -399,9 +410,43 @@ export function SignRulesEditor({
             />
           ))}
 
-          {/* Below the last rule, under a hairline that closes the chain, and centred under the
-              whole list, so the button reads as adding to the rules as a set rather than as part
-              of the last one. The list's own row gap spaces the line from both.
+          {/* The chain's last word: a row no rule matched. Always present, so a user can see
+            what happens to the rest without having to reason about it. */}
+          <div className="flex items-center" style={{ gap: layout.markerGap }}>
+            <Marker>ELSE</Marker>
+            <div className="flex min-w-0 flex-1 items-center" style={{ gap: layout.trackGap }}>
+              <div className="flex h-8 min-w-0 flex-1 items-center">
+                <PrimitiveText
+                  {...font(FOUNDATION_THEME.font.size.body.md)}
+                  color={colors.gray[600]}
+                >
+                  Every other value
+                </PrimitiveText>
+              </div>
+              <div className={`${SIGN_TRACK} shrink-0`}>
+                <SingleSelectV2
+                  aria-label="Else transform it to"
+                  placeholder="Sign"
+                  size={SingleSelectV2Size.SM}
+                  items={OTHERWISE_ITEMS}
+                  selected={otherwise ?? AS_RECEIVED}
+                  onSelect={(next) =>
+                    onChange({
+                      ...value,
+                      otherwise: next === AS_RECEIVED ? undefined : (next as ValueSign),
+                    })
+                  }
+                  triggerDimensions={{ width: '100%' }}
+                  slot={otherwise ? SIGN_ICON[otherwise] : undefined}
+                />
+              </div>
+            </div>
+            <DeleteSpacer />
+          </div>
+
+          {/* Below the ELSE, under a hairline that closes the chain, and centred under the whole
+              list, so the button reads as adding to the rules as a set rather than as part of
+              the else row. The list's own row gap spaces the line from both.
 
               The line carries the keyword the next rule joins with, on a pill that breaks it:
               the Fields palette's resting chip (NO_FILL under fieldTagTokens), whose gray[150]
