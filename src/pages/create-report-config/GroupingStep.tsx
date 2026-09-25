@@ -206,7 +206,7 @@ export function GroupingStep({
           the two versions say the same thing about the same answer.
 
           Only once something is picked. On an untouched step the sentence could only say
-          there is no grouping yet, which the step's own heading and Skip grouping already
+          there is no grouping yet, which the step's own heading and disabled Continue already
           say — so it arrives with the first pick instead, as that pick's consequence. */}
       {picked.length > 0 && (
         <PrimitiveText
