@@ -8,16 +8,9 @@ import {
   MultiSelectV2Size,
   SingleSelectV2,
   SingleSelectV2Size,
-  TagV2,
-  TagV2Color,
-  TagV2Size,
-  TagV2SubType,
-  TagV2Type,
-  ThemeProvider,
 } from '@juspay/blend-design-system'
 import { ArrowRightLeft, Minus, Plus, Trash2 } from 'lucide-react'
 import { PrimitiveText, font } from '../../primitives'
-import { fieldTagTokens, ghostSmallButtonTokens } from '../../theme'
 import { ConditionIcon } from './condition-icons'
 import {
   FIELD_TAGS,
@@ -36,8 +29,7 @@ import type { DataTransformLayout } from './data-transform-layout'
 
 const { colors } = FOUNDATION_THEME
 
-/** The section's two lines, under the title and under the ELSE row — gray[150], the stroke of
-    the ELSE IF pill the lower one runs into. */
+/** The section's lines, under the title and either side of ADD ELSE IF — gray[150]. */
 const DIVIDER = `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[150]}`
 
 /**
@@ -410,6 +402,27 @@ export function SignRulesEditor({
             />
           ))}
 
+          {/* Between the last rule and the ELSE, where the next rule will land: a hairline with
+              the button that adds it sitting on it, so the control is at the insertion point and
+              names the keyword the new rule joins with. Blend's SMALL secondary button as it
+              ships, with no leading +: the label already says "add", and the icon crowded its
+              left edge. The list's own row gap spaces the line from both rows. The lines are decoration, hidden from assistive tech; the button
+              says what it adds.
+              blend-gap: no divider component, so two plain rules on a token border.
+              blend-gap: ButtonV2 sets `cursor: default` with no prop or token to change it, so
+              the pointer comes from this wrapper — same as the footer's Exit. */}
+          <div className="flex items-center [&_button]:cursor-pointer">
+            <hr aria-hidden className="m-0 flex-1 border-0" style={{ borderTop: DIVIDER }} />
+            <ButtonV2
+              buttonType={ButtonV2Type.SECONDARY}
+              size={ButtonV2Size.SMALL}
+              subType={ButtonV2SubType.DEFAULT}
+              text="ADD ELSE IF"
+              onClick={() => setRules([...rules, newSignRule()])}
+            />
+            <hr aria-hidden className="m-0 flex-1 border-0" style={{ borderTop: DIVIDER }} />
+          </div>
+
           {/* The chain's last word: a row no rule matched. Always present, so a user can see
             what happens to the rest without having to reason about it. */}
           <div className="flex items-center" style={{ gap: layout.markerGap }}>
@@ -442,46 +455,6 @@ export function SignRulesEditor({
               </div>
             </div>
             <DeleteSpacer />
-          </div>
-
-          {/* Below the ELSE, under a hairline that closes the chain, and centred under the whole
-              list, so the button reads as adding to the rules as a set rather than as part of
-              the else row. The list's own row gap spaces the line from both.
-
-              The line carries the keyword the next rule joins with, on a pill that breaks it:
-              the Fields palette's resting chip (NO_FILL under fieldTagTokens), whose gray[150]
-              hairline the line matches so the two read as one stroke. Hidden from assistive
-              tech — the button's own label says what it adds.
-              blend-gap: no divider component, so two plain rules on a token border. */}
-          <div aria-hidden className="flex items-center">
-            <hr className="m-0 flex-1 border-0" style={{ borderTop: DIVIDER }} />
-            <ThemeProvider componentTokens={fieldTagTokens}>
-              <TagV2
-                text="ELSE IF"
-                size={TagV2Size.MD}
-                type={TagV2Type.NO_FILL}
-                subType={TagV2SubType.ROUNDED}
-                color={TagV2Color.NEUTRAL}
-              />
-            </ThemeProvider>
-            <hr className="m-0 flex-1 border-0" style={{ borderTop: DIVIDER }} />
-          </div>
-          {/* Borderless: the pill above already draws a stroke, and a second one directly under
-              it stacked two outlined shapes. Ghost rather than bare INLINE so it keeps a 32px
-              hit area and a fill on hover (see ghostButton in theme.ts).
-              blend-gap: ButtonV2 sets `cursor: default` with no prop or token to change it, so
-              the pointer comes from this wrapper — same as the footer's Exit. */}
-          <div className="flex justify-center [&_button]:cursor-pointer">
-            <ThemeProvider componentTokens={ghostSmallButtonTokens}>
-              <ButtonV2
-                buttonType={ButtonV2Type.SECONDARY}
-                size={ButtonV2Size.SMALL}
-                subType={ButtonV2SubType.INLINE}
-                text="Add new rule group"
-                leftSlot={{ slot: <Plus size={14} /> }}
-                onClick={() => setRules([...rules, newSignRule()])}
-              />
-            </ThemeProvider>
           </div>
         </div>
       </div>
