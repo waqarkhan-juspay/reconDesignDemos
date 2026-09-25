@@ -325,10 +325,11 @@ export type SignRule = {
 }
 
 /**
- * An if / else-if chain read top to bottom — the first rule a row matches decides its sign. A
- * row that matches none keeps the sign it arrived with.
+ * An if / else-if chain read top to bottom — the first rule a row matches decides its sign —
+ * and `otherwise` for a row that matches none. Absent `otherwise` keeps the sign the value
+ * arrived with.
  */
-export type SignRules = { rules: SignRule[] }
+export type SignRules = { rules: SignRule[]; otherwise?: ValueSign }
 
 export type DataTransform = {
   /** Absent means as received — SOURCE_DATE_FORMAT. */
@@ -398,8 +399,11 @@ export function reformatDate(value: string, format: DateFormat) {
 export function normaliseTransform(transform: DataTransform): DataTransform | undefined {
   const date =
     transform.date && transform.date.order !== SOURCE_DATE_FORMAT.order ? transform.date : undefined
-  // Sign logic with no rule says "as received" as surely as no logic at all.
-  const signs = transform.signs && transform.signs.rules.length > 0 ? transform.signs : undefined
+  // Sign logic with no rule and no fallback says "as received" as surely as no logic at all.
+  const signs =
+    transform.signs && (transform.signs.rules.length > 0 || transform.signs.otherwise)
+      ? transform.signs
+      : undefined
   const next: DataTransform = { ...(date ? { date } : {}), ...(signs ? { signs } : {}) }
   return next.date || next.signs ? next : undefined
 }
