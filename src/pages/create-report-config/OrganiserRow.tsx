@@ -1,5 +1,8 @@
 import {
   FOUNDATION_THEME,
+  MenuV2,
+  MenuV2Alignment,
+  MenuV2Side,
   SingleSelectV2,
   SingleSelectV2Size,
   SingleSelectV2Variant,
@@ -12,14 +15,33 @@ import {
   TooltipV2Align,
   TooltipV2Side,
 } from '@juspay/blend-design-system'
-import { CopyPlus, GripVertical, PencilLine, X } from 'lucide-react'
-import { useEffect, useRef, useState, type CSSProperties } from 'react'
-import { PrimitiveText, font } from '../../primitives'
+import {
+  ArrowRightLeft,
+  CopyPlus,
+  EllipsisVertical,
+  GripVertical,
+  Info,
+  PencilLine,
+  X,
+} from 'lucide-react'
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ButtonHTMLAttributes,
+  type CSSProperties,
+  type Ref,
+} from 'react'
+import { font } from '../../primitives'
 import {
   aggregationOf,
   aggregationsFor,
+  dateFormatLabel,
+  describeTransform,
   fieldOf,
   sameField,
+  SOURCE_DATE_FORMAT,
+  transformKindOf,
   type Aggregation,
   type FieldColumn,
 } from './answers'
@@ -37,6 +59,13 @@ const { colors } = FOUNDATION_THEME
  *   path (`M8 13.33 H14`); plain `Pencil` does not, and the rule is visible in the frame.
  * - `CopyPlus` — the duplicate. The export is a rounded square offset behind another with a
  *   `+` inside it, which is `CopyPlus` and not `Copy`: same rect, plus the two 4px strokes.
+ *   It now leads the Duplicate row inside the kebab menu rather than standing in the row.
+ * - `Info` — beside a renamed column's name; its tooltip says which field the column
+ *   represents.
+ * - `EllipsisVertical` — the kebab that opens the row's menu, three dots stacked.
+ * - `ArrowRightLeft` — Data Transform, in the same menu. The values go in one shape and come out
+ *   in another, which is what the two arrows say — the one glyph for both kinds of transform, a
+ *   date's format and an amount's sign. Offered on date and amount columns only.
  * - `X` — `M12 4 L4 12 M4 4 L12 12`, which is lucide's X scaled to 16.
  */
 const ICON_SIZE = 16
@@ -73,18 +102,6 @@ const NAME_GAP = { single: 16, double: 8 }
  */
 const HALF_GAP = 16
 
-/**
- * The least of a renamed column's name that stays on screen — a few letters and the
- * ellipsis, enough to tell two renamed rows apart.
- *
- * The note does not shrink (see the name's comment in the row), so its cap is everything but
- * this, the pencil, and the two 4px gaps either side of the note. On any realistic row that
- * is more than the longest note needs, so the note reads in full; only a row too narrow to
- * hold both does it ellipsis, and then the tooltip has the rest.
- */
-const NAME_MIN = 56
-const NOTE_MAX = `calc(100% - ${NAME_MIN + ICON_SIZE + 4 * 2}px)`
-
 const NAME = font(FOUNDATION_THEME.font.size.body.md)
 const META = {
   ...font(FOUNDATION_THEME.font.size.body.sm),
@@ -96,28 +113,34 @@ const BADGE = {
 }
 
 /**
- * A round-cornered icon button — the ✕ and the duplicate.
+ * A round-cornered icon button — the ✕ and the kebab.
  *
  * Not a `ButtonV2` with `subType={ICON_ONLY}`: that one draws a bordered secondary control
  * at every size, and the design has a bare glyph in a hit area. Tailwind's Preflight has
  * already stripped `<button>` to transparent with no border (rule 12), so what is left here
  * is the hit area, the hover and the tint.
+ *
+ * The rest props and the `ref` are passed through because the kebab is a `MenuV2` trigger:
+ * Radix's `Trigger asChild` clones this element and hands it its own ref, `onClick`,
+ * `onPointerDown` and `aria-expanded`, and a button that dropped them would never open.
  */
 function RowAction({
   label,
   icon,
-  onClick,
+  ref,
+  ...rest
 }: {
   label: string
   icon: React.ReactNode
-  onClick: () => void
-}) {
+  ref?: Ref<HTMLButtonElement>
+} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'style'>) {
   return (
     <button
       type="button"
       aria-label={label}
       title={label}
-      onClick={onClick}
+      {...rest}
+      ref={ref}
       className="organiser-action flex shrink-0 cursor-pointer items-center justify-center rounded border-none bg-transparent"
       style={{ width: ACTION_BOX, height: ACTION_BOX }}
     >
@@ -144,6 +167,7 @@ export function OrganiserRow({
   onRename,
   onAggregate,
   onDuplicate,
+  onOpenTransform,
   onRemove,
 }: {
   column: FieldColumn
@@ -165,6 +189,8 @@ export function OrganiserRow({
   onRename: (title: string) => void
   onAggregate: (aggregate: Aggregation) => void
   onDuplicate: () => void
+  /** Opens the Data Transform modal, which the organiser owns — see ColumnOrganiser. */
+  onOpenTransform: () => void
   onRemove: () => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -172,16 +198,16 @@ export function OrganiserRow({
   const inputRef = useRef<HTMLInputElement>(null)
 
   /**
-   * The origin line's tooltip, and whether it has anything to say.
+   * The name's tooltip, and whether it has anything to say.
    *
    * Controlled rather than left to Radix, because a tooltip that repeats text you can already
    * read is the same no-op affordance as a "Clear all" with nothing to clear: it costs a
-   * hover and answers with what is on screen. So the row agrees to open only when the span is
+   * hover and answers with what is on screen. So the row agrees to open only when the name is
    * actually clipped, which `scrollWidth > clientWidth` reports — measured on the hover
    * itself, so it tracks the window being resized without an observer to keep in sync.
    */
-  const originRef = useRef<HTMLSpanElement>(null)
-  const [showOrigin, setShowOrigin] = useState(false)
+  const nameRef = useRef<HTMLSpanElement>(null)
+  const [showName, setShowName] = useState(false)
 
   useEffect(() => {
     if (!editing) return
@@ -205,19 +231,38 @@ export function OrganiserRow({
   }
 
   /**
-   * The origin line — `represents "Gateway"`.
-   *
-   * Only once the column has been renamed away from the field it came from, which is what
-   * `source` records (answers.ts). Before that the name *is* the field and the line would be
-   * a tautology; after it, it is the only thing left saying where the column's data comes
-   * from. The curly quotes are the design's.
+   * Whether the row wears the origin (info) glyph — once the column's title has moved away from the
+   * field it came from, which is what `source` records (answers.ts). Before that the name *is*
+   * the field and there is nothing to point back at.
    *
    * Never on a custom column, whatever its `source` says. There the name *is* the field, and
-   * the row offers no rename (see the pencil below), so there is no earlier name left to
-   * point back at.
+   * the row offers no rename (see the pencil below), so there is no earlier name to show.
    */
   const origin = fieldOf(column)
   const renamed = !custom && !sameField(origin, column.title)
+
+  /** Dates and amounts only — any other column has nothing for the Data Transform to do. */
+  const transformable = transformKindOf(origin) !== undefined
+
+  /**
+   * A date column's format, `[DD-MM-YYYY]` — the one a date is *written* in, so it follows the
+   * Data Transform the moment one is applied, and reads the source's DD-MM-YYYY until then.
+   *
+   * Drawn beside the name, never stored in `title`. That keeps it out of the rename field (a
+   * user editing "Txn Date" is not handed "Txn Date [DD-MM-YYYY]" to pick apart), out of the
+   * report's header and the Review chips, and correct after a transform without a rewrite.
+   *
+   * Renaming moves it rather than dropping it: the name becomes the user's own words, and the
+   * format joins the info glyph's tooltip instead — `represents "Txn Date" [DD-MM-YYYY]` —
+   * which is where a renamed row keeps the facts about its field. Renaming back to the field's
+   * own name brings it back beside the name, since `renamed` is then false again.
+   */
+  const dateFormat =
+    transformKindOf(origin) === 'DATE'
+      ? `[${dateFormatLabel(column.transform?.date ?? SOURCE_DATE_FORMAT)}]`
+      : undefined
+  /** The info glyph's tooltip. The curly quotes are the design's. */
+  const originNote = [`represents “${origin}”`, dateFormat].filter(Boolean).join(' ')
 
   /** Past Z — see BADGE_WIDTH. Both halves of the row's left edge read this one flag. */
   const size = letter.length > 1 ? 'double' : 'single'
@@ -239,124 +284,147 @@ export function OrganiserRow({
         marginBottom: -1,
       }}
     >
-      {/* flex-1 here and on the text column below: NOTE_MAX is a percentage, and it needs a
-          definite width to be a percentage *of*. Content-sized, the column is only as wide as
-          the note itself, so the cap clipped a short row's note with the whole row free. Only
-          the containers grow — the name, the note and the pencil keep their own widths, so
+      {/* flex-1 here and on the text column below, so the name has a definite width to
+          ellipsis against and the double-click target runs to the right-hand controls. Only
+          the containers grow — the name, the tags and the pencil keep their own widths, so
           the pencil still follows the text. */}
       <div className="flex min-w-0 flex-1 items-center">
+        {/* The grip and the letter are one handle, not a 40px target beside a badge that
+            ignores the pointer: the pair reads as the row's "where it goes" end, and a press
+            anywhere on it should pick the row up. */}
         <span
           {...handleProps}
           role="button"
           tabIndex={0}
           aria-label={`Reorder ${column.title}. Use the arrow keys to move it.`}
           title="Drag to reorder"
-          className="flex shrink-0 cursor-grab items-center justify-center active:cursor-grabbing"
-          style={{ width: GRIP_BOX, height: GRIP_BOX, ...handleProps.style }}
+          className="flex shrink-0 cursor-grab items-center self-stretch active:cursor-grabbing"
+          // The gap before the name is the handle's own padding rather than the name's, so
+          // the pointer is on the handle right up to the first letter of the name.
+          style={{ paddingRight: NAME_GAP[size], ...handleProps.style }}
         >
-          <GripVertical size={ICON_SIZE} color={colors.gray[400]} />
+          <span
+            className="flex shrink-0 items-center justify-center"
+            style={{ width: GRIP_BOX, height: GRIP_BOX }}
+          >
+            <GripVertical size={ICON_SIZE} color={colors.gray[400]} />
+          </span>
+
+          {/* The column's position, not its identity — A is the leftmost slot whatever ends
+              up in it. Same letters the v1 table draws above its headers. */}
+          <span
+            aria-hidden
+            className="flex shrink-0 items-center justify-center"
+            style={{
+              ...BADGE,
+              height: 20,
+              minWidth: BADGE_WIDTH[size],
+              // No horizontal padding: the width above is the whole of the box, and padding on
+              // top of it would make a single letter's badge wider than the design's 20.
+              padding: '2px 0',
+              color: colors.gray[500],
+              backgroundColor: colors.gray[50],
+              border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[150]}`,
+              borderRadius: FOUNDATION_THEME.border.radius[6],
+            }}
+          >
+            {letter}
+          </span>
         </span>
 
-        {/* The column's position, not its identity — A is the leftmost slot whatever ends up
-            in it. Same letters the v1 table draws above its headers. */}
-        <span
-          aria-hidden
-          className="flex shrink-0 items-center justify-center"
-          style={{
-            ...BADGE,
-            height: 20,
-            minWidth: BADGE_WIDTH[size],
-            // No horizontal padding: the width above is the whole of the box, and padding on
-            // top of it would make a single letter's badge wider than the design's 20.
-            padding: '2px 0',
-            color: colors.gray[500],
-            backgroundColor: colors.gray[50],
-            border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[150]}`,
-            borderRadius: FOUNDATION_THEME.border.radius[6],
-          }}
-        >
-          {letter}
-        </span>
-
+        {/* A double-click anywhere from the handle to the right-hand controls renames, like a
+            file in a list — the pencil only appears on hover, and aiming for it is the slow
+            way. The row's full height, not the text line's, so the blank space beside a short
+            name counts too. Custom columns keep no rename at all; see the pencil below. */}
         <div
-          className="flex min-w-0 flex-1 items-baseline gap-1"
-          style={{ paddingLeft: NAME_GAP[size] }}
+          className="flex min-w-0 flex-1 items-center self-stretch"
+          onDoubleClick={custom || editing ? undefined : startEditing}
         >
-          {editing ? (
-            <input
-              ref={inputRef}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onBlur={commit}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') commit()
-                if (event.key === 'Escape') setEditing(false)
-              }}
-              aria-label={`Rename ${column.title}`}
-              className="min-w-0 rounded border bg-transparent px-1 outline-none"
-              style={{
-                ...NAME,
-                color: colors.gray[900],
-                borderColor: colors.gray[300],
-                // Sized to the text it replaces, so committing a rename does not jump the row.
-                width: `${Math.max(draft.length, 8) + 2}ch`,
-              }}
-            />
-          ) : (
-            <>
-              {/* The name gives ground; the note stays. A renamed column's name is whatever the
-                  user typed — the one they can reopen with the pencil — while the note is the
-                  only place the row says which field the data comes from. So when the row runs
-                  out of width the name ellipses and the note keeps its full text.
-
-                  The note is not shrinkable at all (below), which makes this a hard order
-                  rather than a weighting: flexbox shares overflow by factor × basis, so any
-                  weighting leaves a sliver on the wrong side, and a sliver is an ellipsis. */}
-              <PrimitiveText
-                as="span"
-                {...NAME}
-                color={colors.gray[900]}
-                style={{
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  minWidth: 0,
-                  flexShrink: 1,
+          <div className="flex min-w-0 flex-1 items-baseline gap-1">
+            {editing ? (
+              <input
+                ref={inputRef}
+                value={draft}
+                onChange={(event) => setDraft(event.target.value)}
+                onBlur={commit}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') commit()
+                  if (event.key === 'Escape') setEditing(false)
                 }}
-              >
-                {column.title}
-              </PrimitiveText>
-              {renamed && (
-                /* A native span rather than a PrimitiveText, on purpose: TooltipV2 wraps any
-                   trigger that is not a host element in an `inline-flex` span of its own
-                   (TooltipV2.tsx:85-96), and that wrapper would become the flex item instead
-                   — leaving the ellipsis measuring itself against a box with no width to run
-                   out of. A host element is cloned in place, so the styles below stay on the
-                   element the layout actually sizes. META carries the token type; the
-                   truncation is Tailwind's, on markup this file owns. */
+                aria-label={`Rename ${column.title}`}
+                className="min-w-0 rounded border bg-transparent px-1 outline-none"
+                style={{
+                  ...NAME,
+                  color: colors.gray[900],
+                  borderColor: colors.gray[300],
+                  // Sized to the text it replaces, so committing a rename does not jump the row.
+                  width: `${Math.max(draft.length, 8) + 2}ch`,
+                }}
+              />
+            ) : (
+              <>
+                {/* The name gives ground; everything after it stays whole. The format and the
+                    tags are not shrinkable at all, which makes this a hard order rather than a
+                    weighting: flexbox shares overflow by factor × basis, so any weighting
+                    leaves a sliver on the wrong side, and a sliver is an ellipsis.
+
+                    The full name on hover, but only once it is actually cut: a tooltip repeating
+                    a name already on screen is noise. A native span on purpose: TooltipV2 wraps
+                    any trigger that is not a host element in an `inline-flex` span of its own
+                    (TooltipV2.tsx:85-96), and that wrapper, not this, would become the flex item
+                    that has to shrink. A host element is cloned in place. */}
                 <TooltipV2
-                  content={`represents “${origin}”`}
+                  content={column.title}
                   side={TooltipV2Side.TOP}
                   align={TooltipV2Align.START}
-                  open={showOrigin}
+                  open={showName}
                   onOpenChange={(next) => {
-                    const el = originRef.current
-                    setShowOrigin(next && el !== null && el.scrollWidth > el.clientWidth)
+                    const el = nameRef.current
+                    setShowName(next && el !== null && el.scrollWidth > el.clientWidth)
                   }}
                 >
-                  {/* Never shrinks, so it always reads in full beside a name of any length.
-                      Capped by NOTE_MAX all the same, which only binds on a row too narrow to
-                      hold it — there it ellipses too, and the tooltip above has the rest. */}
                   <span
-                    ref={originRef}
+                    ref={nameRef}
                     className="truncate"
-                    style={{ ...META, color: colors.gray[500], flex: 'none', maxWidth: NOTE_MAX }}
+                    style={{ ...NAME, color: colors.gray[900], minWidth: 0, flexShrink: 1 }}
                   >
-                    {`represents “${origin}”`}
+                    {column.title}
                   </span>
                 </TooltipV2>
-              )}
-              {/* Where the column came from, which is the one thing about a custom column that
+                {/* Unshrinkable, for the reason above: a format cut to "[DD-MM-" says nothing. */}
+                {!renamed && dateFormat && (
+                  <span style={{ ...META, color: colors.gray[500], flex: 'none' }}>
+                    {dateFormat}
+                  </span>
+                )}
+                {/* A renamed column's origin, behind an info glyph: the row only has to say
+                    *that* there is more to the name; *what* it stands for is a hover away —
+                    `represents "Txn Date"`, with a date's format after it. A 16px glyph rather
+                    than a "Renamed" tag or the old inline sentence, because both of those took
+                    their width from the name, and on a long name it was the name that paid.
+
+                    Focusable, with the tooltip's text as its label, so the origin is reachable
+                    by keyboard and read by a screen reader — a hover-only fact would otherwise
+                    exist for the mouse alone. The wrapper is a host span, so TooltipV2 clones it
+                    in place (see the name above) and its `self-center` aligns the glyph rather
+                    than a wrapper around it. gray.400, the pencil's tint: both are quiet
+                    affordances beside the name, not content. */}
+                {renamed && (
+                  <TooltipV2
+                    content={originNote}
+                    side={TooltipV2Side.TOP}
+                    align={TooltipV2Align.START}
+                  >
+                    <span
+                      tabIndex={0}
+                      aria-label={originNote}
+                      className="ml-1 flex shrink-0 cursor-default self-center"
+                    >
+                      <Info size={ICON_SIZE} color={colors.gray[400]} />
+                    </span>
+                  </TooltipV2>
+                )}
+                {/* Where the column came from, which is the one thing about a custom column that
                   cannot be read off the row: its name is whatever the user typed, so nothing
                   else here distinguishes it from the twenty-six the vocabulary shipped with.
                   Beside the name because it is a fact about the name. The palette chip's
@@ -366,38 +434,61 @@ export function OrganiserRow({
                   `self-center`: the text column aligns on the baseline, and a tag is a box
                   rather than a line of text. `ml-1` on top of the column's 4px gap gives it
                   8px from the name. */}
-              {custom && (
-                <span className="ml-1 flex shrink-0 self-center">
-                  <TagV2
-                    text="Custom"
-                    size={TagV2Size.SM}
-                    subType={TagV2SubType.SQUARICAL}
-                    color={TagV2Color.WARNING}
-                    type={TagV2Type.SUBTLE}
-                  />
-                </span>
-              )}
-              {/* No rename on a custom column. Its name *is* the field — the one the user
+                {custom && (
+                  <span className="ml-1 flex shrink-0 self-center">
+                    <TagV2
+                      text="Custom"
+                      size={TagV2Size.SM}
+                      subType={TagV2SubType.SQUARICAL}
+                      color={TagV2Color.WARNING}
+                      type={TagV2Type.SUBTLE}
+                    />
+                  </span>
+                )}
+                {/* The column's values are rewritten on the way into the file — the one thing
+                  about it the row cannot otherwise show. Same shape and place as Custom; the
+                  tooltip (a native title — TagV2 has nowhere else to put one) says what the
+                  transform does. */}
+                {column.transform && (
+                  <span
+                    className="ml-1 flex shrink-0 self-center"
+                    title={describeTransform(column.transform)}
+                  >
+                    <TagV2
+                      text="Transformed"
+                      size={TagV2Size.SM}
+                      subType={TagV2SubType.SQUARICAL}
+                      color={TagV2Color.NEUTRAL}
+                      type={TagV2Type.SUBTLE}
+                    />
+                  </span>
+                )}
+                {/* No rename on a custom column. Its name *is* the field — the one the user
                   typed in "Add custom column" — so renaming the row would be renaming the
                   field out from under its palette chip and any other copy of it.
 
                   Otherwise hidden until the row is hovered or something in it has focus — the
                   rule is in index.css, because opacity has to answer to `:hover` on the row
                   rather than to a state this component would otherwise have to hold. Focus is
-                  in that rule too, so tabbing to it still reveals it. */}
-              {!custom && (
-                <button
-                  type="button"
-                  onClick={startEditing}
-                  aria-label={`Rename ${column.title}`}
-                  title="Rename"
-                  className="organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0"
-                >
-                  <PencilLine size={ICON_SIZE} color={colors.gray[400]} />
-                </button>
-              )}
-            </>
-          )}
+                  in that rule too, so tabbing to it still reveals it.
+
+                  After a renamed row's info glyph, `ml-1` puts 8px between the two rather than
+                  the row's 4px gap — the same 8 the glyph keeps from the name — so the pencil
+                  reads as its own action rather than as half of a pair with the glyph. */}
+                {!custom && (
+                  <button
+                    type="button"
+                    onClick={startEditing}
+                    aria-label={`Rename ${column.title}`}
+                    title="Rename"
+                    className={`organiser-edit flex shrink-0 cursor-pointer items-center border-none bg-transparent p-0 ${renamed ? 'ml-1' : ''}`}
+                  >
+                    <PencilLine size={ICON_SIZE} color={colors.gray[400]} />
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -412,7 +503,7 @@ export function OrganiserRow({
              and both read it.
 
              Blend's `inline` select zeroes its own padding, so before this the trigger ran
-             flush into the duplicate button and that keyline cut the chevron through its
+             flush into the kebab button and that keyline cut the chevron through its
              middle — the pill beside it stopped 8px earlier, and the two read as a column
              that could not decide where it ended. */
           <span className="pr-2">
@@ -452,10 +543,39 @@ export function OrganiserRow({
             )}
           </span>
         )}
-        <RowAction
-          label={`Duplicate ${column.title}`}
-          icon={<CopyPlus size={ICON_SIZE} color={colors.gray[400]} />}
-          onClick={onDuplicate}
+        <MenuV2
+          alignment={MenuV2Alignment.END}
+          side={MenuV2Side.BOTTOM}
+          trigger={
+            <RowAction
+              label={`More actions for ${column.title}`}
+              icon={<EllipsisVertical size={ICON_SIZE} color={colors.gray[400]} />}
+            />
+          }
+          items={[
+            {
+              items: [
+                {
+                  label: {
+                    text: 'Duplicate',
+                    leftSlot: <CopyPlus size={ICON_SIZE} color={colors.gray[500]} />,
+                  },
+                  onClick: onDuplicate,
+                },
+                ...(transformable
+                  ? [
+                      {
+                        label: {
+                          text: 'Data Transform',
+                          leftSlot: <ArrowRightLeft size={ICON_SIZE} color={colors.gray[500]} />,
+                        },
+                        onClick: onOpenTransform,
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          ]}
         />
         <RowAction
           label={`Remove ${column.title}`}

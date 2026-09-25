@@ -78,7 +78,13 @@ export const DAYS_OF_WEEK = [
 export const LAST_DAY_OF_MONTH = 'Last day of the month'
 const ordinal = (day: number) => {
   const suffix =
-    day % 10 === 1 && day !== 11 ? 'st' : day % 10 === 2 && day !== 12 ? 'nd' : day % 10 === 3 && day !== 13 ? 'rd' : 'th'
+    day % 10 === 1 && day !== 11
+      ? 'st'
+      : day % 10 === 2 && day !== 12
+        ? 'nd'
+        : day % 10 === 3 && day !== 13
+          ? 'rd'
+          : 'th'
   return `${day}${suffix}`
 }
 export const DAYS_OF_MONTH = [
@@ -226,7 +232,10 @@ export const scheduleNoteFor = ({
     // Sent on the 1st, or on the last day, and the window is the month either way — which is
     // the design's own wording. Any other date covers the month *ending* the day before it
     // comes round again, and saying so is the only way that date means anything.
-    const when = dayOfMonth === LAST_DAY_OF_MONTH ? 'the last day of every month' : `the ${dayOfMonth} of every month`
+    const when =
+      dayOfMonth === LAST_DAY_OF_MONTH
+        ? 'the last day of every month'
+        : `the ${dayOfMonth} of every month`
     const covers =
       dayOfMonth === '1st' || dayOfMonth === LAST_DAY_OF_MONTH
         ? '1st to last day of the month'
@@ -250,7 +259,7 @@ export type FieldColumn = {
   defaultValue?: string
   /**
    * The name this column was created under, kept so a rename does not erase where the column
-   * came from. It is what the organiser reads back as `represents "…"`, and — more
+   * came from. It is what the organiser's info glyph reads back as `represents "…"`, and — more
    * importantly — what decides which field chip is lit (`isFieldSelected`).
    *
    * Without it, renaming a column to the name of another field moved the column onto that
@@ -267,6 +276,156 @@ export type FieldColumn = {
    * than a default written 26 times. Read it through `aggregationOf`.
    */
   aggregate?: Aggregation
+  /**
+   * How this column's values are rewritten on the way into the file — the row menu's "Data
+   * Transform". Absent means as received, and so does each half of it: stored only once the user
+   * changes something, like `aggregate` above.
+   */
+  transform?: DataTransform
+}
+
+/**
+ * The order a date's three parts are written in — every permutation of day, month and year.
+ * Named by initials rather than by a format string, so the separator stays out of the stored
+ * answer.
+ */
+export const DATE_ORDERS = ['DMY', 'MDY', 'YMD', 'YDM', 'DYM', 'MYD'] as const
+export type DateOrder = (typeof DATE_ORDERS)[number]
+
+/**
+ * What goes between the parts — always a hyphen, the one the source files use. Only the order
+ * is a choice; slash, dot, space and no separator were offered once and dropped.
+ */
+const DATE_SEPARATOR = '-'
+
+export type DateFormat = { order: DateOrder }
+
+/** How dates arrive from the source files — DD-MM-YYYY. The format "as received" means. */
+export const SOURCE_DATE_FORMAT: DateFormat = { order: 'DMY' }
+
+/** The sign a number is forced to. */
+export type ValueSign = 'POSITIVE' | 'NEGATIVE'
+
+/**
+ * One branch of an amount column's sign logic: "if Txn Type in Refund, Chargeback, write the
+ * amount negative". The condition half is a FilterRule's shape and vocabulary on purpose — the
+ * same column, condition and value controls the Filters step draws, asking the same question
+ * of a row.
+ *
+ * The column can be any field in the vocabulary, whether or not the report includes it: the
+ * sign is decided on the source row, which carries every field. A new rule starts with no
+ * column chosen, so the user picks it rather than inheriting one.
+ */
+export type SignRule = {
+  id: string
+  column: string | null
+  condition: string | null
+  value: string[]
+  sign: ValueSign | null
+}
+
+/**
+ * An if / else-if chain read top to bottom — the first rule a row matches decides its sign. A
+ * row that matches none keeps the sign it arrived with.
+ */
+export type SignRules = { rules: SignRule[] }
+
+export type DataTransform = {
+  /** Absent means as received — SOURCE_DATE_FORMAT. */
+  date?: DateFormat
+  /** Absent means every value keeps the sign it arrived with. */
+  signs?: SignRules
+}
+
+/** The column whose values decide which way money moved — see signRuleValuesFor. */
+export const SIGN_RULE_COLUMN = 'Txn Type'
+
+let nextSignRuleId = 0
+export const newSignRule = (): SignRule => ({
+  id: `sign-rule-${(nextSignRuleId += 1)}`,
+  column: null,
+  condition: null,
+  value: [],
+  sign: null,
+})
+
+/** Untouched since it was added — dropped on Apply rather than blocking it. */
+export const isSignRuleBlank = (rule: SignRule) =>
+  rule.column === null && rule.condition === null && rule.value.length === 0 && rule.sign === null
+
+/**
+ * Values a sign rule offers for a column. Txn Type gets the three kinds that decide which way
+ * money moved — Order, Refund, Chargeback, the source file's ORDER and REFUND among them —
+ * rather than the Filters step's list (VALUE_SUGGESTIONS), which filters on Capture and Void.
+ * Every other column is the Filters step's, and custom values are allowed either way.
+ */
+export const signRuleValuesFor = (column: string | null) =>
+  column !== null && sameField(column, SIGN_RULE_COLUMN)
+    ? ['Order', 'Refund', 'Chargeback']
+    : valuesFor(column)
+
+/** Every control in the row answered — a null test needs no value, everything else does. */
+export const isSignRuleComplete = (rule: SignRule) =>
+  rule.column !== null &&
+  rule.condition !== null &&
+  (!conditionTakesValue(rule.condition) || rule.value.length > 0) &&
+  rule.sign !== null
+
+const DATE_PART_TOKEN = { D: 'DD', M: 'MM', Y: 'YYYY' } as const
+
+/** `{ order: 'YMD' }` → `YYYY-MM-DD`. */
+export const dateFormatLabel = ({ order }: DateFormat) =>
+  [...order]
+    .map((part) => DATE_PART_TOKEN[part as keyof typeof DATE_PART_TOKEN])
+    .join(DATE_SEPARATOR)
+
+/**
+ * A DD-MM-YYYY value rewritten into `format` — what the modal's preview shows, and what a
+ * delivered file would carry. Returns the input untouched if it is not DD-MM-YYYY.
+ */
+export function reformatDate(value: string, format: DateFormat) {
+  const match = /^(\d{2})-(\d{2})-(\d{4})$/.exec(value)
+  if (!match) return value
+  const parts = { D: match[1], M: match[2], Y: match[3] }
+  return [...format.order].map((part) => parts[part as keyof typeof parts]).join(DATE_SEPARATOR)
+}
+
+/**
+ * The transform to store — with each half dropped when it says "as received", and `undefined`
+ * when nothing is left, so a column the user opened and applied unchanged is not marked
+ * Transformed.
+ */
+export function normaliseTransform(transform: DataTransform): DataTransform | undefined {
+  const date =
+    transform.date && transform.date.order !== SOURCE_DATE_FORMAT.order ? transform.date : undefined
+  // Sign logic with no rule says "as received" as surely as no logic at all.
+  const signs = transform.signs && transform.signs.rules.length > 0 ? transform.signs : undefined
+  const next: DataTransform = { ...(date ? { date } : {}), ...(signs ? { signs } : {}) }
+  return next.date || next.signs ? next : undefined
+}
+
+/** One line for what a transform does — the row's "Transformed" tag carries it as its tooltip. */
+export function describeTransform(transform: DataTransform) {
+  return [
+    transform.date && `Dates as ${dateFormatLabel(transform.date)}`,
+    transform.signs && describeSigns(transform.signs),
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+const SIGN_WORD: Record<ValueSign, string> = { POSITIVE: 'positive', NEGATIVE: 'negative' }
+
+/** "Txn Type in Refund, Chargeback → negative; Txn Type equal to Order → positive". */
+function describeSigns({ rules }: SignRules) {
+  return rules
+    .map(
+      ({ column, condition, value, sign }) =>
+        [column, condition && conditionLabel(condition), value.join(', ')]
+          .filter(Boolean)
+          .join(' ') + (sign ? ` → ${SIGN_WORD[sign]}` : ''),
+    )
+    .join('; ')
 }
 
 /** The default title a freshly inserted column carries until it is renamed. */
@@ -349,7 +508,7 @@ export const EMPTY_FIELDS: FieldsAnswers = {
  * case-insensitively rather than by string equality (see `isFieldSelected`).
  *
  * Four of these are not from that node — Failure Count, Success Rate, Total Amount and Total
- * Transactions are report-level aggregates rather than columns off a transaction row, and are
+ * Transactions are report-level aggregates rather than columns off a transaction row, and lead
  * what "Add important columns" selects (IMPORTANT_FIELDS below). They sit in the list in the
  * same alphabetical order as the rest so the vocabulary reads as one set, and they carry
  * samples of their own in field-samples.ts so a preview of them is not a row of dashes.
@@ -408,6 +567,11 @@ export const FIELD_TAGS = [
  * the reading order of the result — the headline rate, the volume behind it, the money,
  * then the operational detail.
  *
+ * After those four come every date and every money field in the vocabulary: dates first,
+ * transaction to settlement to recon, then the amounts in the same order, then the ledger
+ * pieces (Credit, Debit, Fee, Tax). These are the columns a report is read and reconciled by,
+ * and the ones the row menu's Data Transform has something to say about.
+ *
  * Every entry has to be a FIELD_TAGS name, and `satisfies` fails the build if one stops
  * being one — renaming a tag without renaming it here would otherwise leave the button
  * quietly adding a custom column instead of lighting the chip.
@@ -417,6 +581,16 @@ export const IMPORTANT_FIELDS = [
   'Total Transactions',
   'Total Amount',
   'Failure Count',
+  'Txn Date',
+  'Settlement Date',
+  'Reconciled At',
+  'Txn Amount',
+  'Settlement Amount',
+  'Refund Amount',
+  'Credit',
+  'Debit',
+  'Fee',
+  'Tax',
 ] as const satisfies readonly (typeof FIELD_TAGS)[number][]
 
 /**
@@ -428,7 +602,7 @@ export const IMPORTANT_FIELDS = [
  *
  * - Measures are what you aggregate, not what you group by. Grouping by Txn Amount asks for
  *   one row per distinct rupee value. That rules out Credit, Debit, Fee, Refund Amount, Tax,
- *   Txn Amount, Settlement Amount and the four report-level aggregates (IMPORTANT_FIELDS).
+ *   Txn Amount, Settlement Amount and the four report-level aggregates.
  * - Identifiers are unique per record, so grouping by one returns the ungrouped report with
  *   extra steps. That rules out ID, Recon Id, Payment Entity Txn Id, Bank Reference Number
  *   and the free-text Label.
@@ -513,6 +687,35 @@ const DATE_FIELDS = [
   'Settlement Date',
   'Txn Date',
 ] as const satisfies readonly (typeof FIELD_TAGS)[number][]
+
+/**
+ * The measures that are money — MEASURE_FIELDS without its two counts. A sign means something
+ * on an amount; forcing Total Transactions negative does not.
+ */
+const AMOUNT_FIELDS = [
+  'Credit',
+  'Debit',
+  'Fee',
+  'Refund Amount',
+  'Settlement Amount',
+  'Tax',
+  'Total Amount',
+  'Txn Amount',
+] as const satisfies readonly (typeof FIELD_TAGS)[number][]
+
+/**
+ * Which half of the Data Transform a field gets: dates are reformatted, amounts are signed, and
+ * nothing else is transformed at all — the row menu leaves the option out. A custom column is
+ * undefined here too: nothing knows what a user's own field holds.
+ */
+export type TransformKind = 'DATE' | 'AMOUNT'
+
+export function transformKindOf(field: string): TransformKind | undefined {
+  const named = (fields: readonly string[]) => fields.some((name) => sameField(name, field))
+  if (named(DATE_FIELDS)) return 'DATE'
+  if (named(AMOUNT_FIELDS)) return 'AMOUNT'
+  return undefined
+}
 
 /**
  * What the aggregation control offers for a field, in the order it lists them.
@@ -645,8 +848,18 @@ export const FILTER_CONDITIONS = [
  * the control is disabled at that point anyway, there being no column yet.
  */
 export const conditionTakesValue = (condition: string | null) =>
-  condition === null ||
-  (FILTER_CONDITIONS.find(({ id }) => id === condition)?.takesValue ?? true)
+  condition === null || (FILTER_CONDITIONS.find(({ id }) => id === condition)?.takesValue ?? true)
+
+/** The two conditions that test against a set — their value control is a multi-select. */
+export const isSetCondition = (condition: string | null) =>
+  condition === 'in' || condition === 'not in'
+
+/**
+ * A condition as the Data Transform's sign rules word it. "in" reads as "is in" there, beside
+ * "is null" and "is not null"; the id stays `in`, which is what the Filters step shows and
+ * what its icon is keyed on.
+ */
+export const conditionLabel = (condition: string) => (condition === 'in' ? 'is in' : condition)
 
 /**
  * Values offered for a column, where the column has an obvious closed set. Everything else

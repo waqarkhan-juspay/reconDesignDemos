@@ -31,16 +31,14 @@ export type Option = { id: string; title?: string; description: string }
  * The mark is decoration: hidden from assistive tech, since aria-pressed on the card already
  * says selected, and click-through, so a click on it lands on the card like anywhere else.
  *
- * `dimmed` is the de-emphasis the prototype asks for: once a group has an answer, its other
- * options recede so the eye lands on the question that is still open. They stay clickable,
- * and index.css brings them back to full on hover so changing an earlier answer does not
- * become a hunt.
+ * No de-emphasis of the options not picked: every option stays at full strength after a group
+ * is answered. A faded option reads as disabled, and changing an answer is always allowed —
+ * the border and the radio are what say which one is picked.
  */
 export function SelectableCard({
   title,
   description,
   selected,
-  dimmed,
   onSelect,
   onPointerEnter,
   media,
@@ -48,7 +46,6 @@ export function SelectableCard({
   title: string
   description: string
   selected: boolean
-  dimmed: boolean
   onSelect: () => void
   /** Hover in — the Setup step replays a card's illustration on it. */
   onPointerEnter?: () => void
@@ -71,7 +68,6 @@ export function SelectableCard({
       role="button"
       tabIndex={0}
       aria-pressed={selected}
-      data-dimmed={dimmed}
       onClick={onSelect}
       onKeyDown={onKeyDown}
       onPointerEnter={onPointerEnter}
@@ -136,12 +132,10 @@ export function SelectableCard({
 export function OptionCard({
   option,
   selected,
-  dimmed,
   onSelect,
 }: {
   option: Option
   selected: boolean
-  dimmed: boolean
   onSelect: () => void
 }) {
   return (
@@ -149,7 +143,6 @@ export function OptionCard({
       title={option.title ?? option.id}
       description={option.description}
       selected={selected}
-      dimmed={dimmed}
       onSelect={onSelect}
     />
   )

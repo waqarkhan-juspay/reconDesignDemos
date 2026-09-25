@@ -26,6 +26,8 @@ import { ExitFlowModal } from './ExitFlowModal'
 import { SubmitConfigModal } from './SubmitConfigModal'
 import { FieldsStep } from './FieldsStep'
 import { FieldsLayoutDials, type FieldsLayout } from './fields-layout'
+import { OPEN_ON_SHOWCASE, SHOWCASE_DELIVERY, SHOWCASE_FIELDS, SHOWCASE_SETUP } from './showcase'
+import { FaqLauncher } from './FaqLauncher'
 import { FlowDials, type FlowVersion } from './flow-layout'
 import { GroupingStep } from './GroupingStep'
 import { FiltersStep } from './FiltersStep'
@@ -155,7 +157,6 @@ const ALL_STEPS: {
  */
 const SUBMIT_LABEL = 'Proceed for Submission'
 
-
 /**
  * Measure for a step's description.
  *
@@ -265,7 +266,7 @@ function TopbarContent({ onExit }: { onExit: () => void }) {
 function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   const navigate = useNavigate()
 
-  const [setup, setSetup] = useState<SetupAnswers>(EMPTY_SETUP)
+  const [setup, setSetup] = useState<SetupAnswers>(OPEN_ON_SHOWCASE ? SHOWCASE_SETUP : EMPTY_SETUP)
 
   /**
    * Whether the report groups its records at all — Setup's third question, which offers
@@ -297,10 +298,13 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * Which step is showing, by id rather than index: switching flow version changes what
    * index 2 means, and a stored index would silently move the user to a different step.
    */
-  const [stepId, setStepId] = useState<StepId>('setup')
+  const [stepId, setStepId] = useState<StepId>(OPEN_ON_SHOWCASE ? 'fields' : 'setup')
   // A step that the current version does not have — i.e. Grouping, after switching back to
   // version 1 while standing on it. Fields is where that question goes in version 1.
-  const step = Math.max(0, STEPS.findIndex(({ id }) => id === stepId))
+  const step = Math.max(
+    0,
+    STEPS.findIndex(({ id }) => id === stepId),
+  )
   const current = STEPS[step]
   const setStep = (next: number) => setStepId(STEPS[next].id)
   /**
@@ -311,9 +315,15 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
    * committed steps are not necessarily a prefix of the flow: jump straight to Filters,
    * commit it, and Setup and Delivery are still untouched behind you.
    */
-  const [confirmed, setConfirmed] = useState<ReadonlySet<StepId>>(() => new Set())
-  const [delivery, setDelivery] = useState<DeliveryAnswers>(EMPTY_DELIVERY)
-  const [fields, setFields] = useState<FieldsAnswers>(EMPTY_FIELDS)
+  const [confirmed, setConfirmed] = useState<ReadonlySet<StepId>>(
+    () => new Set(OPEN_ON_SHOWCASE ? (['setup', 'delivery', 'grouping'] as const) : []),
+  )
+  const [delivery, setDelivery] = useState<DeliveryAnswers>(
+    OPEN_ON_SHOWCASE ? SHOWCASE_DELIVERY : EMPTY_DELIVERY,
+  )
+  const [fields, setFields] = useState<FieldsAnswers>(
+    OPEN_ON_SHOWCASE ? SHOWCASE_FIELDS : EMPTY_FIELDS,
+  )
   const [filters, setFilters] = useState<FiltersAnswers>(EMPTY_FILTERS)
   const [confirmingExit, setConfirmingExit] = useState(false)
   /** The Fields step's "Add custom column" modal — its button sits in the heading row below. */
@@ -418,7 +428,9 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
   const renderStep = (layout?: FieldsLayout) => (
     // 32px between a step's sections. Setup was drawn at 24 (node 4541:16282) and opened up
     // to match the other steps' rhythm.
-    <div key={current.id} className={`${COLUMN} flow-question gap-y-8 pt-8 pb-12`}
+    <div
+      key={current.id}
+      className={`${COLUMN} flow-question gap-y-8 pt-8 pb-12`}
       style={layout?.style}
       data-layout={layout?.wide ? 'wide' : undefined}
       /* The column organiser is the one step body that should fit the window rather than
@@ -439,46 +451,46 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
       {/* The heading, with the step's own action — Fields' "Add custom column" — pushed to
           the far right of the same row. */}
       <div className="flex items-end justify-between gap-4">
-      <div className="flex flex-col" style={{ gap: 'var(--step-heading-gap, 4px)' }}>
-        {/* Above the title, not beside it: it qualifies the whole step rather than
+        <div className="flex flex-col" style={{ gap: 'var(--step-heading-gap, 4px)' }}>
+          {/* Above the title, not beside it: it qualifies the whole step rather than
             the heading, and it is the first thing worth knowing on a step you are
             allowed to walk straight past. */}
-        {tag && (
-          <div className="flex">
-            <TagV2
-              text={tag}
-              type={TagV2Type.SUBTLE}
-              subType={TagV2SubType.SQUARICAL}
-              color={TagV2Color.NEUTRAL}
-              size={TagV2Size.XS}
-            />
-          </div>
-        )}
-        <PrimitiveText
-          as="h1"
-          {...font(FOUNDATION_THEME.font.size.heading.md)}
-          color={colors.gray[700]}
-          fontWeight={FOUNDATION_THEME.font.weight[600]}
-        >
-          {title}
-        </PrimitiveText>
-        {description && (
-          // Measured, not full-bleed: the design breaks this into two lines against
-          // a 1110px table, and a single 1110px line of 14px copy is a worse read.
-          // The width goes on a wrapper — PrimitiveText builds its own style object
-          // from named props and never forwards a `style` (PrimitiveText.tsx:110).
-          <div style={{ maxWidth: DESCRIPTION_WIDTH }}>
-            <PrimitiveText
-              as="p"
-              {...font(FOUNDATION_THEME.font.size.body.md)}
-              color={colors.gray[500]}
-              fontWeight={FOUNDATION_THEME.font.weight[400]}
-            >
-              {description}
-            </PrimitiveText>
-          </div>
-        )}
-      </div>
+          {tag && (
+            <div className="flex">
+              <TagV2
+                text={tag}
+                type={TagV2Type.SUBTLE}
+                subType={TagV2SubType.SQUARICAL}
+                color={TagV2Color.NEUTRAL}
+                size={TagV2Size.XS}
+              />
+            </div>
+          )}
+          <PrimitiveText
+            as="h1"
+            {...font(FOUNDATION_THEME.font.size.heading.md)}
+            color={colors.gray[700]}
+            fontWeight={FOUNDATION_THEME.font.weight[600]}
+          >
+            {title}
+          </PrimitiveText>
+          {description && (
+            // Measured, not full-bleed: the design breaks this into two lines against
+            // a 1110px table, and a single 1110px line of 14px copy is a worse read.
+            // The width goes on a wrapper — PrimitiveText builds its own style object
+            // from named props and never forwards a `style` (PrimitiveText.tsx:110).
+            <div style={{ maxWidth: DESCRIPTION_WIDTH }}>
+              <PrimitiveText
+                as="p"
+                {...font(FOUNDATION_THEME.font.size.body.md)}
+                color={colors.gray[500]}
+                fontWeight={FOUNDATION_THEME.font.weight[400]}
+              >
+                {description}
+              </PrimitiveText>
+            </div>
+          )}
+        </div>
       </div>
 
       {current.id === 'setup' && <SetupStep answers={setup} onChange={changeSetup} />}
@@ -520,23 +532,28 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
           scroll, since without it a flex child floors at its content height and the
           overflow escapes to the page. */}
       <div className="relative flex min-h-0 flex-1 flex-col">
-          {/* Before the scroller in the DOM, so the rail is the first thing a keyboard reaches
+        {/* Before the scroller in the DOM, so the rail is the first thing a keyboard reaches
               under the bar — it is navigation, and it sits above the questions on screen.
               `.flow-rail` (index.css) takes it out of flow into the content column's left
               gutter, which `--flow-rail-gutter` on the root above keeps clear for it. */}
-          <nav className="flow-rail" aria-label="Report setup steps">
-            <StepRail
-              steps={STEPS.map(({ id, label, skipLabel }) => ({
-                label,
-                optional: skipLabel !== undefined,
-                answered: answeredFor(id),
-                confirmed: confirmed.has(id),
-              }))}
-              current={step}
-              onNavigate={setStep}
-            />
-          </nav>
+        <nav className="flow-rail" aria-label="Report setup steps">
+          <StepRail
+            steps={STEPS.map(({ id, label, skipLabel }) => ({
+              label,
+              optional: skipLabel !== undefined,
+              answered: answeredFor(id),
+              confirmed: confirmed.has(id),
+            }))}
+            current={step}
+            onNavigate={setStep}
+          />
+        </nav>
 
+        {/* The scroller and the help button share a box, so the button can sit in the
+            scroller's bottom-right corner — just above the footer, whatever the footer's
+            height — without being inside the thing that scrolls. Inside it, it would scroll
+            away with the questions. */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
           <div className="flex-1 overflow-auto" data-flow-content>
             {/* Keyed on the step so moving between them replays the arrival rather than
                 cross-fading one set of questions into another. */}
@@ -548,22 +565,31 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
               renderStep()
             )}
           </div>
+          <div className="absolute right-6 bottom-6">
+            {/* Keyed on the step, so moving to another page closes the panel and forgets
+                which answer was open — the questions it was showing belong to the page left. */}
+            <FaqLauncher key={current.id} step={current.id} />
+          </div>
+        </div>
 
-          <div
-            className="shrink-0 border-t"
-            style={{
-              borderColor: colors.gray[200],
-              backgroundColor: colors.gray[0],
-              boxShadow: FOUNDATION_THEME.shadows.md,
-            }}
-          >
-            {/* The same grid as the content, so Exit and the primary action sit on the
+        <div
+          className="shrink-0 border-t"
+          style={{
+            borderColor: colors.gray[200],
+            backgroundColor: colors.gray[0],
+            boxShadow: FOUNDATION_THEME.shadows.md,
+          }}
+        >
+          {/* The same grid as the content, so Exit and the primary action sit on the
                 column's own edges. The design draws this bar at 632px (node 4530:10452)
                 while its content column is wider — inset from it on both sides, which reads as
                 a mistake once the two are on screen together. Aligning them is the point of
-                a single measure. */}
-            <div className={COLUMN}>
-              <div className="flex items-center justify-between py-6">
+                a single measure.
+
+                16px above and below the 40px buttons — a 72px bar. It is chrome the flow's
+                content scrolls behind, so every pixel it gives back is one more of the step. */}
+          <div className={COLUMN}>
+            <div className="flex items-center justify-between py-4">
               {/* A ghost button (ghostButtonTokens, src/theme.ts): padded to the Back button's
                   height so the whole pill is clickable. Pulled 16px left so its label still
                   sits on the column edge, as the inline version did.
@@ -616,9 +642,9 @@ function ReportFlow({ flowVersion }: { flowVersion: FlowVersion }) {
                   }}
                 />
               </div>
-              </div>
             </div>
           </div>
+        </div>
       </div>
 
       <ExitFlowModal

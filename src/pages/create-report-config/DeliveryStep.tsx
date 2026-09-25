@@ -71,14 +71,8 @@ function ChannelCard({
   icon: Icon,
   checked,
   onToggle,
-  wide = false,
   children,
 }: {
-  /**
-   * Span two of the three tracks, open or closed. Email's recipient fields need the room;
-   * Slack's single channel name does not, so it keeps one column (node 4850:101697).
-   */
-  wide?: boolean
   id: string
   /** A lucide glyph, or an image src for a brand logo (see DELIVERY_CHANNELS). */
   icon: LucideIcon | string
@@ -89,9 +83,9 @@ function ChannelCard({
   const expanded = checked && children !== undefined
   return (
     <div
-      // A wide card spans two of the three tracks whether or not it is open, so ticking it
-      // grows it downward only rather than also sideways.
-      className={`flex w-full min-w-0 flex-col gap-4 border px-4 pt-3 ${wide ? 'col-span-2' : ''} ${expanded ? 'pb-4' : 'pb-3'}`}
+      // Two of the three tracks whether or not it is open, so ticking it grows it downward
+      // only rather than also sideways — and wide enough for Email's recipient fields.
+      className={`col-span-2 flex w-full min-w-0 flex-col gap-4 border px-4 pt-3 ${expanded ? 'pb-4' : 'pb-3'}`}
       style={{
         borderRadius: FOUNDATION_THEME.border.radius[8],
         borderColor: colors.gray[200],
@@ -182,7 +176,6 @@ export function DeliveryStep({
               key={option.id}
               option={option}
               selected={frequency === option.id}
-              dimmed={frequency !== null && frequency !== option.id}
               // Leaving a cadence drops its day, so a stale Monday or 15th cannot ride
               // along on another cadence and resurface if the first is picked again.
               //
@@ -232,13 +225,11 @@ export function DeliveryStep({
             <OptionCard
               option={specifiedTime}
               selected={timing === specifiedTime.id}
-              dimmed={timing !== null && timing !== specifiedTime.id}
               onSelect={() => onChange({ ...answers, timing: specifiedTime.id })}
             />
             <OptionCard
               option={immediately}
               selected={timing === immediately.id}
-              dimmed={timing !== null && timing !== immediately.id}
               onSelect={() => onChange({ ...answers, timing: immediately.id })}
             />
           </div>
@@ -345,26 +336,38 @@ export function DeliveryStep({
         </QuestionGroup>
       )}
 
+      {/* The step's two halves — when the report is sent, and where it goes — split by a
+          hairline. As a row of its own in the step's grid it takes the grid's 32px on either
+          side, so the two halves sit 64px apart with the line between them, where every
+          question inside a half keeps 32.
+
+          blend-gap: Blend 0.0.37 ships no divider component, so this is an <hr> in the
+          gray[200] the rest of the flow draws its hairlines in. Revealed with the channels, so
+          it never divides the page from nothing. */}
+      {timing !== null && (
+        <hr
+          className="flow-question m-0 border-0"
+          style={{
+            borderTop: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+          }}
+        />
+      )}
+
       {timing !== null && (
         <QuestionGroup label="Delivery channel">
-          {/* Email on a row of its own, then Slack and SFTP on the next. Each row is the same
-              three tracks as the cadence and timing rows, so the cards line up under Daily
-              and Weekly. Two grids rather than one: in a single grid a collapsed Email would
-              let SFTP flow up beside it. items-start: ticking Email grows it by its To field
-              without stretching anything beside it. */}
-          <div className="flex flex-col gap-4">
-          {[
-            DELIVERY_CHANNELS.filter(({ id }) => id === EMAIL_CHANNEL),
-            DELIVERY_CHANNELS.filter(({ id }) => id !== EMAIL_CHANNEL),
-          ].map((row) => (
-          <div key={row[0].id} className="grid grid-cols-3 items-start gap-4">
-            {row.map(({ id, icon }) => (
+          {/* One card per row, stacked: a list of channels you can tick any number of, read
+              top to bottom. Every card spans two of the same three tracks as the cadence and
+              timing rows, so the list lines up under Daily and Weekly — and a two-track card
+              leaves no room for the next beside it, so each wraps to a row of its own.
+              items-start: ticking a channel grows its card by its fields without stretching
+              anything else. */}
+          <div className="grid grid-cols-3 items-start gap-4">
+            {DELIVERY_CHANNELS.map(({ id, icon }) => (
               <ChannelCard
                 key={id}
                 id={id}
                 icon={icon}
                 checked={channels.includes(id)}
-                wide={id === EMAIL_CHANNEL}
                 onToggle={() =>
                   onChange({
                     ...answers,
@@ -389,15 +392,20 @@ export function DeliveryStep({
                   //
                   // The action opens the Configurator in a new tab rather than navigating:
                   // leaving this flow would throw away everything answered so far.
+                  //
+                  // Blue (PRIMARY) rather than red: nothing has gone wrong yet — it is a step
+                  // still to take, and the way to take it is right there.
                   <AlertV2
-                    type={AlertV2Type.ERROR}
+                    type={AlertV2Type.PRIMARY}
                     subType={AlertV2SubType.SUBTLE}
-                    // Kept to two lines in a one-column card.
                     description="No SFTP configuration found. Set one up to use SFTP."
                     actions={{
                       position: AlertV2ActionPosition.BOTTOM,
                       primaryAction: {
-                        text: 'Click here to configure',
+                        // ↗ says the click leaves for a new tab. blend-gap: AlertV2Action is
+                        // `{ text, onClick }` (alertV2.types.ts) with no slot for an icon, so
+                        // the arrow is a character in the label rather than a lucide glyph.
+                        text: 'Click here to configure ↗',
                         onClick: () => window.open('/configurator', '_blank', 'noopener'),
                       },
                     }}
@@ -405,8 +413,9 @@ export function DeliveryStep({
                     // AlertV2 shows its ✕ unless told otherwise (AlertV2.tsx:261).
                     closeButton={{ show: false }}
                     width="100%"
-                    // AlertV2's token floor is 300px (alertV2.light.tokens.ts:11), wider than
-                    // a one-column card's 275px content box, so it would run past the border.
+                    // AlertV2's token floor is 300px (alertV2.light.tokens.ts:11). The card is
+                    // wider than that now, but the floor would still overrun it on a narrow
+                    // window, where the tracks shrink.
                     // A string, not 0: AlertV2 falls back with `minWidth || token`
                     // (AlertV2.tsx:295), so a numeric 0 is ignored.
                     minWidth="0px"
@@ -441,8 +450,6 @@ export function DeliveryStep({
                 ) : undefined}
               </ChannelCard>
             ))}
-          </div>
-          ))}
           </div>
         </QuestionGroup>
       )}

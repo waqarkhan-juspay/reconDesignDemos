@@ -150,7 +150,6 @@ export function SetupStep({
                 title={option.title}
                 description={option.description}
                 selected={selected}
-                dimmed={category !== null && !selected}
                 onSelect={() => chooseCategory(option.id)}
                 // Hover replays it once — never on the chosen card, which stays still.
                 onPointerEnter={selected ? undefined : players[option.id].play}
@@ -182,7 +181,6 @@ export function SetupStep({
                 key={option.id}
                 option={option}
                 selected={sourceType === option.id}
-                dimmed={sourceType !== null && sourceType !== option.id}
                 onSelect={() => chooseSourceType(option.id)}
               />
             ))}
@@ -198,7 +196,6 @@ export function SetupStep({
                 key={option.id}
                 option={option}
                 selected={format === option.id}
-                dimmed={format !== null && format !== option.id}
                 onSelect={() => onChange({ ...answers, format: option.id })}
               />
             ))}

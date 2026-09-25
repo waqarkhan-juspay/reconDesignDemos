@@ -150,23 +150,9 @@ html {
   animation: flow-question-enter var(--flow-reveal) var(--flow-reveal-ease) both;
 }
 
-/*
- * Once a group has an answer its other options recede, so the eye lands on the question
- * still open. Hover returns a dimmed option to full — changing an earlier answer should not
- * become a hunt for something that faded.
- */
+/* The picked option's border arrives rather than snapping on. */
 .flow-card {
-  transition:
-    opacity var(--flow-feedback) var(--flow-feedback-ease),
-    border-color var(--flow-feedback) var(--flow-feedback-ease);
-}
-
-.flow-card[data-dimmed='true'] {
-  opacity: 0.5;
-}
-
-.flow-card[data-dimmed='true']:hover {
-  opacity: 1;
+  transition: border-color var(--flow-feedback) var(--flow-feedback-ease);
 }
 
 /* Reveal-only, so plain `none` is safe here — nothing waits on an animationend to unmount. */
@@ -767,6 +753,23 @@ button[aria-label='Close modal'] {
 }
 
 /*
+ * A renamed field's info glyph (ColumnOrganiser.tsx, RenamedGlyph), right after its name.
+ *
+ * TagV2 has a slot before its label and one after, and the one after is the chip's + / ✓. So
+ * the glyph rides in the left slot and is reordered here to follow the label, with
+ * `margin-right: auto` taking the chip's spare width so the + / ✓ stays at the far edge. Only
+ * a chip with a left slot has one, and nothing else in the palette uses it.
+ */
+.organiser-palette [data-tag] > [data-element='left-slot'] {
+  order: 1;
+  margin-right: auto;
+}
+
+.organiser-palette [data-tag] > [data-element='right-slot'] {
+  order: 2;
+}
+
+/*
  * The Grouping step's chips: a vertical list with one width floor.
  *
  * Same hook and the same reason as the rule above — TagV2 takes neither `className` nor
@@ -874,4 +877,104 @@ button[aria-label='Close modal'] {
   .organiser-action {
     transition: none;
   }
+}
+
+/*
+ * The FAQ panel's list (FaqLauncher.tsx) — AccordionV2, reached through the `data-element`
+ * hooks Blend puts on its own nodes, since AccordionV2Item takes neither `className` nor
+ * `style`. Every value arrives as a variable from FaqLauncher, so this file keeps none of its
+ * own (rule 1).
+ */
+
+/*
+ * The open question and its answer on one filled card. blend-gap: AccordionV2 has a token for
+ * an open *trigger* but none for the item, so the answer under it would stay white; and the
+ * trigger's token is skipped below `md`, where PopoverV2 is a drawer. So the fill goes on the
+ * item, by Radix's own `data-state`.
+ *
+ * `position: relative` anchors the divider below; Blend sets no position on the item.
+ */
+.faq-list [data-element='accordion-item'] {
+  position: relative;
+  transition: background-color var(--faq-ms) var(--faq-ease);
+}
+
+.faq-list [data-element='accordion-item'][data-state='open'] {
+  background-color: var(--faq-open-bg);
+}
+
+/*
+ * A hairline between questions, on the text's keyline rather than the card's edge — so it
+ * reads as separating two lines of text, and stops short of the rounded corners a filled card
+ * has there. Lighter than the stroke under the heading, which divides the panel; these only
+ * divide a list.
+ *
+ * Drawn on the lower item's top edge. It fades out beside a filled card — the open one, or the
+ * one under the pointer — where the card's own edge already does the separating, and a line
+ * touching a fill reads as a crease in it.
+ */
+.faq-list [data-element='accordion-item'] + [data-element='accordion-item']::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: var(--faq-inset);
+  right: var(--faq-inset);
+  height: var(--faq-divider-width);
+  background-color: var(--faq-divider);
+  transition: opacity var(--faq-ms) var(--faq-ease);
+}
+
+.faq-list [data-element='accordion-item'][data-state='open']::before,
+.faq-list [data-element='accordion-item'][data-state='open'] + [data-element='accordion-item']::before,
+.faq-list [data-element='accordion-item']:hover::before,
+.faq-list [data-element='accordion-item']:hover + [data-element='accordion-item']::before {
+  opacity: 0;
+}
+
+/*
+ * The chevron in a column of its own, beside the question rather than over it.
+ *
+ * blend-gap: AccordionV2 draws a right chevron `position: absolute` across the whole trigger
+ * (AccordionV2TriggerContent.tsx, ChevronContainer), with nothing reserving its width — so a
+ * question long enough to reach the right edge ran underneath it. Put back in the flow, it is
+ * a flex sibling of the question's column in the row Blend already lays out, and takes that
+ * row's own `content.gap` (8) from the text. `margin-left: auto` holds it at the right edge when
+ * the question is short. And the height of one line of the question, so it centres on the
+ * first line rather than floating between two.
+ *
+ * !important because Block writes both as styled-components rules of its own.
+ */
+.faq-list [data-element='chevron-icon'] {
+  position: static !important;
+  height: var(--faq-line) !important;
+  margin-left: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .faq-list [data-element='accordion-item'],
+  .faq-list [data-element='accordion-item'] + [data-element='accordion-item']::before {
+    transition: none;
+  }
+}
+
+/*
+ * The Data Transform modal's column tag (DataTransformModal.tsx), which ellipses rather than
+ * wraps. TagV2 fixes its height but lets its label wrap, and a column name can run to the
+ * length of a sentence — so the tag may shrink to the header's width, and its label clips
+ * inside it. The full name is the wrapper's `title`.
+ */
+.transform-column-tag {
+  display: flex;
+  min-width: 0;
+}
+
+.transform-column-tag [data-tag] {
+  max-width: 100%;
+}
+
+.transform-column-tag [data-tag] > [data-id] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
