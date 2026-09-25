@@ -176,7 +176,7 @@ const RENAMED_ICON_SIZE = 14
 function RenamedGlyph({ note }: { note: string }) {
   return (
     <span className="flex" onClick={(event) => event.stopPropagation()}>
-      <TooltipV2 content={note} side={TooltipV2Side.TOP} align={TooltipV2Align.START}>
+      <TooltipV2 content={note} side={TooltipV2Side.TOP} align={TooltipV2Align.CENTER}>
         <span className="flex cursor-default">
           <Info size={RENAMED_ICON_SIZE} color={colors.gray[400]} />
         </span>
