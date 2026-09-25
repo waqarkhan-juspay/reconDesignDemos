@@ -37,7 +37,6 @@ import {
   aggregationOf,
   aggregationsFor,
   dateFormatLabel,
-  describeTransform,
   fieldOf,
   sameField,
   SOURCE_DATE_FORMAT,
@@ -252,17 +251,21 @@ export function OrganiserRow({
    * user editing "Txn Date" is not handed "Txn Date [DD-MM-YYYY]" to pick apart), out of the
    * report's header and the Review chips, and correct after a transform without a rewrite.
    *
-   * Renaming moves it rather than dropping it: the name becomes the user's own words, and the
-   * format joins the info glyph's tooltip instead — `represents "Txn Date" [DD-MM-YYYY]` —
-   * which is where a renamed row keeps the facts about its field. Renaming back to the field's
-   * own name brings it back beside the name, since `renamed` is then false again.
+   * Renaming moves the source's format rather than dropping it: the name becomes the user's own
+   * words, and the format joins the info glyph's tooltip instead — `represents "Txn Date"
+   * [DD-MM-YYYY]` — which is where a renamed row keeps the facts about its field. A transformed
+   * date is the exception: the format it is rewritten to is a choice the user made, so it stays
+   * beside the name, renamed or not, and the tooltip keeps to the origin.
    */
   const dateFormat =
     transformKindOf(origin) === 'DATE'
       ? `[${dateFormatLabel(column.transform?.date ?? SOURCE_DATE_FORMAT)}]`
       : undefined
+  const showDateFormat = dateFormat !== undefined && (!renamed || column.transform?.date)
   /** The info glyph's tooltip. The curly quotes are the design's. */
-  const originNote = [`represents “${origin}”`, dateFormat].filter(Boolean).join(' ')
+  const originNote = [`represents “${origin}”`, !showDateFormat && dateFormat]
+    .filter(Boolean)
+    .join(' ')
 
   /** Past Z — see BADGE_WIDTH. Both halves of the row's left edge read this one flag. */
   const size = letter.length > 1 ? 'double' : 'single'
@@ -392,7 +395,7 @@ export function OrganiserRow({
                   </span>
                 </TooltipV2>
                 {/* Unshrinkable, for the reason above: a format cut to "[DD-MM-" says nothing. */}
-                {!renamed && dateFormat && (
+                {showDateFormat && (
                   <span style={{ ...META, color: colors.gray[500], flex: 'none' }}>
                     {dateFormat}
                   </span>
@@ -413,7 +416,7 @@ export function OrganiserRow({
                   <TooltipV2
                     content={originNote}
                     side={TooltipV2Side.TOP}
-                    align={TooltipV2Align.START}
+                    align={TooltipV2Align.CENTER}
                   >
                     <span
                       tabIndex={0}
@@ -441,24 +444,6 @@ export function OrganiserRow({
                       size={TagV2Size.SM}
                       subType={TagV2SubType.SQUARICAL}
                       color={TagV2Color.WARNING}
-                      type={TagV2Type.SUBTLE}
-                    />
-                  </span>
-                )}
-                {/* The column's values are rewritten on the way into the file — the one thing
-                  about it the row cannot otherwise show. Same shape and place as Custom; the
-                  tooltip (a native title — TagV2 has nowhere else to put one) says what the
-                  transform does. */}
-                {column.transform && (
-                  <span
-                    className="ml-1 flex shrink-0 self-center"
-                    title={describeTransform(column.transform)}
-                  >
-                    <TagV2
-                      text="Transformed"
-                      size={TagV2Size.SM}
-                      subType={TagV2SubType.SQUARICAL}
-                      color={TagV2Color.NEUTRAL}
                       type={TagV2Type.SUBTLE}
                     />
                   </span>

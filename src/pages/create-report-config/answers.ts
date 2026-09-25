@@ -392,8 +392,8 @@ export function reformatDate(value: string, format: DateFormat) {
 
 /**
  * The transform to store — with each half dropped when it says "as received", and `undefined`
- * when nothing is left, so a column the user opened and applied unchanged is not marked
- * Transformed.
+ * when nothing is left, so a column the user opened and applied unchanged carries no
+ * transform.
  */
 export function normaliseTransform(transform: DataTransform): DataTransform | undefined {
   const date =
@@ -402,30 +402,6 @@ export function normaliseTransform(transform: DataTransform): DataTransform | un
   const signs = transform.signs && transform.signs.rules.length > 0 ? transform.signs : undefined
   const next: DataTransform = { ...(date ? { date } : {}), ...(signs ? { signs } : {}) }
   return next.date || next.signs ? next : undefined
-}
-
-/** One line for what a transform does — the row's "Transformed" tag carries it as its tooltip. */
-export function describeTransform(transform: DataTransform) {
-  return [
-    transform.date && `Dates as ${dateFormatLabel(transform.date)}`,
-    transform.signs && describeSigns(transform.signs),
-  ]
-    .filter(Boolean)
-    .join(' · ')
-}
-
-const SIGN_WORD: Record<ValueSign, string> = { POSITIVE: 'positive', NEGATIVE: 'negative' }
-
-/** "Txn Type in Refund, Chargeback → negative; Txn Type equal to Order → positive". */
-function describeSigns({ rules }: SignRules) {
-  return rules
-    .map(
-      ({ column, condition, value, sign }) =>
-        [column, condition && conditionLabel(condition), value.join(', ')]
-          .filter(Boolean)
-          .join(' ') + (sign ? ` → ${SIGN_WORD[sign]}` : ''),
-    )
-    .join('; ')
 }
 
 /** The default title a freshly inserted column carries until it is renamed. */
