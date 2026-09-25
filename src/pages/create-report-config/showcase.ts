@@ -87,7 +87,7 @@ export const SHOWCASE_FIELDS: FieldsAnswers = {
     // A rate, with an aggregation only rates and measures offer.
     field('Success Rate', { aggregate: 'AVERAGE' }),
 
-    // Amount + transformed with a two-branch sign chain.
+    // Amount + transformed with a two-branch sign chain and an otherwise.
     field('Txn Amount', {
       aggregate: 'SUM',
       transform: {
@@ -96,6 +96,7 @@ export const SHOWCASE_FIELDS: FieldsAnswers = {
             rule('in', ['Refund', 'Chargeback'], 'NEGATIVE'),
             rule('equal to', ['Order'], 'POSITIVE'),
           ],
+          otherwise: 'POSITIVE',
         },
       },
     }),
@@ -103,7 +104,7 @@ export const SHOWCASE_FIELDS: FieldsAnswers = {
     renamed('Txn Amount', 'Gross Txn Amount', { aggregate: 'AVERAGE' }),
     // Renamed measure, short name.
     renamed('Fee', 'Processing Fee', { aggregate: 'SUM' }),
-    // Amount transformed by a single rule.
+    // Amount transformed by a single rule and no otherwise.
     field('Refund Amount', {
       aggregate: 'MIN',
       transform: { signs: { rules: [rule('equal to', ['Refund'], 'NEGATIVE')] } },

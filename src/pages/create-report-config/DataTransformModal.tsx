@@ -150,7 +150,7 @@ export function DataTransformModal({
       setSigns(
         transform?.signs && transform.signs.rules.length > 0
           ? transform.signs
-          : { rules: [newSignRule()] },
+          : { rules: [newSignRule()], otherwise: transform?.signs?.otherwise },
       )
     }
   }
