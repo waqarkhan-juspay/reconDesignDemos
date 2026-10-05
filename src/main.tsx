@@ -14,7 +14,7 @@ import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router'
 import './index.css'
-import { SHOW_DIALKIT, SHOW_MESURER } from './dev-tools'
+import { SHOW_DIALKIT, SHOW_INSPECTKIT, SHOW_MESURER } from './dev-tools'
 import { router } from './router.tsx'
 import { componentTokens } from './theme'
 
@@ -67,6 +67,25 @@ const Mesurer = SHOW_MESURER && import.meta.env.DEV
         // a package while the dev server is up and the next load is a 504 Outdated Optimize
         // Dep. So the failure degrades to "no inspector" and says why.
         console.warn('[mesurer] inspector did not load; continuing without it.', error)
+        return { default: () => null }
+      }
+    })
+  : null
+
+/**
+ * InspectKit — Mesurer's sibling: redlines, rulers, layout grids and a spacing lint. Loaded
+ * the way Mesurer is and for the same two reasons: the `lazy(…)` sits in the branch
+ * `import.meta.env.DEV` folds away, so nothing of it reaches `dist/` (the package's own
+ * `productionEnabled` guard only stops it *rendering*); and a failed load degrades to no
+ * inspector rather than a blank app. It ships no stylesheet, so there is only the one import.
+ */
+const InspectKit = SHOW_INSPECTKIT && import.meta.env.DEV
+  ? lazy(async () => {
+      try {
+        const { InspectKit } = await import('inspectkit')
+        return { default: InspectKit }
+      } catch (error) {
+        console.warn('[inspectkit] inspector did not load; continuing without it.', error)
         return { default: () => null }
       }
     })
@@ -135,6 +154,16 @@ createRoot(document.getElementById('root')!).render(
             overlay takes pointer events across the whole viewport, so the first click
             anywhere in the app is spent on the inspector instead of the app. */}
         <Mesurer initialState={{ enabled: false, minimized: true }} />
+      </Suspense>
+    )}
+    {/* Outside ThemeProvider for Mesurer's reason. It opens collapsed to a round button and
+        measures only while Option is held, so it costs the app nothing until asked.
+
+        The lint scale is the 4px grid (AGENTS.md rule 10). Its default — multiples of 8,
+        plus 4 — would flag every 12 and 20 Blend itself uses. */}
+    {InspectKit && (
+      <Suspense fallback={null}>
+        <InspectKit lint={{ base: 4 }} />
       </Suspense>
     )}
   </StrictMode>,

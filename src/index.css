@@ -488,6 +488,40 @@ html {
 }
 
 /*
+ * PACB stat cards, left-aligned.
+ *
+ * blend-gap: StatCardV2's NUMBER variant centres its content from 1024px up and takes no
+ * prop to stop it — `numberVariantAlignment` is hard-coded 'center' (StatCardV2.tsx:64) and
+ * set on three nested column containers: the top container, the data container, and the
+ * stats column under the title. Those three are the only column-direction boxes in the
+ * card, so they are the ones moved. The title row and value row are horizontal, and their
+ * `center` is what keeps the help icon and the value on one line with their text — left
+ * alone.
+ *
+ * This anchors on the card's DOM shape, which no prop describes. If a Blend upgrade
+ * reshapes StatCardV2, the cards go back to centred rather than breaking. The class is on
+ * the wrapper StatTile draws (src/pages/pacb/kit.tsx); the card's root is its `[role]`
+ * child — region, or button when the card is clickable.
+ */
+.pacb-stat-left > [role] > div,
+.pacb-stat-left > [role] > div > div,
+.pacb-stat-left > [role] > div > div > div:nth-child(2) {
+  align-items: flex-start;
+}
+
+/*
+ * blend-gap: StatCardV2 always draws its title above its value, with no prop for the order.
+ * `.pacb-stat-value-first` reverses the one flex column that holds the two — the title row
+ * (with its help icon) and the value — so the figure reads first and each keeps its own type
+ * and colour. Visual order only: the card's accessible name stays "title, value". Same DOM
+ * anchor as the rule above, and the same failure mode — a reshaped card simply keeps
+ * Blend's order.
+ */
+.pacb-stat-value-first > [role] > div > div {
+  flex-direction: column-reverse;
+}
+
+/*
  * The configuration summary card — see src/config-summary.tsx for what it is and why it is
  * composed rather than taken from Blend.
  *
@@ -977,4 +1011,13 @@ button[aria-label='Close modal'] {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * The content area as a size container, only while a full-bleed table is on the page
+ * (FullBleed in src/pages/pacb/kit.tsx), so `100cqw` there is the width beside the sidebar.
+ * `[data-main-content]` is the scroll element SidebarV2 renders around every page.
+ */
+[data-main-content]:has(.pacb-full-bleed) {
+  container-type: inline-size;
 }

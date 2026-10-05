@@ -3,6 +3,7 @@ import {
   FOUNDATION_THEME,
   getDirectoryTokens,
   getKeyValuePairV2Tokens,
+  getStatCardV2Tokens,
   getTableToken,
   type ComponentTokenType,
   type DirectoryTokenType,
@@ -774,3 +775,126 @@ export const detailSheetTokens: ComponentTokenType = {
     (token) => ({ ...token, gap: { ...token.gap, vertical: FOUNDATION_THEME.unit[8] } }),
   ) as unknown as ComponentTokenType['KEYVALUEPAIRV2'],
 }
+
+/**
+ * A stat card whose number is coloured by what it counts — the PACB pages draw Pending in
+ * orange, Staged and Settled in green, the pending amount in primary.
+ *
+ * StatCardV2 takes no colour for its value: `StatCardV2Value.tsx:125` reads
+ * `value[variant].color` from the token and nothing else reaches it. So each tone is a
+ * scoped token set, applied with a nested ThemeProvider around the card (see StatTile in
+ * src/pages/pacb/kit.tsx). Only the NUMBER variant's colour moves.
+ *
+ * Built once per tone at module load, not per render — a new object each render would hand
+ * ThemeProvider a new context value and re-render every card under it.
+ */
+/**
+ * `neutral` is Blend's own value colour (gray[800]); `gray` is one step lighter, gray[700],
+ * for a figure that should read as information rather than as a status — the Recon
+ * Summary's totals.
+ */
+export type StatTone = 'neutral' | 'gray' | 'warning' | 'success' | 'primary' | 'error'
+
+const STAT_TONE_COLOR: Record<StatTone, unknown> = {
+  neutral: FOUNDATION_THEME.colors.gray[800],
+  gray: FOUNDATION_THEME.colors.gray[700],
+  warning: FOUNDATION_THEME.colors.orange[500],
+  success: FOUNDATION_THEME.colors.green[600],
+  primary: FOUNDATION_THEME.colors.primary[600],
+  error: FOUNDATION_THEME.colors.red[600],
+}
+
+type StatCardValueToken = {
+  paddingTop: unknown
+  paddingBottom: unknown
+  topContainer: {
+    dataContainer: {
+      gap: unknown
+      titleContainer: { title: { fontSize: unknown; lineHeight: unknown } }
+      statsContainer: {
+        value: Record<string, { color: unknown; fontSize: unknown; lineHeight: unknown }>
+      }
+    }
+  }
+}
+
+/**
+ * How big a stat card's figure is.
+ * `regular` — Blend's NUMBER value, 32/38.
+ * `compact` — heading/lg, 24/32: the size Blend gives the value in its other two variants
+ *             (statcardV2.light.tokens.ts:47-56).
+ * `minimal` — one step down again on Blend's own scale throughout: the value at heading/sm
+ *             (18/24), the label at body/sm (12/18), 12px top and bottom, 2px between them.
+ *             For a card that reports beside a page title (20/28) rather than competing
+ *             with it.
+ */
+export type StatCardSize = 'regular' | 'compact' | 'minimal'
+
+/** A tone's colour at one of the sizes above — every size is a step on Blend's own scale. */
+const statCardTone = (color: unknown, size: StatCardSize = 'regular'): ComponentTokenType => ({
+  ...componentTokens,
+  STATCARDV2: perBreakpoint(
+    getStatCardV2Tokens(FOUNDATION_THEME) as unknown as Record<string, StatCardValueToken>,
+    (token) => {
+      const data = token.topContainer.dataContainer
+      const value = data.statsContainer.value
+      const valueSize =
+        size === 'minimal'
+          ? FOUNDATION_THEME.font.size.heading.sm
+          : size === 'compact'
+            ? FOUNDATION_THEME.font.size.heading.lg
+            : null
+      return {
+        ...token,
+        ...(size === 'minimal' && {
+          paddingTop: FOUNDATION_THEME.unit[12],
+          paddingBottom: FOUNDATION_THEME.unit[12],
+        }),
+        topContainer: {
+          ...token.topContainer,
+          dataContainer: {
+            ...data,
+            ...(size === 'minimal' && {
+              gap: FOUNDATION_THEME.unit[2],
+              titleContainer: {
+                ...data.titleContainer,
+                title: {
+                  ...data.titleContainer.title,
+                  fontSize: FOUNDATION_THEME.font.size.body.sm.fontSize,
+                  lineHeight: FOUNDATION_THEME.font.size.body.sm.lineHeight,
+                },
+              },
+            }),
+            statsContainer: {
+              ...data.statsContainer,
+              value: {
+                ...value,
+                number: {
+                  ...value.number,
+                  color,
+                  // The weight is already 600, the semiBold both heading sizes ask for.
+                  ...(valueSize && {
+                    fontSize: valueSize.fontSize,
+                    lineHeight: valueSize.lineHeight,
+                  }),
+                },
+              },
+            },
+          },
+        },
+      }
+    },
+  ) as unknown as ComponentTokenType['STATCARDV2'],
+})
+
+export const statCardToneTokens = Object.fromEntries(
+  Object.entries(STAT_TONE_COLOR).map(([tone, color]) => [tone, statCardTone(color)]),
+) as Record<StatTone, ComponentTokenType>
+
+export const compactStatCardToneTokens = Object.fromEntries(
+  Object.entries(STAT_TONE_COLOR).map(([tone, color]) => [tone, statCardTone(color, 'compact')]),
+) as Record<StatTone, ComponentTokenType>
+
+export const minimalStatCardToneTokens = Object.fromEntries(
+  Object.entries(STAT_TONE_COLOR).map(([tone, color]) => [tone, statCardTone(color, 'minimal')]),
+) as Record<StatTone, ComponentTokenType>

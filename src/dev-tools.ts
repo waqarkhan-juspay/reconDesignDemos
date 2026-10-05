@@ -22,5 +22,16 @@ export const SHOW_DIALKIT = true
  * the `import()` has to sit in the dead branch or it survives into the build as its own
  * 365 KB chunk however dead the JSX is. Same reason `import.meta.env.DEV` is spelled out
  * there rather than here.
+ *
+ * Off since 2026-10-01 while InspectKit (below) is tried in its place. Flip back to `true`.
  */
-export const SHOW_MESURER = true
+export const SHOW_MESURER = false
+
+/**
+ * InspectKit — Figma-style redlines, rulers with guides (Shift+R), layout grids (Shift+G)
+ * and a spacing lint (Shift+L). Measuring is Option-hover, so it never takes a plain click.
+ *
+ * Same `lazy()` bargain as Mesurer in main.tsx: the `import()` sits in the dead branch so
+ * none of it reaches the build. Added on the PACB branch on 2026-10-01.
+ */
+export const SHOW_INSPECTKIT = true

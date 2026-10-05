@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { createServer } from 'node:net'
 import { fileURLToPath, URL } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
@@ -79,9 +80,34 @@ function agentationServer(): Plugin {
   }
 }
 
+/**
+ * Where `/` lands, per git branch. A branch with a module in progress opens on that module,
+ * so `npm run dev` (and the preview pane, which opens the origin) start on the page being
+ * worked on. Every other branch — main and handoff included — keeps the app's own landing,
+ * which is why this is keyed on the branch rather than written into the router: merging
+ * PACB into main changes nothing on main.
+ *
+ * Read once, when the dev server starts — switch branches and restart it to pick up the
+ * change. No git (a tarball, a CI checkout in detached HEAD) means no override.
+ */
+const BRANCH_LANDING: Record<string, string> = {
+  PACB: '/pacb/generate-payment-info',
+}
+
+const gitBranch = () => {
+  try {
+    return execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  } catch {
+    return ''
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss(), ...(SHOW_AGENTATION ? [agentationServer()] : [])],
+  define: {
+    __BRANCH_LANDING__: JSON.stringify(BRANCH_LANDING[gitBranch()] ?? null),
+  },
   server: {
     // This project runs on 9000. Vite ignores $PORT by default, so read it
     // explicitly to leave a deliberate override available; strictPort then makes

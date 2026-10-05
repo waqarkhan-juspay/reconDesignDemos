@@ -6,10 +6,11 @@ import {
   TagV2Type,
   type DirectoryData,
 } from '@juspay/blend-design-system'
-import { BookOpen, House, MessageSquareCheck, User, Wrench } from 'lucide-react'
+import { BookOpen, FileSearch, House, MessageSquareCheck, User, Wrench } from 'lucide-react'
 import announcementIcon from '../assets/icons/announcement-01.svg'
 import globeIcon from '../assets/icons/globe-01.svg'
 import MaskIcon from '../components/MaskIcon'
+import { PACB_ROUTES } from '../pages/pacb/routes'
 import { ICON_SIZE } from './chrome'
 
 /**
@@ -40,6 +41,11 @@ export type NavigationOptions = {
    */
   isHomeActive: boolean
   isConfiguratorActive: boolean
+  /**
+   * The current path when it is one of the PACB pages, otherwise null — so moving between
+   * two non-PACB routes still leaves the tree's inputs unchanged.
+   */
+  activePacbPath: string | null
   /** Router push. Blend's NavItem does no routing of its own — see below. */
   navigate: (to: string) => void
 }
@@ -57,6 +63,7 @@ export type NavigationOptions = {
 export function buildNavigationData({
   isHomeActive,
   isConfiguratorActive,
+  activePacbPath,
   navigate,
 }: NavigationOptions): DirectoryData[] {
   return [
@@ -131,6 +138,20 @@ export function buildNavigationData({
           // Without this the item is absent from the mobile drawer, where the desktop
           // nav is display:none — i.e. unreachable between 320px and 1024px.
           showOnMobile: true,
+        },
+        {
+          // A parent row with nested `items`: Directory draws the chevron and the hierarchy
+          // line itself. The parent has no page of its own — clicking it only expands.
+          label: 'PACB Recon',
+          leftSlot: <FileSearch size={ICON_SIZE} />,
+          showOnMobile: true,
+          items: PACB_ROUTES.map(({ label, path }) => ({
+            label,
+            href: path,
+            onClick: () => navigate(path),
+            isSelected: activePacbPath === path,
+            showOnMobile: true,
+          })),
         },
       ],
     },
