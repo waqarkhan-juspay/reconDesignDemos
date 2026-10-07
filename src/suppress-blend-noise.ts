@@ -43,6 +43,15 @@ const SUPPRESSED: Rule[] = [
       '(Block.tsx:181) contains only `outline` — so it is forwarded to the DOM. Fires ' +
       'wherever a StepperV2 renders.',
   },
+  {
+    match: 'Cannot update a component (`%s`) while rendering a different component (`%s`)',
+    args: ['DataTable', 'TableHeader'],
+    why:
+      'DataTable/TableHeader/handlers.ts:197 calls onColumnFilter — which sets DataTable ' +
+      "state — from inside a setFilterState updater, and updaters run during TableHeader's " +
+      'render. Fires on every pick in a column header value filter (the Payment Info ' +
+      'Generator).',
+  },
   /*
    * The five below are one bug with five names, from V1 Drawer — which is what the report
    * config detail sheet uses, deliberately (see ConfigDetailSheet.tsx for why V1 and not

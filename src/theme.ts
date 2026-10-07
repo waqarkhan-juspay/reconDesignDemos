@@ -824,9 +824,10 @@ type StatCardValueToken = {
  * `compact` — heading/lg, 24/32: the size Blend gives the value in its other two variants
  *             (statcardV2.light.tokens.ts:47-56).
  * `minimal` — one step down again on Blend's own scale throughout: the value at heading/sm
- *             (18/24), the label at body/sm (12/18), 12px top and bottom, 2px between them.
- *             For a card that reports beside a page title (20/28) rather than competing
- *             with it.
+ *             (18/24), the label at body/sm (12/18), 2px between them. For a card that
+ *             reports beside a page title (20/28) rather than competing with it. Padding
+ *             stays Blend's 16 on every side, so the icon in the corner is square to both
+ *             edges.
  */
 export type StatCardSize = 'regular' | 'compact' | 'minimal'
 
@@ -846,10 +847,6 @@ const statCardTone = (color: unknown, size: StatCardSize = 'regular'): Component
             : null
       return {
         ...token,
-        ...(size === 'minimal' && {
-          paddingTop: FOUNDATION_THEME.unit[12],
-          paddingBottom: FOUNDATION_THEME.unit[12],
-        }),
         topContainer: {
           ...token.topContainer,
           dataContainer: {
@@ -898,3 +895,23 @@ export const compactStatCardToneTokens = Object.fromEntries(
 export const minimalStatCardToneTokens = Object.fromEntries(
   Object.entries(STAT_TONE_COLOR).map(([tone, color]) => [tone, statCardTone(color, 'minimal')]),
 ) as Record<StatTone, ComponentTokenType>
+
+/**
+ * A ramp step with its hue taken out: the same HSL lightness, zero saturation. Expects the
+ * `#RRGGBB` form every foundation colour ships in.
+ *
+ * blend-gap: Blend's gray ramp is a cool blue-gray at every step and the foundation has no
+ * neutral one, so a neutral surface is derived from a gray step rather than written as a
+ * literal — it keeps that step's lightness, and moves if the token does.
+ */
+export function desaturate(hex: string) {
+  const channels = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  const lightness = Math.round((Math.max(...channels) + Math.min(...channels)) / 2)
+  return `rgb(${lightness}, ${lightness}, ${lightness})`
+}
+
+/**
+ * Layout 6's range bar on the Payment Info Generator: gray[50] without its blue — a shade
+ * under the table header's gray[25], so the bar reads as the container's header band.
+ */
+export const NEUTRAL_BAND = desaturate(FOUNDATION_THEME.colors.gray[50]!)

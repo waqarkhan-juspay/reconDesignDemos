@@ -15,6 +15,7 @@ import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router'
 import './index.css'
 import { SHOW_DIALKIT, SHOW_INSPECTKIT, SHOW_MESURER } from './dev-tools'
+import { installDialKitReset } from './dialkit-reset'
 import { router } from './router.tsx'
 import { componentTokens } from './theme'
 
@@ -105,6 +106,10 @@ const InspectKit = SHOW_INSPECTKIT && import.meta.env.DEV
 // `!` because the token map is indexed and so types every ramp step as possibly missing;
 // gray[0] is white and has shipped in every version of the foundation.
 document.documentElement.style.setProperty('--app-surface', FOUNDATION_THEME.colors.gray[0]!)
+
+// A reset button beside every DialKit slider — see dialkit-reset.ts. Dev only, like the
+// panel itself: DialRoot renders nothing in a production build (productionEnabled).
+if (SHOW_DIALKIT && import.meta.env.DEV) installDialKitReset()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

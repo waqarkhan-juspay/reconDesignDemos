@@ -6,14 +6,77 @@
 
 import {
   ColumnType,
+  FOUNDATION_THEME,
   type ColumnDefinition,
   type DataTableProps,
   type DateRange,
   TagV2Color,
 } from '@juspay/blend-design-system'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { EMPTY } from './data'
 import { AmountCell, CopyableId, StatusTag, TruncatedId, type StatusColors } from './kit'
+
+// ─── Range panel ─────────────────────────────────────────────────────────────────────────
+
+const { colors } = FOUNDATION_THEME
+
+/**
+ * The bordered container a page's figures and table sit in.
+ *
+ * blend-gap: Blend has no section/panel container, so this is a Tailwind box drawn with the
+ * card tokens — 12px radius, gray[200] hairline.
+ */
+export const PANEL_STYLE: CSSProperties = {
+  border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+  borderRadius: FOUNDATION_THEME.border.radius[12],
+  backgroundColor: colors.gray[0],
+}
+
+/** The panel's rhythm, in px — the Payment Info Generator's tuned spacing defaults. */
+export type PanelSpacing = {
+  /** The range row to the panel it scopes — tighter than the title above the row. */
+  toolbarToPanel: number
+  /** Inside the panel, on all four sides. */
+  padding: number
+  /** Between the stat cards. */
+  cardGap: number
+  /** The cards to the table under them. */
+  cardsToTable: number
+}
+
+export const PANEL_SPACING: PanelSpacing = {
+  toolbarToPanel: 16,
+  padding: 24,
+  cardGap: 12,
+  cardsToTable: 32,
+}
+
+/**
+ * blend-gap: DataTable pads its own bordered box by 2px (dataTable.tokens.ts:552), so its
+ * edge sits 2px inside the cards' and the page's. A margin of this on the table's wrapper
+ * pulls it back out to share them.
+ */
+export const TABLE_OUTSET = `calc(-1 * ${FOUNDATION_THEME.unit[2]})`
+
+/**
+ * Columns sized to their content — pair with FIT_COLUMNS on the table's wrapper.
+ *
+ * Blend gives every column a minimum and a maximum by type — TEXT 120–250px, NUMBER
+ * 80–120px, which clips an amount in the crores — and never applies `width`, so both bounds
+ * come off here.
+ */
+export const hugColumns = <T extends Row>(columns: DataTableProps<T>['columns']) =>
+  columns.map((column) => ({ ...column, minWidth: '0px', maxWidth: 'none' }))
+
+/**
+ * blend-gap: no column-sizing mode. Every cell carries an inline `width: auto` and the table
+ * is `width: 100%` (utils.ts getColumnStyles, dataTable.tokens.ts), so the browser spreads
+ * spare width across all columns. `w-px` on every cell but the last makes each one shrink to
+ * its content, and the last takes what is left; `!` because Blend's width is inline.
+ * `nowrap` so a shrunk header keeps its label on one line.
+ */
+export const FIT_COLUMNS =
+  '[&_:is(th,td)]:!w-px [&_:is(th,td)]:whitespace-nowrap [&_:is(th,td):last-child]:!w-auto'
 
 // ─── Date range ──────────────────────────────────────────────────────────────────────────
 
@@ -186,8 +249,10 @@ export function useSelection() {
   /**
    * blend-gap: DataTable keeps its checkboxes in its own state and takes no prop to clear
    * them (DataTable.tsx:316), so clearing from outside the table — a Deselect all of our own —
-   * means remounting it. Pass `tableKey` as the table's `key`. Its sort goes back to the
-   * default with it; paging is ours (usePaged) and survives.
+   * means remounting it. Pass `tableKey` as the table's `key`. Everything else DataTable
+   * holds goes with it — its sort, which a page can hand back through `defaultSort`, and its
+   * header filters, which nothing can (see `deselectAll` in ReconSummary.tsx). Paging is
+   * ours (usePaged) and survives.
    */
   const clear = useCallback(() => {
     setSelected([])

@@ -27,6 +27,7 @@ import {
   type SortConfig,
 } from '@juspay/blend-design-system'
 import { useDialKit } from 'dialkit'
+import { spacingDial } from '../dev-tools'
 import { Trash2 } from 'lucide-react'
 import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
@@ -539,7 +540,7 @@ type TableRow = ReportConfigRow & {
 // A factory rather than five literals: it puts the range and the 4px step in one place,
 // and returns a mutable tuple, which is what DialKit's DialConfig wants — `as const` here
 // produces a readonly tuple and does not typecheck.
-const dial = (value: number): [number, number, number, number] => [value, 0, 96, 4]
+const dial = spacingDial
 
 const SPACING_DIALS = {
   aboveTitle: dial(24),

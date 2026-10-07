@@ -33,6 +33,7 @@ import {
 } from '@juspay/blend-design-system'
 import { Copy, X } from 'lucide-react'
 import type { CSSProperties, KeyboardEvent, MouseEvent, ReactElement, ReactNode } from 'react'
+import { FEEDBACK_EASING, MICRO_MS } from '../../motion'
 import { PrimitiveText, font } from '../../primitives'
 import {
   compactStatCardToneTokens,
@@ -42,10 +43,23 @@ import {
 } from '../../theme'
 import { EMPTY } from './data'
 import { formatRange } from './dates'
+import { PANEL_SPACING, PANEL_STYLE, type PanelSpacing } from './helpers'
 
 const { colors } = FOUNDATION_THEME
 
 // ─── Page frame ──────────────────────────────────────────────────────────────────────────
+
+/** Vertical rhythm of a PACB page, in px. A page with spacing dials passes its own. */
+type PacbPageSpacing = {
+  /** Above the title. */
+  top: number
+  /** Between the title row and each block under it. */
+  gap: number
+  /** Below the last block. */
+  bottom: number
+}
+
+const PAGE_SPACING: PacbPageSpacing = { top: 24, gap: 24, bottom: 24 }
 
 /**
  * Title on the left, the page's controls on the right, content below — the frame all three
@@ -56,13 +70,18 @@ export function PacbPage({
   title,
   actions,
   children,
+  spacing = PAGE_SPACING,
 }: {
   title: string
   actions?: ReactNode
   children: ReactNode
+  spacing?: PacbPageSpacing
 }) {
   return (
-    <div className="mx-auto flex w-full max-w-[1440px] flex-col gap-6 px-6 py-6">
+    <div
+      className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
+      style={{ paddingTop: spacing.top, paddingBottom: spacing.bottom, gap: spacing.gap }}
+    >
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
         <PrimitiveText
           as="h1"
@@ -90,6 +109,40 @@ export function SectionTitle({ children }: { children: ReactNode }) {
     >
       {children}
     </PrimitiveText>
+  )
+}
+
+// ─── Range panel ─────────────────────────────────────────────────────────────────────────
+
+/**
+ * The range on a row of its own under the page title, then the panel it scopes: the
+ * Payment Info Generator's layout 7, for any page whose figures and table share one range.
+ * `toolbar` is the row — the range picker on the left, and anything given `ml-auto` sits at
+ * the panel's right edge. The panel's children are spaced by `cardsToTable`.
+ */
+export function RangePanel({
+  label,
+  toolbar,
+  children,
+  spacing = PANEL_SPACING,
+}: {
+  /** The panel's accessible name — what it holds, and for which period. */
+  label: string
+  toolbar: ReactNode
+  children: ReactNode
+  spacing?: PanelSpacing
+}) {
+  return (
+    <div className="flex flex-col" style={{ gap: spacing.toolbarToPanel }}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{toolbar}</div>
+      <section
+        aria-label={label}
+        className="flex flex-col overflow-hidden"
+        style={{ ...PANEL_STYLE, padding: spacing.padding, gap: spacing.cardsToTable }}
+      >
+        {children}
+      </section>
+    </div>
   )
 }
 
@@ -199,7 +252,17 @@ export function StatTile({
         variant={StatCardV2Variant.NUMBER}
         title={title}
         value={value}
-        titleIcon={icon}
+        // blend-gap: StatCardV2 renders `titleIcon` bare (StatCardV2.tsx:192) with no colour
+        // of its own, so a lucide icon's `currentColor` resolved to black. Muted here to
+        // gray[500] — a step darker than the title's gray[400], so the glyph holds its shape
+        // at 16px without competing with the figure. An icon given its own `color` keeps it.
+        titleIcon={
+          icon && (
+            <span className="inline-flex" style={{ color: colors.gray[500] }}>
+              {icon}
+            </span>
+          )
+        }
         helpIconText={helpIconText}
         subtitle={subtitle}
         actionIcon={action}
@@ -239,13 +302,26 @@ export function StatTile({
   const layout = valueFirst ? 'pacb-stat-left pacb-stat-value-first' : 'pacb-stat-left'
   if (!onClick) return <div className={layout}>{card}</div>
 
-  // A clickable card also gets the affordance: the pointer, the value underlining as a
-  // link does on hover, and a focus ring on the card that holds focus. Colours come in as
-  // tokens through a custom property (rule 1).
+  // A clickable card also gets the affordance: the pointer, a hover state, and a focus ring
+  // on the card that holds focus. On hover a card's border steps up to gray[300] and it
+  // takes a gray[50] fill; a bare figure has neither to change, so its value dims instead.
+  // `!` because the card's own styled-components class is unlayered and beats Tailwind's
+  // utilities layer. Colours and timing come in as custom properties (rules 1 and 14).
+  const hover = bare
+    ? '[&:hover_[data-element=statcard-data]]:opacity-70'
+    : '[&_[role=button]:hover]:!border-[var(--stat-hover-border)] [&_[role=button]:hover]:!bg-[var(--stat-hover-bg)]'
   return (
     <div
-      className={`${layout} cursor-pointer [&:hover_[data-element=statcard-data]]:underline [&_[role=button]]:rounded-lg [&_[role=button]:focus-visible]:outline-2 [&_[role=button]:focus-visible]:outline-offset-4 [&_[role=button]:focus-visible]:outline-[var(--stat-focus)] [&_[role=button]:focus-visible]:outline-solid`}
-      style={{ '--stat-focus': colors.primary[500] } as CSSProperties}
+      className={`${layout} cursor-pointer ${hover} [&_[role=button]]:![transition:border-color_var(--stat-ms)_var(--stat-ease),background-color_var(--stat-ms)_var(--stat-ease)] [&_[role=button]]:rounded-lg [&_[role=button]:focus-visible]:outline-2 [&_[role=button]:focus-visible]:outline-offset-4 [&_[role=button]:focus-visible]:outline-[var(--stat-focus)] [&_[role=button]:focus-visible]:outline-solid`}
+      style={
+        {
+          '--stat-focus': colors.primary[500],
+          '--stat-hover-border': colors.gray[300],
+          '--stat-hover-bg': colors.gray[50],
+          '--stat-ms': `${MICRO_MS}ms`,
+          '--stat-ease': FEEDBACK_EASING,
+        } as CSSProperties
+      }
     >
       {card}
     </div>
@@ -334,7 +410,7 @@ export function TruncatedId({ value, keep = ID_KEEP_CHARS }: { value: string; ke
 }
 
 /**
- * An ID with a copy glyph after it: IDs, UTRs and file UUIDs are too long to retype, and one
+ * An ID with a copy glyph at the end of its cell: IDs, UTRs and file UUIDs are too long to retype, and one
  * cut in the middle cannot be selected whole, so the button is the way to take it elsewhere.
  * `truncate` cuts it to its ends (TruncatedId); off, it is drawn whole, for columns already
  * wide enough to hold it.
@@ -365,8 +441,11 @@ export function CopyableId({
         }),
     )
   if (!value || value === EMPTY) return <>{EMPTY}</>
+  // The full cell width with the glyph pushed to its end, so the glyphs down a column share
+  // one keyline. Placed straight after the text they would follow each value's width, and in
+  // a proportional face no two IDs are the same width.
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="flex w-full items-center justify-between gap-1.5">
       {truncate ? <TruncatedId value={value} /> : <span className="whitespace-nowrap">{value}</span>}
       <ButtonV2
         buttonType={ButtonV2Type.SECONDARY}
@@ -543,8 +622,27 @@ const TypedDataTable = DataTable as unknown as <T extends Row>(
   props: DataTableProps<T>,
 ) => ReactElement
 
+/**
+ * The whole checkbox cell selects, not only the 16px box in it.
+ *
+ * blend-gap: DataTable's checkbox fills a fraction of its 52px cell (TableBody), and a
+ * click on the rest of the cell is a click on the row — on a table with `onRowClick`, that
+ * opens the detail sheet when the user was aiming for the box. Clicks that land in the
+ * cell but miss the box are stopped before the row sees them and handed to the box.
+ * The header's select-all cell gets the same.
+ */
+function selectFromCell(event: MouseEvent<HTMLDivElement>) {
+  const target = event.target as Element
+  if (target.closest('[role="checkbox"]')) return
+  const cell = target.closest('tbody td:first-child, thead th:first-child')
+  const box = cell?.querySelector<HTMLElement>('[role="checkbox"]')
+  if (!box) return
+  event.stopPropagation()
+  box.click()
+}
+
 export function PacbTable<T extends Row>(props: DataTableProps<T>) {
-  return (
+  const table = (
     <TypedDataTable<T>
       enableColumnManager={false}
       enableColumnReordering={false}
@@ -552,5 +650,15 @@ export function PacbTable<T extends Row>(props: DataTableProps<T>) {
       showFooter={Boolean(props.pagination)}
       {...props}
     />
+  )
+  if (!props.enableRowSelection) return table
+  // `contents`, so the wrapper adds no box of its own to the layout.
+  return (
+    <div
+      className="contents [&_tbody_td:first-child]:cursor-pointer [&_thead_th:first-child]:cursor-pointer"
+      onClickCapture={selectFromCell}
+    >
+      {table}
+    </div>
   )
 }

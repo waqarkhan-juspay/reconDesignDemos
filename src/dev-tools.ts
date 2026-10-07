@@ -35,3 +35,14 @@ export const SHOW_MESURER = false
  * none of it reaches the build. Added on the PACB branch on 2026-10-01.
  */
 export const SHOW_INSPECTKIT = true
+
+/**
+ * A DialKit spacing slider: [default, min, max, step]. The 4px step keeps every value it can
+ * produce on the grid (rule 10). Shared by every page with spacing dials.
+ */
+export const spacingDial = (value: number, max = 96): [number, number, number, number] => [
+  value,
+  0,
+  max,
+  4,
+]

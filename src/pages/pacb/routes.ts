@@ -21,4 +21,6 @@ export const PACB_ROUTES: PacbRoute[] = [
     path: `${PACB_BASE_PATH}/escrow-to-oca-fund-movement`,
   },
   { label: 'PACB Workflow', path: `${PACB_BASE_PATH}/workflow` },
+  // A scratch copy of the workflow page to tinker with (PacbWorkflowSandbox.tsx).
+  { label: 'PACB Workflow (Sandbox)', path: `${PACB_BASE_PATH}/workflow-sandbox` },
 ]

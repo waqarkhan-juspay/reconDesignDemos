@@ -709,4 +709,28 @@ function padEscrow(count: number): EscrowRow[] {
   }))
 }
 
-export const ESCROW_ROWS: EscrowRow[] = [...ESCROW_SHOWN, ...padEscrow(6)]
+/**
+ * Movements raised but not yet made — no UTR and no approver until the funds move. Dated
+ * inside the default range, newest first, so the Pending figure has something to total.
+ * Their date sits in `settledAt`, the column the range filters on, as the time they were
+ * raised.
+ */
+function pendingEscrow(count: number): EscrowRow[] {
+  const rand = seeded(23)
+  return Array.from({ length: count }, (_, i) => ({
+    settlementId: `sid-${hex(rand, 32)}`,
+    entityId: 'AD_CITI',
+    settlementAmount: Math.round((rand() < 0.4 ? rand() * 2_200_000 : rand() * 30_000) * 100) / 100,
+    settlementStatus: 'PENDING' as const,
+    utrNo: EMPTY,
+    createdBy: i % 2 ? 'hyperpg_pragati_katiyar' : 'hyperpg_naveen_a',
+    approvedBy: EMPTY,
+    settledAt: ist(`2026-09-${pad(29 - Math.floor(i / 3))}`, `${pad(18 - i)}:${pad(Math.floor(rand() * 60))}`),
+  }))
+}
+
+export const ESCROW_ROWS: EscrowRow[] = [
+  ...pendingEscrow(5),
+  ...ESCROW_SHOWN,
+  ...padEscrow(6),
+]

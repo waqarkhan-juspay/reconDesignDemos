@@ -1,7 +1,7 @@
 import type { ComponentTokenType, ResponsiveModalV2Tokens } from '@juspay/blend-design-system'
 import { useDialKitController } from 'dialkit'
 import type { ReactNode } from 'react'
-import { SHOW_DIALKIT } from '../../dev-tools'
+import { SHOW_DIALKIT, spacingDial } from '../../dev-tools'
 import { componentTokens } from '../../theme'
 import { MODALV2_TOKENS } from '../../tokens/ModalV2'
 
@@ -70,8 +70,8 @@ const DEFAULTS = {
   preview: { paddingX: 12, paddingY: 8, iconGap: 12, itemGap: 8 },
 }
 
-/** [default, min, max, step] — a 4px step, so every value the dial can produce is on the grid. */
-const dial = (value: number, max = 48): [number, number, number, number] => [value, 0, max, 4]
+/** Capped at 48: the gaps inside one modal never need more. */
+const dial = (value: number) => spacingDial(value, 48)
 
 /**
  * MODALV2 with the header, body and footer paddings replaced — desktop (`lg`) only.

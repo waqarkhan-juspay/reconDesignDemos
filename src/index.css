@@ -1021,3 +1021,45 @@ button[aria-label='Close modal'] {
 [data-main-content]:has(.pacb-full-bleed) {
   container-type: inline-size;
 }
+
+/*
+ * DialKit's per-slider reset (src/dialkit-reset.ts). The slider is absolutely positioned
+ * across its whole row, with an inline width, so it is narrowed to leave a square for the
+ * button at the row's right end. Drawn on DialKit's own variables so it follows the panel's
+ * light and dark themes.
+ */
+.dialkit-slider-wrapper:has(> .dialkit-slider-reset) > .dialkit-slider {
+  width: calc(100% - var(--dial-row-height) - 4px) !important;
+}
+
+.dialkit-slider-reset {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--dial-row-height);
+  height: var(--dial-row-height);
+  border-radius: var(--dial-radius);
+  background: var(--dial-surface);
+  color: var(--dial-text-secondary);
+  cursor: pointer;
+}
+
+.dialkit-slider-reset:hover:not(:disabled) {
+  background: var(--dial-surface-hover);
+  color: var(--dial-text-primary);
+}
+
+.dialkit-slider-reset:focus-visible {
+  outline: 2px solid var(--dial-focus-ring);
+  outline-offset: 1px;
+}
+
+/* Already at its default: still there, so the rows stay aligned, but nothing to undo. */
+.dialkit-slider-reset:disabled {
+  color: var(--dial-text-tertiary);
+  opacity: 0.5;
+  cursor: default;
+}

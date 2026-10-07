@@ -10,6 +10,7 @@ import NotFound from './pages/NotFound.tsx'
 import EscrowToOca from './pages/pacb/EscrowToOca.tsx'
 import PacbPage from './pages/pacb/PacbPage.tsx'
 import PacbWorkflow from './pages/pacb/PacbWorkflow.tsx'
+import PacbWorkflowSandbox from './pages/pacb/PacbWorkflowSandbox.tsx'
 import ReconSummary from './pages/pacb/ReconSummary.tsx'
 import { PACB_ROUTES } from './pages/pacb/routes.ts'
 import { CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.tsx'
@@ -19,6 +20,7 @@ const PACB_PAGES: Record<string, ReactNode> = {
   'Payment Info Generator': <ReconSummary />,
   'Escrow to OCA Fund Movement': <EscrowToOca />,
   'PACB Workflow': <PacbWorkflow />,
+  'PACB Workflow (Sandbox)': <PacbWorkflowSandbox />,
 }
 
 export const router = createBrowserRouter([
