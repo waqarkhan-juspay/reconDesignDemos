@@ -35,7 +35,7 @@ import { MiddleTruncate } from '../middle-truncate'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
 import type { Categorised } from '../report-config'
-import { sectionTabsTokens } from '../theme'
+import { sectionTabsTokens, viewTabsTokens } from '../theme'
 
 const { colors } = FOUNDATION_THEME
 
@@ -1001,28 +1001,29 @@ function Configurator() {
               parent, which would stretch the tablist — and with it the triggers' hover and
               active targets — across several hundred pixels of dead space running to the
               button. TabsV2 takes no className (rule 2), so the width is capped on a wrapper
-              we own. It mattered more under BOXED, which painted that space grey; it still
-              matters now that the space is merely invisible rather than absent. */}
+              we own. Under BOXED it is also what keeps the grey track hugging the pair
+              instead of running to the button. */}
           <div className="w-fit shrink-0">
-            <TabsV2
-              // FLOATING: no track, no radius on the list, and the only mark is a fill under
-              // the tab you are on (gray[100] active, gray[50] on hover) — so the switch
-              // reads as two words, one of them current, rather than as a segmented control
-              // sitting on its own grey ground. The table below is what it changes, and this
-              // keeps the eye on that rather than on the chrome that chose it.
-              variant={TabsV2Variant.FLOATING}
-              size={TabsV2Size.LG}
-              value={view}
-              onValueChange={handleViewChange}
-            >
-              <TabsV2List>
-                {VIEW_TABS.map((label) => (
-                  <TabsV2Trigger key={label} value={label}>
-                    {label}
-                  </TabsV2Trigger>
-                ))}
-              </TabsV2List>
-            </TabsV2>
+            {/* Its own ThemeProvider for the track's 12px radius — viewTabsTokens. */}
+            <ThemeProvider componentTokens={viewTabsTokens}>
+              <TabsV2
+                // BOXED: a segmented control — the pair on a grey track, the tab you are on a
+                // white surface lifted out of it. It reads as one switch with two positions,
+                // which is what it is: the table below shows one set of rows or the other.
+                variant={TabsV2Variant.BOXED}
+                size={TabsV2Size.LG}
+                value={view}
+                onValueChange={handleViewChange}
+              >
+                <TabsV2List>
+                  {VIEW_TABS.map((label) => (
+                    <TabsV2Trigger key={label} value={label}>
+                      {label}
+                    </TabsV2Trigger>
+                  ))}
+                </TabsV2List>
+              </TabsV2>
+            </ThemeProvider>
           </div>
 
           {/* ButtonV2 sizes to its text; without this it is a flex item that can shrink

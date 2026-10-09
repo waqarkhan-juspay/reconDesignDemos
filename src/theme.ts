@@ -180,6 +180,33 @@ export const sectionTabsTokens: ComponentTokenType = {
   ) as unknown as ResponsiveTabsV2Tokens,
 }
 
+type BoxedTabsToken = {
+  tabList: { borderRadius: Record<'sm' | 'md' | 'lg', Record<string, unknown>> }
+}
+
+/**
+ * The Configurator's All Reports / Drafts switch — TabsV2 BOXED, a segmented control. Its
+ * grey track at the 12px radius (Blend: 8) so it rounds a step more than the 8px white tab
+ * sitting 4px inside it, the way nested corners should: an inner radius as large as the
+ * outer one makes the gap between them look pinched at the corners.
+ *
+ * Scoped by a nested ThemeProvider for the reason sectionTabsTokens gives — any other BOXED
+ * tabs keep Blend's radius.
+ */
+export const viewTabsTokens: ComponentTokenType = {
+  ...componentTokens,
+  TABSV2: perBreakpoint(TABSV2_TOKENS as unknown as Record<string, BoxedTabsToken>, (token) => ({
+    ...token,
+    tabList: {
+      ...token.tabList,
+      borderRadius: {
+        ...token.tabList.borderRadius,
+        lg: { ...token.tabList.borderRadius.lg, boxed: FOUNDATION_THEME.border.radius[12] },
+      },
+    },
+  })) as unknown as ResponsiveTabsV2Tokens,
+}
+
 type Sides = 'top' | 'right' | 'bottom' | 'left'
 /** Blend's own size keys — `ButtonV2Size` is `sm | md | lg` (buttonV2.types.ts:11). */
 type GhostSize = 'sm' | 'md' | 'lg'
