@@ -180,12 +180,49 @@ export const sectionTabsTokens: ComponentTokenType = {
   ) as unknown as ResponsiveTabsV2Tokens,
 }
 
+type UnderlineTabsPadding = Record<
+  'sm' | 'md' | 'lg',
+  Record<string, Record<'top' | 'right' | 'bottom' | 'left', unknown>>
+>
+/** `trigger` sits inside `tabList` in Blend's tree (tabsV2.tokens.ts), not beside it. */
+type UnderlineTabsToken = {
+  tabList: { gap: unknown; trigger: { padding: UnderlineTabsPadding } }
+}
+
+/**
+ * The Configurator's section tabs — TabsV2 UNDERLINE with no side padding on the tabs (Blend:
+ * 8px a side), so the first label starts on the page's keyline, with the toolbar and the
+ * table under it. The 16px that padding put between neighbours goes into the gap instead
+ * (8 → 24), so the labels sit as far apart as before. The indicator now spans the label
+ * alone.
+ */
+export const configSectionTabsTokens: ComponentTokenType = {
+  ...componentTokens,
+  TABSV2: perBreakpoint(TABSV2_TOKENS as unknown as Record<string, UnderlineTabsToken>, (token) => {
+    const { trigger } = token.tabList
+    const padding = Object.fromEntries(
+      Object.entries(trigger.padding).map(([size, variants]) => [
+        size,
+        { ...variants, underline: { ...variants.underline, left: 0, right: 0 } },
+      ]),
+    ) as unknown as UnderlineTabsPadding
+    return {
+      ...token,
+      tabList: {
+        ...token.tabList,
+        gap: FOUNDATION_THEME.unit[24],
+        trigger: { ...trigger, padding },
+      },
+    }
+  }) as unknown as ResponsiveTabsV2Tokens,
+}
+
 type BoxedTabsToken = {
   tabList: { borderRadius: Record<'sm' | 'md' | 'lg', Record<string, unknown>> }
 }
 
 /**
- * The Configurator's All Reports / Drafts switch — TabsV2 BOXED, a segmented control. Its
+ * The Configurator's Reports / Drafts switch — TabsV2 BOXED, a segmented control. Its
  * grey track at the 12px radius (Blend: 8) so it rounds a step more than the 8px white tab
  * sitting 4px inside it, the way nested corners should: an inner radius as large as the
  * outer one makes the gap between them look pinched at the corners.
