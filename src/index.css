@@ -167,6 +167,17 @@ html {
 }
 
 /*
+ * The Alerts table's Actions title, centred over the centred Edit / History pair.
+ *
+ * blend-gap: ColumnDefinition has no alignment — DataTable centres only its own built-in
+ * actions column — and the <th> carries `text-align: left` inline. The <p> holding the title
+ * is full-width and only inherits that, so setting it on the <p> is enough: no !important.
+ */
+.alerts-table th[data-element='table-header'][data-id='Actions'] p {
+  text-align: center;
+}
+
+/*
  * The create flow's content grid — one measure for every step.
  *
  * Every step's content sits in the `content` track, so the column never jumps as you walk

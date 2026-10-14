@@ -1,9 +1,10 @@
 import { Navigate, createBrowserRouter } from 'react-router'
 import App from './App.tsx'
+import Alerts from './pages/alerts'
 import Configurator from './pages/Configurator.tsx'
 import CreateReportConfig from './pages/create-report-config'
 import NotFound from './pages/NotFound.tsx'
-import { CONFIGURATOR_PATH } from './layout/navigation.tsx'
+import { ALERTS_PATH, CONFIGURATOR_PATH } from './layout/navigation.tsx'
 
 export const router = createBrowserRouter([
   {
@@ -16,6 +17,7 @@ export const router = createBrowserRouter([
       // forward again, trapping the user.
       { index: true, element: <Navigate to={CONFIGURATOR_PATH} replace /> },
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
+      { path: ALERTS_PATH.slice(1), element: <Alerts /> },
     ],
   },
   // Deliberately a sibling of the shell route, not a child: this flow is a full-screen
