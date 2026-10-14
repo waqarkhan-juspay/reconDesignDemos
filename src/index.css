@@ -301,6 +301,31 @@ html {
 }
 
 /*
+ * The Ledger table's column titles, aligned with what sits under them: the two money columns
+ * right-aligned over their figures, and Status and Recon centred over their tags and
+ * checkboxes. Actions stays left, over its left-aligned buttons. The same blend-gap and the
+ * same mechanism as the Alerts rule above.
+ */
+.ledger-table th[data-element='table-header'][data-id='Amount'] p,
+.ledger-table th[data-element='table-header'][data-id='Closing Balance'] p {
+  text-align: right;
+}
+.ledger-table th[data-element='table-header'][data-id='Status'] p,
+.ledger-table th[data-element='table-header'][data-id='Recon'] p {
+  text-align: center;
+}
+
+/* Ledger V2's: the money columns right, Status centred. Recon and Actions stay left over
+   their left-aligned content. */
+.ledger-table-v2 th[data-element='table-header'][data-id='Amount'] p,
+.ledger-table-v2 th[data-element='table-header'][data-id='Balance After'] p {
+  text-align: right;
+}
+.ledger-table-v2 th[data-element='table-header'][data-id='Status'] p {
+  text-align: center;
+}
+
+/*
  * …and the same for their size. DataTable writes `font-size: 12px` inline on the <th> and
  * again on the <p> inside it, with no prop reaching either, so both are named here and both
  * need !important. The values arrive as --header-size / --header-leading from FieldsStep,

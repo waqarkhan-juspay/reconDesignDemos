@@ -7,6 +7,9 @@ import Blend from './pages/Blend.tsx'
 import Configurator from './pages/Configurator.tsx'
 import CreateReportConfig from './pages/create-report-config'
 import Home from './pages/Home.tsx'
+import Ledger from './pages/ledger'
+import LedgerV1 from './pages/ledger/LedgerV1.tsx'
+import LedgerV2 from './pages/ledger/LedgerV2.tsx'
 import NotFound from './pages/NotFound.tsx'
 import EscrowToOca from './pages/pacb/EscrowToOca.tsx'
 import { PacbPage } from './pages/pacb/kit'
@@ -18,7 +21,13 @@ import { PLAYGROUND_ROUTES } from './pages/playground/routes.ts'
 import FormUploads from './pages/playground/FormUploads.tsx'
 import PaymentCards from './pages/playground/PaymentCards.tsx'
 import SettlementCards from './pages/playground/SettlementCards.tsx'
-import { ALERTS_PATH, CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.tsx'
+import {
+  ALERTS_PATH,
+  CONFIGURATOR_PATH,
+  HOME_PATH,
+  LEDGER_PATH,
+  LEDGER_V2_PATH,
+} from './layout/navigation.tsx'
 
 /** PACB pages by their nav label — the label is the route's identity (src/pages/pacb/routes.ts). */
 const PACB_PAGES: Record<string, ReactNode> = {
@@ -51,6 +60,17 @@ export const router = createBrowserRouter([
       { path: 'blend', element: <Blend /> },
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
       { path: ALERTS_PATH.slice(1), element: <Alerts /> },
+      // A layout route: Ledger holds the entries and the dialogs, and the version renders
+      // into its Outlet. Moving between v1 and v2 keeps the ledger as it was left.
+      {
+        path: LEDGER_PATH.slice(1),
+        element: <Ledger />,
+        children: [
+          { index: true, element: <Navigate to={LEDGER_V2_PATH} replace /> },
+          { path: 'v1', element: <LedgerV1 /> },
+          { path: 'v2', element: <LedgerV2 /> },
+        ],
+      },
       // A PACB route with no page of its own yet (LRS Files) falls back to the placeholder.
       ...PACB_ROUTES.map(({ label, path }) => ({
         path: path.slice(1),

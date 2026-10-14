@@ -28,6 +28,8 @@ import {
   ALERTS_PATH,
   CONFIGURATOR_PATH,
   HOME_PATH,
+  LEDGER_V1_PATH,
+  LEDGER_V2_PATH,
   buildNavigationData,
   expandableItemLabels,
 } from './navigation'
@@ -210,16 +212,28 @@ function AppShell({ children }: { children?: ReactNode }) {
       : isAlertsActive
         ? 'Alerts'
         : moduleRoute?.label
+  const isLedgerV1Active = pathname === LEDGER_V1_PATH
+  const isLedgerV2Active = pathname === LEDGER_V2_PATH
   const navigationData = useMemo(
     () =>
       buildNavigationData({
         isHomeActive,
         isConfiguratorActive,
         isAlertsActive,
+        isLedgerV1Active,
+        isLedgerV2Active,
         activeModulePath,
         navigate,
       }),
-    [isHomeActive, isConfiguratorActive, isAlertsActive, activeModulePath, navigate],
+    [
+      isHomeActive,
+      isConfiguratorActive,
+      isAlertsActive,
+      isLedgerV1Active,
+      isLedgerV2Active,
+      activeModulePath,
+      navigate,
+    ],
   )
   // Every nested menu starts open on this branch — see use-open-nested-menus.ts.
   useOpenNestedMenus(expandableItemLabels(navigationData))
