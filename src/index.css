@@ -178,6 +178,31 @@ html {
 }
 
 /*
+ * The Ledger table's column titles, aligned with what sits under them: the two money columns
+ * right-aligned over their figures, and Status and Recon centred over their tags and
+ * checkboxes. Actions stays left, over its left-aligned buttons. The same blend-gap and the
+ * same mechanism as the Alerts rule above.
+ */
+.ledger-table th[data-element='table-header'][data-id='Amount'] p,
+.ledger-table th[data-element='table-header'][data-id='Closing Balance'] p {
+  text-align: right;
+}
+.ledger-table th[data-element='table-header'][data-id='Status'] p,
+.ledger-table th[data-element='table-header'][data-id='Recon'] p {
+  text-align: center;
+}
+
+/* Ledger V2's: the money columns right, Status centred. Recon and Actions stay left over
+   their left-aligned content. */
+.ledger-table-v2 th[data-element='table-header'][data-id='Amount'] p,
+.ledger-table-v2 th[data-element='table-header'][data-id='Balance After'] p {
+  text-align: right;
+}
+.ledger-table-v2 th[data-element='table-header'][data-id='Status'] p {
+  text-align: center;
+}
+
+/*
  * The create flow's content grid — one measure for every step.
  *
  * Every step's content sits in the `content` track, so the column never jumps as you walk

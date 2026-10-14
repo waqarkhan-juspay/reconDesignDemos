@@ -20,7 +20,13 @@ import merchantOrb from '../assets/merchant-hyper-recon.png'
 import MaskIcon from '../components/MaskIcon'
 import { font } from '../primitives'
 import { CHROME_HOVER } from './chrome'
-import { ALERTS_PATH, CONFIGURATOR_PATH, buildNavigationData } from './navigation'
+import {
+  ALERTS_PATH,
+  CONFIGURATOR_PATH,
+  LEDGER_V1_PATH,
+  LEDGER_V2_PATH,
+  buildNavigationData,
+} from './navigation'
 import { TopbarStatusIcons } from './topbar'
 
 const { colors } = FOUNDATION_THEME
@@ -196,9 +202,18 @@ function AppShell({ children }: { children?: ReactNode }) {
 
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
   const isAlertsActive = pathname === ALERTS_PATH
+  const isLedgerV1Active = pathname === LEDGER_V1_PATH
+  const isLedgerV2Active = pathname === LEDGER_V2_PATH
   const navigationData = useMemo(
-    () => buildNavigationData({ isConfiguratorActive, isAlertsActive, navigate }),
-    [isConfiguratorActive, isAlertsActive, navigate],
+    () =>
+      buildNavigationData({
+        isConfiguratorActive,
+        isAlertsActive,
+        isLedgerV1Active,
+        isLedgerV2Active,
+        navigate,
+      }),
+    [isConfiguratorActive, isAlertsActive, isLedgerV1Active, isLedgerV2Active, navigate],
   )
 
   return (

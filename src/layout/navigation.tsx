@@ -6,7 +6,16 @@ import {
   TagV2Type,
   type DirectoryData,
 } from '@juspay/blend-design-system'
-import { BellRing, BookOpen, House, MessageSquareCheck, User, Wrench } from 'lucide-react'
+import {
+  BellRing,
+  BookCheck,
+  BookOpen,
+  BookText,
+  House,
+  MessageSquareCheck,
+  User,
+  Wrench,
+} from 'lucide-react'
 import announcementIcon from '../assets/icons/announcement-01.svg'
 import globeIcon from '../assets/icons/globe-01.svg'
 import MaskIcon from '../components/MaskIcon'
@@ -14,6 +23,14 @@ import { ICON_SIZE } from './chrome'
 
 export const CONFIGURATOR_PATH = '/configurator'
 export const ALERTS_PATH = '/alerts'
+/**
+ * The Ledger, in its two designs: V1 is the prototype as first rebuilt, V2 the reviewed one.
+ * Both are children of LEDGER_PATH, which holds the ledger they share — so an entry recorded
+ * in one is there in the other — and which on its own redirects to V2.
+ */
+export const LEDGER_PATH = '/ledger'
+export const LEDGER_V1_PATH = `${LEDGER_PATH}/v1`
+export const LEDGER_V2_PATH = `${LEDGER_PATH}/v2`
 
 /**
  * The collapsed sections below Reconciliation — node 4405:10766 draws each as a label and a
@@ -35,6 +52,8 @@ export type NavigationOptions = {
    */
   isConfiguratorActive: boolean
   isAlertsActive: boolean
+  isLedgerV1Active: boolean
+  isLedgerV2Active: boolean
   /** Router push. Blend's NavItem does no routing of its own — see below. */
   navigate: (to: string) => void
 }
@@ -45,13 +64,15 @@ export type NavigationOptions = {
  * so `href` alone goes nowhere and an `onClick` is required. `href` still earns its place —
  * cmd/ctrl-click bails out before that handler and opens the real URL in a new tab.
  *
- * Only Configurator and Alerts have routes. The rest are the design's labels, drawn so the
- * rail reads as the product's nav rather than the two pages that exist — they are
+ * Only Configurator, Alerts and the two Ledgers have routes. The rest are the design's labels,
+ * drawn so the rail reads as the product's nav rather than the pages that exist — they are
  * deliberately inert rather than pointing at a 404.
  */
 export function buildNavigationData({
   isConfiguratorActive,
   isAlertsActive,
+  isLedgerV1Active,
+  isLedgerV2Active,
   navigate,
 }: NavigationOptions): DirectoryData[] {
   return [
@@ -130,6 +151,24 @@ export function buildNavigationData({
           href: ALERTS_PATH,
           onClick: () => navigate(ALERTS_PATH),
           isSelected: isAlertsActive,
+          showOnMobile: true,
+        },
+        // Two icons, not one: the rail opens collapsed, where an item is only its icon, and
+        // two identical books would be told apart by hovering each.
+        {
+          label: 'Ledger v1',
+          leftSlot: <BookText size={ICON_SIZE} />,
+          href: LEDGER_V1_PATH,
+          onClick: () => navigate(LEDGER_V1_PATH),
+          isSelected: isLedgerV1Active,
+          showOnMobile: true,
+        },
+        {
+          label: 'Ledger v2',
+          leftSlot: <BookCheck size={ICON_SIZE} />,
+          href: LEDGER_V2_PATH,
+          onClick: () => navigate(LEDGER_V2_PATH),
+          isSelected: isLedgerV2Active,
           showOnMobile: true,
         },
       ],

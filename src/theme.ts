@@ -244,6 +244,36 @@ export const viewTabsTokens: ComponentTokenType = {
   })) as unknown as ResponsiveTabsV2Tokens,
 }
 
+type CountTabsToken = {
+  tabList: { trigger: { icon: Record<string, unknown> } & Record<string, unknown> }
+}
+
+/**
+ * viewTabsTokens with room for a count in a trigger's right slot — Ledger V2's All /
+ * Unreconciled / On Hold / In Progress switch.
+ *
+ * TabsV2 caps a slot at `trigger.icon.maxWidth` in both directions (StyledTabsV2.tsx:156-166),
+ * and that is 20px: sized for an icon, so a count chip of two digits is clipped mid-number.
+ * 40 holds three digits. Height is capped by the same value, so it rises with it, but the
+ * chip inside is 20px tall and sets the height itself.
+ */
+export const countTabsTokens: ComponentTokenType = {
+  ...viewTabsTokens,
+  TABSV2: perBreakpoint(
+    viewTabsTokens.TABSV2 as unknown as Record<string, CountTabsToken>,
+    (token) => ({
+      ...token,
+      tabList: {
+        ...token.tabList,
+        trigger: {
+          ...token.tabList.trigger,
+          icon: { ...token.tabList.trigger.icon, maxWidth: FOUNDATION_THEME.unit[40] },
+        },
+      },
+    }),
+  ) as unknown as ResponsiveTabsV2Tokens,
+}
+
 type Sides = 'top' | 'right' | 'bottom' | 'left'
 /** Blend's own size keys — `ButtonV2Size` is `sm | md | lg` (buttonV2.types.ts:11). */
 type GhostSize = 'sm' | 'md' | 'lg'
@@ -420,6 +450,23 @@ export const ghostButtonTokens = ghostButton('lg', {
  * gray[150] / gray[200] sit one step above the row instead.
  */
 export const smallGhostIconButtonTokens = ghostButton('sm', {
+  x: '8px',
+  y: '8px',
+  radius: FOUNDATION_THEME.border.radius[10],
+  hover: FOUNDATION_THEME.colors.gray[150],
+  active: FOUNDATION_THEME.colors.gray[200],
+})
+
+/**
+ * Ledger's row actions — icon-only ghosts at SMALL: 8px all round a 16px glyph, so each is a
+ * 32px square, the height of every other SMALL control on the page.
+ *
+ * Built on the inline ghost rather than IconButton, whose secondary SMALL is 9px of padding
+ * plus a 1px border — 36px, a step taller than the buttons and fields around it, and a box
+ * drawn around every action on every row. The fill is the Alerts row actions' gray[150] /
+ * gray[200], for the same reason: a hovered row is already gray[100].
+ */
+export const iconGhostButtonTokens = ghostButton('sm', {
   x: '8px',
   y: '8px',
   radius: FOUNDATION_THEME.border.radius[10],
