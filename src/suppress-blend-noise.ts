@@ -44,6 +44,21 @@ const SUPPRESSED: Rule[] = [
       'wherever a StepperV2 renders.',
   },
   {
+    match: 'React does not recognize the `%s` prop on a DOM element',
+    args: ['customMargin'],
+    why:
+      "DrawerBase.tsx's StyledContent is styled(VaulDrawer.Content) with no shouldForwardProp, " +
+      'so the `offSet` prop it renames to customMargin reaches the DOM. Fires wherever a ' +
+      'DrawerContent is given offSet — the PACB detail sheet (DetailSheet.tsx).',
+  },
+  {
+    match: 'React does not recognize the `%s` prop on a DOM element',
+    args: ['mobileOffset'],
+    why:
+      'Same StyledContent as customMargin above: mobileOffset is read for its styles and then ' +
+      'forwarded to the DOM. Fires wherever a DrawerContent is given mobileOffset.',
+  },
+  {
     match: 'Cannot update a component (`%s`) while rendering a different component (`%s`)',
     args: ['DataTable', 'TableHeader'],
     why:

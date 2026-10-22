@@ -2,7 +2,7 @@ import { useDialKit, useDialKitController } from 'dialkit'
 import { SHOW_DIALKIT, spacingDial } from '../../dev-tools'
 
 /**
- * Seven arrangements of the same four things — the two totals, the range, and Generate Payment
+ * Eight arrangements of the same four things — the two totals, the range, and Generate Payment
  * Info — around the one table. Nothing else on the page moves between them.
  *
  * `table`  — **Generate on the table.** The range sits with the title; the cards follow;
@@ -23,9 +23,23 @@ import { SHOW_DIALKIT, spacingDial } from '../../dev-tools'
  *            control over everything inside it, not one more control beside them.
  * `aligned` — **Range above the container.** Layout 6's container without its header band:
  *            the range and Generate sit on their own row above it, flush with the container's
- *            two edges. The default.
+ *            two edges.
+ * `open`   — **Range beside the title, no container.** Layout 7's contents with the
+ *            container's border and padding gone, and the range and Generate side by side at
+ *            the title's right. Like layout 2, but the cards and table keep layout 7's own
+ *            spacing (cardsToTable) and stay one named section. Neither selection bar: the
+ *            ticked rows' Mark Ready and Revert to Hold sit on a row of their own between the
+ *            cards and the table, at its right. The default since 2026-10-21.
  */
-export type ReconLayout = 'table' | 'header' | 'strip' | 'inline' | 'rail' | 'scoped' | 'aligned'
+export type ReconLayout =
+  | 'table'
+  | 'header'
+  | 'strip'
+  | 'inline'
+  | 'rail'
+  | 'scoped'
+  | 'aligned'
+  | 'open'
 
 const LAYOUTS: { value: ReconLayout; label: string }[] = [
   { value: 'table', label: '1 — Generate on the table' },
@@ -34,11 +48,12 @@ const LAYOUTS: { value: ReconLayout; label: string }[] = [
   { value: 'inline', label: '4 — Minimal, no cards' },
   { value: 'rail', label: '5 — Summary rail' },
   { value: 'scoped', label: '6 — Date range scopes the page' },
-  // The default since 2026-10-05.
   { value: 'aligned', label: '7 — Range above the container' },
+  // The default since 2026-10-21.
+  { value: 'open', label: '8 — Range beside the title, no container' },
 ]
 
-const DEFAULT: ReconLayout = 'aligned'
+const DEFAULT: ReconLayout = 'open'
 
 /**
  * `lean` — without AD UTR No, Merchant UTR No and Settlement ID, which are empty until
@@ -55,8 +70,9 @@ const COLUMN_SETS: { value: ReconColumnSet; label: string }[] = [
 const DEFAULT_COLUMNS: ReconColumnSet = 'lean'
 
 /**
- * `label-first` — Blend's order: "Pending Amount" over the figure. The default.
- * `value-first` — the figure over its label, each keeping its own type and colour.
+ * `label-first` — Blend's order: "Pending Amount" over the figure.
+ * `value-first` — the figure over its label, each keeping its own type and colour. The default
+ *                 since 2026-10-08.
  */
 export type ReconCardOrder = 'label-first' | 'value-first'
 
@@ -65,12 +81,12 @@ const CARD_ORDERS: { value: ReconCardOrder; label: string }[] = [
   { value: 'value-first', label: 'Version 2 — Value above label' },
 ]
 
-const DEFAULT_CARD_ORDER: ReconCardOrder = 'label-first'
+const DEFAULT_CARD_ORDER: ReconCardOrder = 'value-first'
 
 /**
  * `minimal` — value 18/24, label 12/18, tighter padding: figures that report beside the page
- *             title rather than outweigh it. The default since 2026-10-01.
- * `regular` — the value at 24/32, label 14/20, as the cards were before.
+ *             title rather than outweigh it.
+ * `regular` — the value at 24/32, label 14/20. The default since 2026-10-08.
  */
 export type ReconCardSize = 'minimal' | 'regular'
 
@@ -79,15 +95,17 @@ const CARD_SIZES: { value: ReconCardSize; label: string }[] = [
   { value: 'minimal', label: 'Version 2 — Minimal (18px value)' },
 ]
 
-const DEFAULT_CARD_SIZE: ReconCardSize = 'minimal'
+const DEFAULT_CARD_SIZE: ReconCardSize = 'regular'
 
 /**
  * Where the actions for the ticked rows — Mark Ready, Revert to Hold, Deselect all — appear.
+ * Layout 8 ignores this dial: it has a row of its own for them (see `open` above).
  *
  * `above`  — our SelectionBar (kit.tsx), a bar of its own above the table that pushes the
- *            rows down while anything is ticked. The default.
+ *            rows down while anything is ticked.
  * `inside` — DataTable's own BulkActionBar, floating over the rows inside the table's box,
- *            with the same actions handed in as its `customActions`.
+ *            with the same actions handed in as its `customActions`. The default since
+ *            2026-10-08.
  */
 export type ReconSelectionBar = 'above' | 'inside'
 
@@ -96,7 +114,21 @@ const SELECTION_BARS: { value: ReconSelectionBar; label: string }[] = [
   { value: 'inside', label: 'Version 2 — Inside the table (Blend)' },
 ]
 
-const DEFAULT_SELECTION_BAR: ReconSelectionBar = 'above'
+const DEFAULT_SELECTION_BAR: ReconSelectionBar = 'inside'
+
+/** The figure cards' StatTile props for a card order and size. */
+export const statCardProps = (order: ReconCardOrder, size: ReconCardSize) => ({
+  compact: true,
+  tone: 'gray' as const,
+  valueFirst: order === 'value-first',
+  minimal: size === 'minimal',
+})
+
+/**
+ * The figure cards as the defaults draw them, for pages without these dials — Escrow to OCA
+ * uses it, so its cards stay the Payment Info Generator's as the defaults move.
+ */
+export const DEFAULT_STAT_CARD = statCardProps(DEFAULT_CARD_ORDER, DEFAULT_CARD_SIZE)
 
 /** Stable, so every visit shares one saved value — see flow-layout.tsx. */
 const PANEL_ID = 'recon-summary-layout'
@@ -147,7 +179,8 @@ const dial = spacingDial
 
 /**
  * Every gap between the page's main pieces, in px, top to bottom. The defaults were tuned
- * on these dials on 2026-10-05. contentPadding and cardsToTable are the container in layouts
+ * on these dials on 2026-10-05, titleToContent and cardsToTable again on
+ * 2026-10-09. contentPadding and cardsToTable are the container in layouts
  * 6 and 7; barPadding and barToCards are layout 6's header band (contentPadding is then its
  * sides and bottom, barToCards its top). Layout 7 has no band — contentPadding is all four
  * sides. Elsewhere the cards and table are the page's own
@@ -159,14 +192,14 @@ const dial = spacingDial
  */
 const SPACING_DIALS = {
   pageTop: dial(24),
-  titleToContent: dial(24),
+  titleToContent: dial(32),
   barToContainer: dial(16),
   barPaddingX: dial(24),
   barPaddingY: dial(24),
   barToCards: dial(32),
   contentPadding: dial(24),
   cardGap: dial(12),
-  cardsToTable: dial(32),
+  cardsToTable: dial(16),
   selectionToTable: dial(12),
   pageBottom: dial(24),
 }

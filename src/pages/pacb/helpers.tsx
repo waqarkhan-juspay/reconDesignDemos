@@ -5,8 +5,10 @@
  */
 
 import {
+  addSnackbarV2,
   ColumnType,
   FOUNDATION_THEME,
+  SnackbarV2Variant,
   type ColumnDefinition,
   type DataTableProps,
   type DateRange,
@@ -16,9 +18,63 @@ import { useCallback, useMemo, useState, type CSSProperties, type ReactNode } fr
 import { EMPTY } from './data'
 import { AmountCell, CopyableId, StatusTag, TruncatedId, type StatusColors } from './kit'
 
+/**
+ * Copies a value, toasting only if the browser refuses — clipboard access can be blocked. The
+ * control that called it shows its own "Copied". `label` names the value in the failure
+ * message. Resolves to whether the copy went through.
+ */
+export const copyToClipboard = (value: string, label: string) =>
+  navigator.clipboard.writeText(value).then(
+    () => true,
+    () => {
+      addSnackbarV2({
+        header: `Couldn't copy the ${label}`,
+        description: 'The browser blocked clipboard access.',
+        variant: SnackbarV2Variant.ERROR,
+      })
+      return false
+    },
+  )
+
+/** Hands the browser a file to save. */
+/** Lines of plain text as a file — the demo's stand-in for an artefact it cannot fetch. */
+export const downloadText = (lines: string[], name: string) =>
+  downloadBlob(new Blob([lines.join('\n')], { type: 'text/plain' }), name)
+
+export function downloadBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
+/** Rows as CSV, one column per [header, value] pair — values quoted where they need it. */
+export function toCsv<T>(rows: T[], columns: [header: string, value: (row: T) => unknown][]) {
+  const cell = (value: unknown) => {
+    const text = String(value ?? '')
+    return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+  }
+  return [
+    columns.map(([header]) => cell(header)).join(','),
+    ...rows.map((row) => columns.map(([, value]) => cell(value(row))).join(',')),
+  ].join('\n')
+}
+
 // ─── Range panel ─────────────────────────────────────────────────────────────────────────
 
 const { colors } = FOUNDATION_THEME
+
+/**
+ * The PACB Workflow's selection surface: the selected payment row and the payment detail
+ * panel it opens, so the two read as one. Off Blend's palette on purpose — the nearest token,
+ * gray[50], is #F5F7FA, which is blue-tinted; this neutral grey was asked for on 2026-10-08.
+ */
+export const SELECTION_SURFACE = '#F7F7F7'
+
+/** The module's 1px gray[200] rule — panel and card borders, column and header dividers. */
+export const HAIRLINE = `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`
 
 /**
  * The bordered container a page's figures and table sit in.
@@ -27,7 +83,7 @@ const { colors } = FOUNDATION_THEME
  * card tokens — 12px radius, gray[200] hairline.
  */
 export const PANEL_STYLE: CSSProperties = {
-  border: `${FOUNDATION_THEME.border.width[1]} solid ${colors.gray[200]}`,
+  border: HAIRLINE,
   borderRadius: FOUNDATION_THEME.border.radius[12],
   backgroundColor: colors.gray[0],
 }
@@ -99,7 +155,6 @@ export function inRange(iso: string, { startDate, endDate }: DateRange) {
   return dayOf >= start && dayOf <= end
 }
 
-
 /**
  * An IST timestamp as the tables show it — "Sep 29, 2026 12:14 PM (IST)" — for the places
  * outside a DataTable that have no DATE column to do it (the detail sheet).
@@ -125,8 +180,61 @@ export const STAT_ICON = 16
 
 type Row = Record<string, unknown>
 
-export const amount = (value: number) =>
-  value.toLocaleString('en-US', { maximumFractionDigits: 3 })
+export const amount = (value: number) => value.toLocaleString('en-US', { maximumFractionDigits: 3 })
+
+const ordinal = (day: number) => {
+  if (day % 100 >= 11 && day % 100 <= 13) return `${day}th`
+  return `${day}${['th', 'st', 'nd', 'rd'][day % 10] ?? 'th'}`
+}
+
+const IST_PARTS = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Kolkata',
+  day: 'numeric',
+  month: 'short',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hourCycle: 'h23',
+})
+
+/**
+ * "28th Sep 2026 ⋅ 18:41", in IST whatever the viewer's time zone — the cards' timestamp.
+ * The "(IST)" is the caller's, since one card greys it and another does not. The parts come
+ * from en-US because en-GB abbreviates September to "Sept".
+ */
+export function istStamp(iso: string) {
+  const part = istParts(iso)
+  return `${istDay(iso)} ⋅ ${part.hour}:${part.minute}`
+}
+
+/** "28th Sep 2026" — istStamp's date alone, for the settlement cards (version 2). */
+export function istDay(iso: string) {
+  const part = istParts(iso)
+  return `${ordinal(Number(part.day))} ${part.month} ${part.year}`
+}
+
+const istParts = (iso: string) =>
+  Object.fromEntries(
+    IST_PARTS.formatToParts(new Date(iso)).map(({ type, value }) => [type, value]),
+  ) as Record<string, string>
+
+const IST_SHORT_DATE = new Intl.DateTimeFormat('en-GB', {
+  timeZone: 'Asia/Kolkata',
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+})
+
+/** "28/09/26", in IST — version 3's card date. */
+export const istShortDate = (iso: string) => IST_SHORT_DATE.format(new Date(iso))
+
+const RUPEES = new Intl.NumberFormat('en-IN', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
+/** "₹27,23,731.75" — rupees in Indian digit grouping, always two decimals. For the cards. */
+export const rupees = (value: number) => `₹${RUPEES.format(value)}`
 
 /**
  * Money in a column: never fewer than two decimals, so 2,014,429.3 reads 2,014,429.30 and

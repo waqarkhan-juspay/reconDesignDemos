@@ -4,17 +4,13 @@
  */
 
 import type { DateRange } from '@juspay/blend-design-system'
-import { Hourglass, Zap } from 'lucide-react'
-import { useMemo, useState } from 'react'
-import { ESCROW_ROWS, type EscrowRow } from './data'
-import { formatRange } from './dates'
-import {
-  PacbPage,
-  PacbTable,
-  RangePanel,
-  RangePicker,
-  StatTile,
-} from './kit'
+import { Clock, Hourglass, Layers, Zap } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { PAGE_EASING, PAGE_MS } from '../../motion'
+import { ESCROW_AS_OF, ESCROW_ROWS, type EscrowRow } from './data'
+import { DAY_MS, formatRange } from './dates'
+import { PacbPage, PacbTable, RangePicker, StatTile } from './kit'
+import { DEFAULT_STAT_CARD } from './recon-summary-layout'
 import {
   FIT_COLUMNS,
   PANEL_SPACING,
@@ -47,45 +43,114 @@ const COLUMNS = hugColumns([
   dateCol<EscrowRow>('settledAt', 'Settled At'),
 ])
 
+/** Pending for more than a day, as of the demo's clock (ESCROW_AS_OF in data.ts). */
+const isOverdue = (row: EscrowRow) =>
+  row.settlementStatus !== 'SUCCESS' &&
+  Date.parse(ESCROW_AS_OF) - Date.parse(row.settledAt) > DAY_MS
+
+const isPending = (row: EscrowRow) => row.settlementStatus !== 'SUCCESS'
+
+/**
+ * What a card narrows the table to, one key per card. Pending Amount and Pending Settlements
+ * filter to the same rows, but each is its own toggle — only the card clicked lights up.
+ */
+type CardFilter = 'PENDING_AMOUNT' | 'PENDING_COUNT' | 'SETTLED' | 'OVERDUE'
+
+const FILTERS: Record<CardFilter, (row: EscrowRow) => boolean> = {
+  PENDING_AMOUNT: isPending,
+  PENDING_COUNT: isPending,
+  SETTLED: (row) => row.settlementStatus === 'SUCCESS',
+  OVERDUE: isOverdue,
+}
+
 const sum = (rows: EscrowRow[]) =>
   Math.round(rows.reduce((total, row) => total + row.settlementAmount, 0) * 100) / 100
 
 function EscrowToOca() {
   const [range, setRange] = useState<DateRange>(() => rangeOf('2026-09-22', '2026-09-29'))
+  // Which card the table is narrowed to; clicking the same card again clears it.
+  const [filter, setFilter] = useState<CardFilter | null>(null)
   const visible = useMemo(() => ESCROW_ROWS.filter((row) => inRange(row.settledAt, range)), [range])
-  const { pageRows, pagination } = usePaged(visible)
+  const shown = useMemo(
+    () => (filter ? visible.filter(FILTERS[filter]) : visible),
+    [visible, filter],
+  )
+  const { pageRows, pagination } = usePaged(shown)
 
-  const settled = visible.filter((row) => row.settlementStatus === 'SUCCESS')
-  const pending = visible.filter((row) => row.settlementStatus !== 'SUCCESS')
+  const settled = visible.filter(FILTERS.SETTLED)
+  const pending = visible.filter(isPending)
+  const overdue = visible.filter(FILTERS.OVERDUE)
 
-  // The Payment Info Generator's layout: the range on its own row under the title, then one
-  // panel holding the figures and the table it scopes. Read-only, so the row has no action.
+  // The figures always count the whole range — a card says what is there to filter to, not
+  // what the table currently shows.
+  //
+  // Every click also flickers the table once, so it reads as refreshed — even when the rows do
+  // not change, as going from Pending Amount to Pending Settlements does not. The Web
+  // Animations API restarts it on every click without remounting the table (which would drop
+  // its own header state); reduced motion skips it.
+  const tableRef = useRef<HTMLDivElement>(null)
+  const refreshTable = () => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    tableRef.current?.animate([{ opacity: 0.2 }, { opacity: 1 }], {
+      duration: PAGE_MS,
+      easing: PAGE_EASING,
+    })
+  }
+  const card = (key: CardFilter) => ({
+    pressed: filter === key,
+    onClick: () => {
+      setFilter((current) => (current === key ? null : key))
+      refreshTable()
+    },
+  })
+
+  // The Payment Info Generator's layout 8: the range at the title's right, then the figures
+  // and the table it scopes as one section with no border or padding of its own, so both
+  // line up with the title. Read-only, so the range is the only control.
   return (
-    <PacbPage title="Escrow to OCA Fund Movement">
-      <RangePanel
-        label={`Escrow to OCA fund movement for ${formatRange(range.startDate, range.endDate)}`}
-        toolbar={<RangePicker value={range} onChange={setRange} />}
+    <PacbPage
+      title="Escrow to OCA Fund Movement"
+      actions={<RangePicker value={range} onChange={setRange} />}
+    >
+      <section
+        aria-label={`Escrow to OCA fund movement for ${formatRange(range.startDate, range.endDate)}`}
+        className="flex flex-col"
+        style={{ gap: PANEL_SPACING.cardsToTable }}
       >
         <div
-          className="grid grid-cols-1 sm:grid-cols-2"
+          className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4"
           style={{ gap: PANEL_SPACING.cardGap }}
         >
           <StatTile
-            title="Pending"
+            title="Pending Amount"
             icon={<Hourglass size={STAT_ICON} />}
             value={`₹${amount(sum(pending))}`}
-            tone="gray"
-            minimal
+            {...DEFAULT_STAT_CARD}
+            {...card('PENDING_AMOUNT')}
           />
           <StatTile
-            title="Settled"
+            title="Pending Settlements"
+            icon={<Layers size={STAT_ICON} />}
+            value={String(pending.length)}
+            {...DEFAULT_STAT_CARD}
+            {...card('PENDING_COUNT')}
+          />
+          <StatTile
+            title="Settled Amount"
             icon={<Zap size={STAT_ICON} />}
             value={`₹${amount(sum(settled))}`}
-            tone="gray"
-            minimal
+            {...DEFAULT_STAT_CARD}
+            {...card('SETTLED')}
+          />
+          <StatTile
+            title="Pending Settlements > 1 Day"
+            icon={<Clock size={STAT_ICON} />}
+            value={String(overdue.length)}
+            {...DEFAULT_STAT_CARD}
+            {...card('OVERDUE')}
           />
         </div>
-        <div style={{ margin: TABLE_OUTSET }} className={FIT_COLUMNS}>
+        <div ref={tableRef} style={{ margin: TABLE_OUTSET }} className={FIT_COLUMNS}>
           <PacbTable<EscrowRow>
             data={pageRows}
             columns={COLUMNS}
@@ -93,7 +158,7 @@ function EscrowToOca() {
             {...pagination}
           />
         </div>
-      </RangePanel>
+      </section>
     </PacbPage>
   )
 }

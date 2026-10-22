@@ -71,8 +71,13 @@ import {
   useSelection,
 } from './helpers'
 
-
-const TABS = ['Payment File', 'Supporting File', 'Form 145/146', 'Transaction Report', 'MPR'] as const
+const TABS = [
+  'Payment File',
+  'Supporting File',
+  'Form 145/146',
+  'Transaction Report',
+  'MPR',
+] as const
 type Tab = (typeof TABS)[number]
 
 const slug = (tab: Tab) => tab.toLowerCase().replace(/[^a-z0-9]+/g, '-')
@@ -88,7 +93,6 @@ const announce = (header: string, description: string) =>
   addSnackbarV2({ header, description, variant: SnackbarV2Variant.SUCCESS })
 
 // ─── Payment File / Supporting File ──────────────────────────────────────────────────────
-
 
 // Payment ID identifies the row, so the Settlement ID it used to sit beside is gone. Purpose
 // Code and Merchant Business Type are left out too — one value for every PACB payment, so
@@ -141,7 +145,6 @@ const SUPPORTING_STAGE_COLUMNS: ColumnDefinition<StageRow>[] = [
   dateCol('createdAt', 'Payment Info Created On'),
   downloadCol('Supporting file'),
 ]
-
 
 const fuseRows = (generate: GenerateRow[], stage: StageRow[]): FileRow[] => {
   const staged = new Map(stage.map((row) => [row.fileUuid, row]))
@@ -240,9 +243,19 @@ function FileTab({
     <div className="flex flex-col gap-6">
       <StatRow
         stats={[
-          { title: 'Pending', value: count('PENDING'), tone: 'warning', icon: <Hourglass size={STAT_ICON} /> },
+          {
+            title: 'Pending',
+            value: count('PENDING'),
+            tone: 'warning',
+            icon: <Hourglass size={STAT_ICON} />,
+          },
           { title: 'Created', value: count('CREATED'), icon: <Zap size={STAT_ICON} /> },
-          { title: 'Staged', value: count('STAGED'), tone: 'success', icon: <Building2 size={STAT_ICON} /> },
+          {
+            title: 'Staged',
+            value: count('STAGED'),
+            tone: 'success',
+            icon: <Building2 size={STAT_ICON} />,
+          },
         ]}
       />
       {/* The Generate and Stage tables as one: a payment and the file it became are the same
@@ -270,7 +283,10 @@ function FileTab({
                 text={`Generate ${noun}`}
                 disabled={selected.length === 0}
                 onClick={() =>
-                  announce(`${noun} generation started`, `${plural(selected.length, 'payment')} queued.`)
+                  announce(
+                    `${noun} generation started`,
+                    `${plural(selected.length, 'payment')} queued.`,
+                  )
                 }
               />
               <ButtonV2
@@ -458,8 +474,18 @@ function TransactionReportTab({ range }: { range: DateRange }) {
             tone: 'warning',
             icon: <Hourglass size={STAT_ICON} />,
           },
-          { title: 'Matched', value: count('SUCCESS'), tone: 'success', icon: <LayoutGrid size={STAT_ICON} /> },
-          { title: 'Mismatched', value: count('FAILED'), tone: 'error', icon: <LayoutGrid size={STAT_ICON} /> },
+          {
+            title: 'Matched',
+            value: count('SUCCESS'),
+            tone: 'success',
+            icon: <LayoutGrid size={STAT_ICON} />,
+          },
+          {
+            title: 'Mismatched',
+            value: count('FAILED'),
+            tone: 'error',
+            icon: <LayoutGrid size={STAT_ICON} />,
+          },
         ]}
       />
       <PacbTable<TransactionReportRow>

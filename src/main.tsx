@@ -14,7 +14,8 @@ import { lazy, StrictMode, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router'
 import './index.css'
-import { SHOW_DIALKIT, SHOW_INSPECTKIT, SHOW_MESURER } from './dev-tools'
+import ViewportGuide from './components/ViewportGuide'
+import { SHOW_DIALKIT, SHOW_INSPECTKIT, SHOW_MESURER, SHOW_VIEWPORT_GUIDE } from './dev-tools'
 import { installDialKitReset } from './dialkit-reset'
 import { router } from './router.tsx'
 import { componentTokens } from './theme'
@@ -171,5 +172,7 @@ createRoot(document.getElementById('root')!).render(
         <InspectKit lint={{ base: 4 }} />
       </Suspense>
     )}
+    {/* Dev only, and inert to the pointer — see ViewportGuide.tsx. */}
+    {SHOW_VIEWPORT_GUIDE && import.meta.env.DEV && <ViewportGuide />}
   </StrictMode>,
 )

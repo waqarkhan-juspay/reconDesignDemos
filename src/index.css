@@ -1,6 +1,21 @@
 @import "tailwindcss";
 
 /*
+ * Buttons take the pointer. Tailwind v4's Preflight puts every button on the default cursor,
+ * and Blend's ButtonV2 sets a cursor only when disabled (ButtonV2/utils.ts:269,279) — so
+ * without this every ButtonV2 needed a `[&_button]:cursor-pointer` wrapper of its own.
+ *
+ * In the base layer, so anything unlayered still wins: Blend's styled-components (its
+ * `not-allowed` on disabled buttons) and any utility class.
+ */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']) {
+    cursor: pointer;
+  }
+}
+
+/*
  * InterDisplay — the typeface Blend's foundation declares (`font.family.body`,
  * font.tokens.ts:140) — and the binaries that make that declaration true.
  *
@@ -163,6 +178,48 @@ html {
 
   .flow-card {
     transition: none;
+  }
+}
+
+/*
+ * PACB Workflow's "Drill in" columns (src/pages/pacb/PacbWorkflowSandbox.tsx).
+ *
+ * A page-and-step gesture (rule 14: PAGE_MS, PAGE_EASING, arriving as custom properties from
+ * src/motion.ts on the page root), the way a messaging app pushes a chat. Only the cards
+ * move; the column header swaps in place and the right-hand pane just changes. Going in, the
+ * payments slide the whole column width in from the right — a push, no fade. Coming back,
+ * the settlements return from just off to the left, as if waiting underneath.
+ *
+ * Keyframes on mount: the payments mount fresh each time, and the settlements, hidden rather
+ * than unmounted, restart their animation when `display: none` lifts. Each column is
+ * overflow-hidden so the cards come in from its edge.
+ */
+@keyframes drill-forward {
+  from {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes drill-back {
+  from {
+    opacity: 0;
+    transform: translateX(-30%);
+  }
+}
+
+.drill-forward {
+  animation: drill-forward var(--drill-ms) var(--drill-ease) both;
+}
+
+.drill-back {
+  animation: drill-back var(--drill-ms) var(--drill-ease) both;
+}
+
+/* Reveal-only, so plain `none` is safe — nothing waits on an animationend to unmount. */
+@media (prefers-reduced-motion: reduce) {
+  .drill-forward,
+  .drill-back {
+    animation: none;
   }
 }
 

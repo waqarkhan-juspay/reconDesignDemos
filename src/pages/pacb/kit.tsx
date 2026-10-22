@@ -17,7 +17,6 @@ import {
   DateRangePicker,
   DateRangePickerSize,
   FOUNDATION_THEME,
-  SnackbarV2Variant,
   StatCardV2,
   StatCardV2Variant,
   TagV2,
@@ -27,23 +26,36 @@ import {
   ThemeProvider,
   TooltipV2,
   TooltipV2Size,
-  addSnackbarV2,
   type DataTableProps,
   type DateRange,
 } from '@juspay/blend-design-system'
-import { Copy, X } from 'lucide-react'
-import type { CSSProperties, KeyboardEvent, MouseEvent, ReactElement, ReactNode } from 'react'
-import { FEEDBACK_EASING, MICRO_MS } from '../../motion'
+import { Calendar, Check, ChevronDown, X } from 'lucide-react'
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent,
+  type MouseEvent,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
+import copyIcon from '../../assets/icons/copy-04.svg'
+import infoIcon from '../../assets/icons/info-circle.svg'
+import MaskIcon from '../../components/MaskIcon'
+import { FEEDBACK_EASING, FEEDBACK_MS, MICRO_MS } from '../../motion'
 import { PrimitiveText, font } from '../../primitives'
 import {
   compactStatCardToneTokens,
+  ghostInfoTokens,
   minimalStatCardToneTokens,
   statCardToneTokens,
   type StatTone,
 } from '../../theme'
 import { EMPTY } from './data'
 import { formatRange } from './dates'
-import { PANEL_SPACING, PANEL_STYLE, type PanelSpacing } from './helpers'
+import { PLAYGROUND_ROUTES } from '../playground/routes'
+import { PACB_ROUTES } from './routes'
+import { copyToClipboard, PANEL_SPACING, PANEL_STYLE, type PanelSpacing } from './helpers'
 
 const { colors } = FOUNDATION_THEME
 
@@ -61,20 +73,55 @@ type PacbPageSpacing = {
 
 const PAGE_SPACING: PacbPageSpacing = { top: 24, gap: 24, bottom: 24 }
 
+/** A page's subtitle, from its route row (routes.ts) — matched by the title it shows. */
+const pageDescription = (title: string) =>
+  [...PACB_ROUTES, ...PLAYGROUND_ROUTES].find(({ label }) => label === title)?.description
+
 /**
- * Title on the left, the page's controls on the right, content below — the frame all three
- * pages share. Same width cap and gutters as the Configurator, so moving between modules
- * does not shift the page's left edge.
+ * A page's title and, under it, one line on what the page is for — the subtitle. 20px
+ * semibold over 14px gray[500], 4px apart. Used by PacbPage and by the full-bleed headers
+ * that draw their own row (the workflow sandbox), so every page's heading is one thing.
+ */
+export function PageTitle({ title, description }: { title: string; description?: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <PrimitiveText
+        as="h1"
+        {...font(FOUNDATION_THEME.font.size.heading.md)}
+        color={colors.gray[700]}
+        fontWeight={FOUNDATION_THEME.font.weight[600]}
+      >
+        {title}
+      </PrimitiveText>
+      {description && (
+        <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.md)} color={colors.gray[500]}>
+          {description}
+        </PrimitiveText>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Title and subtitle on the left, the page's controls on the right, content below — the
+ * frame every PACB and Playground page shares. Same width cap and gutters as the
+ * Configurator, so moving between modules does not shift the page's left edge.
+ *
+ * The subtitle defaults to the route row's `description` for the page's title, so a page
+ * needs to pass one only to say something else. A page with no content yet (LRS Files) is
+ * the frame with nothing under it.
  */
 export function PacbPage({
   title,
+  description = pageDescription(title),
   actions,
   children,
   spacing = PAGE_SPACING,
 }: {
   title: string
+  description?: string
   actions?: ReactNode
-  children: ReactNode
+  children?: ReactNode
   spacing?: PacbPageSpacing
 }) {
   return (
@@ -83,14 +130,7 @@ export function PacbPage({
       style={{ paddingTop: spacing.top, paddingBottom: spacing.bottom, gap: spacing.gap }}
     >
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
-        <PrimitiveText
-          as="h1"
-          {...font(FOUNDATION_THEME.font.size.heading.md)}
-          color={colors.gray[700]}
-          fontWeight={FOUNDATION_THEME.font.weight[600]}
-        >
-          {title}
-        </PrimitiveText>
+        <PageTitle title={title} description={description} />
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
       {children}
@@ -161,14 +201,53 @@ const RANGE_FORMAT = {
 export function RangePicker({
   value,
   onChange,
+  asButton = false,
 }: {
   value: DateRange
   onChange: (range: DateRange) => void
+  /**
+   * Trigger the calendar from a secondary ButtonV2 — calendar glyph, the range, a chevron —
+   * rather than the picker's own field, so it reads as one more button beside others (the
+   * PACB Workflow page's Filter). Always ButtonV2's MEDIUM, 36px.
+   */
+  asButton?: boolean
 }) {
+  if (asButton) {
+    const icon = (glyph: ReactNode) => ({ slot: glyph, maxHeight: 16 })
+    return (
+      // No onClick on the button: DateRangePicker wraps `triggerConfig.element` in its
+      // popover's trigger, which opens and closes the calendar itself.
+      <span className="inline-flex shrink-0">
+        <DateRangePicker
+          value={value}
+          onChange={onChange}
+          formatConfig={RANGE_FORMAT}
+          showDateTimePicker={false}
+          showPresets={false}
+          popoverConfig={{ align: 'end' }}
+          triggerConfig={{
+            element: (
+              <ButtonV2
+                buttonType={ButtonV2Type.SECONDARY}
+                size={ButtonV2Size.MEDIUM}
+                text={formatRange(value.startDate, value.endDate)}
+                aria-label={`Date range, ${formatRange(value.startDate, value.endDate)}`}
+                leftSlot={icon(<Calendar size={16} />)}
+                rightSlot={icon(<ChevronDown size={16} />)}
+              />
+            ),
+          }}
+        />
+      </span>
+    )
+  }
   // The trigger fills its container, so the container is what sizes it — without this it
-  // stretches across the header and pushes the page's buttons onto a line of their own.
+  // stretches across the header and pushes the page's buttons onto a line of their own. It
+  // hugs the label (`w-max`) above a 272px floor: the floor keeps a short range from jumping
+  // the pill's width as it changes, and hugging lets a long one ("Dec 31, 2026 – Dec 1,
+  // 2028 · 702 days") grow the pill instead of running out of it.
   return (
-    <div className="w-[272px] shrink-0">
+    <div className="w-max min-w-[272px] shrink-0">
       <DateRangePicker
         value={value}
         onChange={onChange}
@@ -206,6 +285,12 @@ export type Stat = {
   /** Makes the whole figure a button — Enter and Space as well as a click. */
   onClick?: () => void
   /**
+   * With `onClick`, makes the figure a toggle instead of a button that opens something:
+   * `aria-pressed` rather than `aria-haspopup`, and an active look (primary border and fill)
+   * while true. For figures that filter what sits under them.
+   */
+  pressed?: boolean
+  /**
    * The value at heading/lg/semiBold, 24/32, rather than Blend's 32/38. Always on for a bare
    * figure; opt-in for a card.
    */
@@ -237,10 +322,12 @@ export function StatTile({
   action,
   bare = false,
   onClick,
+  pressed,
   compact = bare,
   minimal = false,
   valueFirst = false,
 }: Stat) {
+  const isToggle = pressed !== undefined
   const tokens = minimal
     ? minimalStatCardToneTokens
     : compact
@@ -278,7 +365,7 @@ export function StatTile({
         {...(onClick && {
           role: 'button',
           tabIndex: 0,
-          'aria-haspopup': 'dialog' as const,
+          ...(isToggle ? { 'aria-pressed': pressed } : { 'aria-haspopup': 'dialog' as const }),
           onClick: (event: MouseEvent<HTMLDivElement>) => {
             // The help icon is a tooltip trigger of its own; a click on it is a request
             // for the explanation, not for whatever this figure opens.
@@ -310,14 +397,21 @@ export function StatTile({
   const hover = bare
     ? '[&:hover_[data-element=statcard-data]]:opacity-70'
     : '[&_[role=button]:hover]:!border-[var(--stat-hover-border)] [&_[role=button]:hover]:!bg-[var(--stat-hover-bg)]'
+  // A pressed toggle keeps the primary border and fill, hovered or not.
+  const active =
+    pressed && !bare
+      ? '[&_[role=button]]:!border-[var(--stat-active-border)] [&_[role=button]]:!bg-[var(--stat-active-bg)]'
+      : ''
   return (
     <div
-      className={`${layout} cursor-pointer ${hover} [&_[role=button]]:![transition:border-color_var(--stat-ms)_var(--stat-ease),background-color_var(--stat-ms)_var(--stat-ease)] [&_[role=button]]:rounded-lg [&_[role=button]:focus-visible]:outline-2 [&_[role=button]:focus-visible]:outline-offset-4 [&_[role=button]:focus-visible]:outline-[var(--stat-focus)] [&_[role=button]:focus-visible]:outline-solid`}
+      className={`${layout} cursor-pointer ${hover} ${active} [&_[role=button]]:![transition:border-color_var(--stat-ms)_var(--stat-ease),background-color_var(--stat-ms)_var(--stat-ease)] [&_[role=button]]:rounded-lg [&_[role=button]:focus-visible]:outline-2 [&_[role=button]:focus-visible]:outline-offset-4 [&_[role=button]:focus-visible]:outline-[var(--stat-focus)] [&_[role=button]:focus-visible]:outline-solid`}
       style={
         {
           '--stat-focus': colors.primary[500],
           '--stat-hover-border': colors.gray[300],
           '--stat-hover-bg': colors.gray[50],
+          '--stat-active-border': colors.primary[500],
+          '--stat-active-bg': colors.primary[50],
           '--stat-ms': `${MICRO_MS}ms`,
           '--stat-ease': FEEDBACK_EASING,
         } as CSSProperties
@@ -341,7 +435,6 @@ export function StatRow({ stats }: { stats: Stat[] }) {
     </div>
   )
 }
-
 
 // ─── Status tag ──────────────────────────────────────────────────────────────────────────
 
@@ -410,16 +503,15 @@ export function TruncatedId({ value, keep = ID_KEEP_CHARS }: { value: string; ke
 }
 
 /**
- * An ID with a copy glyph at the end of its cell: IDs, UTRs and file UUIDs are too long to retype, and one
- * cut in the middle cannot be selected whole, so the button is the way to take it elsewhere.
- * `truncate` cuts it to its ends (TruncatedId); off, it is drawn whole, for columns already
- * wide enough to hold it.
+ * An ID with a copy glyph at the end of its cell: IDs, UTRs and file UUIDs are too long to
+ * retype, and one cut in the middle cannot be selected whole, so the button is the way to
+ * take it elsewhere. `truncate` cuts it to its ends (TruncatedId); off, it is drawn whole,
+ * for columns already wide enough to hold it.
  *
  * An empty value is the empty mark alone — nothing to copy, so no button.
  *
- * SECONDARY + INLINE — the link button in grey rather than primary, so a glyph repeated down
- * every row reads as a utility, not a call to action. Its click stops at the button: on the
- * tables whose rows open something, the row behind it would otherwise open too.
+ * The glyph is HoverCopy's: shown while the pointer is on the table row, and morphing into a
+ * check on a copy. Its click stops at the button, so a row that opens something stays shut.
  */
 export function CopyableId({
   value,
@@ -430,35 +522,184 @@ export function CopyableId({
   label: string
   truncate?: boolean
 }) {
-  const copy = () =>
-    navigator.clipboard.writeText(value).then(
-      () => addSnackbarV2({ header: `${label} copied`, variant: SnackbarV2Variant.SUCCESS }),
-      () =>
-        addSnackbarV2({
-          header: `Couldn't copy the ${label}`,
-          description: 'The browser blocked clipboard access.',
-          variant: SnackbarV2Variant.ERROR,
-        }),
-    )
   if (!value || value === EMPTY) return <>{EMPTY}</>
   // The full cell width with the glyph pushed to its end, so the glyphs down a column share
   // one keyline. Placed straight after the text they would follow each value's width, and in
   // a proportional face no two IDs are the same width.
   return (
     <span className="flex w-full items-center justify-between gap-1.5">
-      {truncate ? <TruncatedId value={value} /> : <span className="whitespace-nowrap">{value}</span>}
+      {truncate ? (
+        <TruncatedId value={value} />
+      ) : (
+        <span className="whitespace-nowrap">{value}</span>
+      )}
+      <HoverCopy value={value} label={label} size={14} tableRow />
+    </span>
+  )
+}
+
+// ─── Copy on hover ───────────────────────────────────────────────────────────────────────
+
+/** How long the check stays after a copy before morphing back. */
+const COPIED_MS = 1500
+/** Hover dwell before the "Copy" tooltip — long enough not to flash while passing over. */
+const COPY_TOOLTIP_DELAY_MS = 500
+
+/**
+ * One glyph of the copy button's morph. Both sit in the same box; the one not showing is
+ * shrunk, blurred and faded, so the swap reads as one icon turning into the other rather
+ * than a cut. Reduced motion keeps the swap and drops the movement.
+ */
+function MorphLayer({ shown, children }: { shown: boolean; children: ReactNode }) {
+  return (
+    <span
+      aria-hidden
+      className="absolute inset-0 flex items-center justify-center motion-reduce:!transition-none"
+      style={{
+        opacity: shown ? 1 : 0,
+        transform: shown ? 'scale(1)' : 'scale(0.5)',
+        filter: shown ? 'blur(0)' : 'blur(2px)',
+        transition: `opacity ${FEEDBACK_MS}ms ${FEEDBACK_EASING}, transform ${FEEDBACK_MS}ms ${FEEDBACK_EASING}, filter ${FEEDBACK_MS}ms ${FEEDBACK_EASING}`,
+      }}
+    >
+      {children}
+    </span>
+  )
+}
+
+/**
+ * The ⓘ on a column heading that brings its figures back: over the settlement list, the
+ * period's Overview; over a settlement's payments, that settlement's own. Borderless, with a
+ * see-through hover (ghostInfoTokens). It is a 36px button, so the caller holds it to the
+ * heading's line — negative margins, or a fixed-height wrapper.
+ */
+export function InfoButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <ThemeProvider componentTokens={ghostInfoTokens}>
       <ButtonV2
         buttonType={ButtonV2Type.SECONDARY}
         subType={ButtonV2SubType.INLINE}
         size={ButtonV2Size.SMALL}
-        leftSlot={{ slot: <Copy size={14} />, maxHeight: 14 }}
-        aria-label={`Copy ${label}`}
-        onClick={(event) => {
-          event.stopPropagation()
-          void copy()
-        }}
+        leftSlot={{ slot: <MaskIcon src={infoIcon} size={16} />, maxHeight: 16 }}
+        aria-label={label}
+        onClick={onClick}
       />
+    </ThemeProvider>
+  )
+}
+
+/**
+ * The copy glyph beside an ID. The design shows it on hover only, so it appears while the
+ * pointer is anywhere on its row (`group/row`) — one row at a time, rather than every glyph
+ * on the card at once. In a table cell (`tableRow`) the row is the table's own `tr`, which
+ * Blend draws and we cannot class, so it is matched by element instead. Focus reveals it
+ * too, so it is never an invisible tab stop.
+ *
+ * A "Copy" tooltip follows a short dwell. A click morphs the glyph into a check for
+ * COPIED_MS — that is the confirmation, so there is no success toast (a failure still gets
+ * one). The glyph stays visible while the check shows, even if the pointer has left.
+ */
+export function HoverCopy({
+  value,
+  label,
+  size,
+  tableRow = false,
+}: {
+  value: string
+  label: string
+  size: number
+  tableRow?: boolean
+}) {
+  const [copied, setCopied] = useState(false)
+
+  useEffect(() => {
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), COPIED_MS)
+    return () => window.clearTimeout(timer)
+  }, [copied])
+
+  // `relative` holds the sr-only announcement below to this box. Without it the absolutely
+  // placed span finds its containing block outside any scroll area it sits in, and stretches
+  // the page's main scroller — a card deep in a scrolled column left blank space under the page.
+  return (
+    <span
+      className={`relative flex transition-opacity ${
+        tableRow
+          ? '[tr:focus-within_&]:opacity-100 [tr:hover_&]:opacity-100'
+          : 'group-focus-within/row:opacity-100 group-hover/row:opacity-100'
+      } ${copied ? 'opacity-100' : 'opacity-0'}`}
+    >
+      <TooltipV2
+        content={copied ? 'Copied' : 'Copy'}
+        size={TooltipV2Size.SM}
+        delayDuration={COPY_TOOLTIP_DELAY_MS}
+      >
+        <ButtonV2
+          buttonType={ButtonV2Type.SECONDARY}
+          subType={ButtonV2SubType.INLINE}
+          size={ButtonV2Size.SMALL}
+          leftSlot={{
+            slot: (
+              <span className="relative block" style={{ width: size, height: size }}>
+                <MorphLayer shown={!copied}>
+                  <MaskIcon src={copyIcon} size={size} />
+                </MorphLayer>
+                <MorphLayer shown={copied}>
+                  <Check size={size} color={colors.green[600]} strokeWidth={2.5} />
+                </MorphLayer>
+              </span>
+            ),
+            maxHeight: size,
+          }}
+          aria-label={`Copy ${label}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            void copyToClipboard(value, label).then((ok) => {
+              if (ok) setCopied(true)
+            })
+          }}
+        />
+      </TooltipV2>
+      {/* The morph is visual only; this says it to a screen reader. */}
+      <span className="sr-only" aria-live="polite">
+        {copied ? `${label} copied` : ''}
+      </span>
     </span>
+  )
+}
+
+// ─── Selectable cards ────────────────────────────────────────────────────────────────────
+
+/**
+ * Keyboard selection for a card the mouse selects by its whole surface. A button laid over
+ * the card with `pointer-events: none`: Tab reaches it, Enter/Space press it, and a mouse
+ * click passes through to the card's own handler. SettlementCard and PaymentCard both use it.
+ */
+export function SelectOverlay({
+  selected,
+  label,
+  onSelect,
+  radius,
+}: {
+  selected: boolean
+  label: string
+  onSelect: () => void
+  /** The card's corner radius, so the focus ring follows it. */
+  radius?: string | number
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={label}
+      onClick={(event) => {
+        // The card's own handler would fire too once this bubbles — select once.
+        event.stopPropagation()
+        onSelect()
+      }}
+      className="pointer-events-none absolute inset-0 z-10 border-none bg-transparent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--card-focus)] focus-visible:outline-solid"
+      style={{ borderRadius: radius, ['--card-focus' as string]: colors.primary[500] }}
+    />
   )
 }
 
@@ -513,7 +754,10 @@ export function SelectionBar({
       role="region"
       aria-label={`${count} ${count === 1 ? 'row' : 'rows'} selected`}
       className="flex flex-wrap items-center gap-3 px-4 py-2"
-      style={{ backgroundColor: colors.gray[700], borderRadius: FOUNDATION_THEME.border.radius[12] }}
+      style={{
+        backgroundColor: colors.gray[700],
+        borderRadius: FOUNDATION_THEME.border.radius[12],
+      }}
     >
       <PrimitiveText
         {...font(FOUNDATION_THEME.font.size.body.md)}

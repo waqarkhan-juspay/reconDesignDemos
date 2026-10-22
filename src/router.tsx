@@ -8,11 +8,15 @@ import CreateReportConfig from './pages/create-report-config'
 import Home from './pages/Home.tsx'
 import NotFound from './pages/NotFound.tsx'
 import EscrowToOca from './pages/pacb/EscrowToOca.tsx'
-import PacbPage from './pages/pacb/PacbPage.tsx'
+import { PacbPage } from './pages/pacb/kit'
 import PacbWorkflow from './pages/pacb/PacbWorkflow.tsx'
 import PacbWorkflowSandbox from './pages/pacb/PacbWorkflowSandbox.tsx'
 import ReconSummary from './pages/pacb/ReconSummary.tsx'
 import { PACB_ROUTES } from './pages/pacb/routes.ts'
+import { PLAYGROUND_ROUTES } from './pages/playground/routes.ts'
+import FormUploads from './pages/playground/FormUploads.tsx'
+import PaymentCards from './pages/playground/PaymentCards.tsx'
+import SettlementCards from './pages/playground/SettlementCards.tsx'
 import { CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.tsx'
 
 /** PACB pages by their nav label — the label is the route's identity (src/pages/pacb/routes.ts). */
@@ -21,6 +25,13 @@ const PACB_PAGES: Record<string, ReactNode> = {
   'Escrow to OCA Fund Movement': <EscrowToOca />,
   'PACB Workflow': <PacbWorkflow />,
   'PACB Workflow (Sandbox)': <PacbWorkflowSandbox />,
+}
+
+/** Playground pages by their nav label (src/pages/playground/routes.ts). */
+const PLAYGROUND_PAGES: Record<string, ReactNode> = {
+  'Settlement Cards': <SettlementCards />,
+  'Payment Card': <PaymentCards />,
+  'Form 145/146': <FormUploads />,
 }
 
 export const router = createBrowserRouter([
@@ -42,6 +53,10 @@ export const router = createBrowserRouter([
       ...PACB_ROUTES.map(({ label, path }) => ({
         path: path.slice(1),
         element: PACB_PAGES[label] ?? <PacbPage title={label} />,
+      })),
+      ...PLAYGROUND_ROUTES.map(({ label, path }) => ({
+        path: path.slice(1),
+        element: PLAYGROUND_PAGES[label] ?? <PacbPage title={label} />,
       })),
     ],
   },

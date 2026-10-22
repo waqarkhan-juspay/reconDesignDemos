@@ -2,6 +2,9 @@ import {
   AvatarV2,
   AvatarV2Shape,
   AvatarV2Size,
+  ButtonV2,
+  ButtonV2Size,
+  ButtonV2Type,
   FOUNDATION_THEME,
   SidebarV2,
   SidebarV2StateChange,
@@ -11,7 +14,6 @@ import { ChevronDown } from 'lucide-react'
 import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import avatarImage from '../assets/avatar.png'
-import searchIcon from '../assets/icons/search-md.svg'
 import starsIcon from '../assets/icons/stars-02.svg'
 import tenantIcon1 from '../assets/icons/tenant-icon-1.svg'
 import tenantIcon2 from '../assets/icons/tenant-icon-2.svg'
@@ -21,8 +23,15 @@ import MaskIcon from '../components/MaskIcon'
 import { font } from '../primitives'
 import { CHROME_HOVER } from './chrome'
 import { PACB_ROUTES } from '../pages/pacb/routes'
-import { CONFIGURATOR_PATH, HOME_PATH, buildNavigationData } from './navigation'
+import { PLAYGROUND_ROUTES } from '../pages/playground/routes'
+import {
+  CONFIGURATOR_PATH,
+  HOME_PATH,
+  buildNavigationData,
+  expandableItemLabels,
+} from './navigation'
 import { TopbarStatusIcons } from './topbar'
+import { useOpenNestedMenus } from './use-open-nested-menus'
 
 const { colors } = FOUNDATION_THEME
 
@@ -54,16 +63,6 @@ const SIDEBAR_COLLAPSE_KEY = '/'
  */
 const MENU_ROW = font(FOUNDATION_THEME.font.size.body.md)
 
-/**
- * The topbar's search placeholder, which is deliberately a step lighter than the menu rows.
- * It is placeholder text rather than a row you can click through to something, and reading
- * as secondary is the whole job.
- */
-const LABEL = {
-  ...font(FOUNDATION_THEME.font.size.body.md),
-  fontWeight: FOUNDATION_THEME.font.weight[400],
-}
-
 const tenants = [
   { label: 'Juspay', value: 'juspay', icon: tenantLogo },
   { label: 'Breeze', value: 'breeze', icon: tenantIcon1 },
@@ -76,33 +75,36 @@ const PROFILE_NAME = 'Waqar Khan'
 /**
  * The merchant the rail is scoped to — node 4405:10766. The orb is the design's own export,
  * downscaled to 64px: it renders at 14, and the 1024px original was 1.25MB for an icon.
+ *
+ * Sized outright rather than `size-full`: the sidebar's slot is 14px, but the mobile
+ * topbar's merchant switcher gives it no box of its own, and filling that drew the orb at
+ * its full 64px.
  */
 const merchants = [
   {
     label: 'Hyper Recon',
     value: 'hyper-recon',
-    icon: <img src={merchantOrb} alt="" className="block size-full rounded object-cover" />,
+    icon: <img src={merchantOrb} alt="" className="block size-3.5 rounded object-cover" />,
   },
 ]
 
-function TopbarSearch() {
+/**
+ * The topbar's left side names the page you are on — the nav item's own label, so the two
+ * cannot disagree. Pages the nav does not route (there is no label to show) leave it empty.
+ */
+function TopbarContent({ title }: { title?: string }) {
   return (
-    <button
-      type="button"
-      className="flex cursor-pointer items-center gap-1.5 border-none bg-transparent py-1.5"
-    >
-      <MaskIcon src={searchIcon} size={16} color={colors.gray[400]} />
-      <span className="whitespace-pre" style={{ ...LABEL, color: colors.gray[400] }}>
-        {'Search  (⌘K)'}
+    <div className="flex w-full min-w-0 items-center justify-between gap-4">
+      <span
+        className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap"
+        style={{
+          ...MENU_ROW,
+          fontWeight: FOUNDATION_THEME.font.weight[600],
+          color: colors.gray[700],
+        }}
+      >
+        {title}
       </span>
-    </button>
-  )
-}
-
-function TopbarContent() {
-  return (
-    <div className="flex w-full items-center justify-between">
-      <TopbarSearch />
       <TopbarActions />
     </div>
   )
@@ -113,15 +115,15 @@ function TopbarActions() {
     <div className="flex items-center gap-1.5">
       <TopbarStatusIcons />
       <div className="h-6 w-px self-stretch" style={{ backgroundColor: colors.gray[200] }} />
-      <button
-        type="button"
-        className="flex cursor-pointer items-center gap-[5px] border-none bg-transparent px-1"
-      >
-        <img src={starsIcon} alt="" className="block size-3" />
-        <span className="bg-gradient-to-r from-[#6461ff] to-[#3877ff] bg-clip-text text-[14px] leading-[20px] font-medium text-transparent">
-          Ask Genius
-        </span>
-      </button>
+      <span className="inline-flex">
+        <ButtonV2
+          buttonType={ButtonV2Type.SECONDARY}
+          size={ButtonV2Size.SMALL}
+          text="Ask Genius"
+          // The design's sparkle, drawn in the label's ink rather than its old gradient.
+          leftSlot={{ slot: <MaskIcon src={starsIcon} size={16} color={colors.gray[700]} /> }}
+        />
+      </span>
     </div>
   )
 }
@@ -197,11 +199,19 @@ function AppShell({ children }: { children?: ReactNode }) {
 
   const isHomeActive = pathname === HOME_PATH
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
-  const activePacbPath = PACB_ROUTES.some(({ path }) => path === pathname) ? pathname : null
+  const moduleRoute = [...PACB_ROUTES, ...PLAYGROUND_ROUTES].find(({ path }) => path === pathname)
+  const activeModulePath = moduleRoute ? pathname : null
+  const pageTitle = isHomeActive
+    ? 'Home'
+    : isConfiguratorActive
+      ? 'Configurator'
+      : moduleRoute?.label
   const navigationData = useMemo(
-    () => buildNavigationData({ isHomeActive, isConfiguratorActive, activePacbPath, navigate }),
-    [isHomeActive, isConfiguratorActive, activePacbPath, navigate],
+    () => buildNavigationData({ isHomeActive, isConfiguratorActive, activeModulePath, navigate }),
+    [isHomeActive, isConfiguratorActive, activeModulePath, navigate],
   )
+  // Every nested menu starts open on this branch — see use-open-nested-menus.ts.
+  useOpenNestedMenus(expandableItemLabels(navigationData))
 
   return (
     <SidebarV2
@@ -221,7 +231,7 @@ function AppShell({ children }: { children?: ReactNode }) {
         selected: merchant,
         onSelect: setMerchant,
       }}
-      topbar={<TopbarContent />}
+      topbar={<TopbarContent title={pageTitle} />}
       rightActions={<TopbarActions />}
       defaultIsExpanded={RAIL_STARTS_EXPANDED}
       sidebarCollapseKey={SIDEBAR_COLLAPSE_KEY}

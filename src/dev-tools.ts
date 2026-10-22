@@ -46,3 +46,10 @@ export const spacingDial = (value: number, max = 96): [number, number, number, n
   max,
   4,
 ]
+
+/**
+ * Viewport guide — a dashed line at
+ * 1512px, for sizing the browser to a 15" MacBook by hand (src/components/ViewportGuide.tsx).
+ * Added on the PACB branch on 2026-10-07.
+ */
+export const SHOW_VIEWPORT_GUIDE = false

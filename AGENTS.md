@@ -402,6 +402,10 @@ which are the legitimate exceptions. A warning naming anything else is a real re
 
 ## Pushing to GitHub
 
+**Before every push, ask the user whether to run `/simplify` first.** Ask each time, even if
+they said yes or no to an earlier push, and wait for the answer. On a yes, run it, apply its
+fixes, re-run `npm run lint && npm run build`, and only then push. On a no, push as is.
+
 **Always push with `--no-verify`.**
 
 ```bash

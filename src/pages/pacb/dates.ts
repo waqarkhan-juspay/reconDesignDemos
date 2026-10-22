@@ -15,13 +15,20 @@
 
 const month = (date: Date) => date.toLocaleDateString('en-US', { month: 'short' })
 
-/** Midnight of the date's own calendar day, so a range ending 23:59:59 still counts whole days. */
-const dayStart = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+export const HOUR_MS = 60 * 60 * 1000
+export const DAY_MS = 24 * HOUR_MS
 
-const DAY_MS = 24 * 60 * 60 * 1000
+/**
+ * Midnight of the viewer's calendar day, as a timestamp — so a range ending 23:59:59 still
+ * counts whole days, and "today" means the calendar day, not the last 24 hours.
+ */
+export const dayStart = (date: Date | number) => {
+  const day = new Date(date)
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime()
+}
 
 export function daysIn(start: Date, end: Date) {
-  return Math.round((dayStart(end).getTime() - dayStart(start).getTime()) / DAY_MS) + 1
+  return Math.round((dayStart(end) - dayStart(start)) / DAY_MS) + 1
 }
 
 export function formatRange(start: Date, end?: Date) {

@@ -5,12 +5,22 @@ import {
   TagV2SubType,
   TagV2Type,
   type DirectoryData,
+  type NavbarItem,
 } from '@juspay/blend-design-system'
-import { BookOpen, FileSearch, House, MessageSquareCheck, User, Wrench } from 'lucide-react'
+import {
+  BookOpen,
+  FileSearch,
+  House,
+  LayoutTemplate,
+  MessageSquareCheck,
+  User,
+  Wrench,
+} from 'lucide-react'
 import announcementIcon from '../assets/icons/announcement-01.svg'
 import globeIcon from '../assets/icons/globe-01.svg'
 import MaskIcon from '../components/MaskIcon'
 import { PACB_ROUTES } from '../pages/pacb/routes'
+import { PLAYGROUND_ROUTES } from '../pages/playground/routes'
 import { ICON_SIZE } from './chrome'
 
 /**
@@ -32,6 +42,22 @@ export const CONFIGURATOR_PATH = '/configurator'
  */
 const PLACEHOLDER_SECTIONS = ['Offers', 'Mandates', 'Smart Convert', 'Monitoring']
 
+/**
+ * The label of every nav item that has children — the nested menus useOpenNestedMenus opens.
+ * NavItem labels its toggle with the item's own label, so that is what identifies one.
+ */
+export function expandableItemLabels(data: DirectoryData[]): string[] {
+  const labels: string[] = []
+  const walk = (items: NavbarItem[] = []) =>
+    items.forEach((item) => {
+      if (!item.items?.length) return
+      labels.push(item.label)
+      walk(item.items)
+    })
+  data.forEach((section) => walk(section.items))
+  return labels
+}
+
 export type NavigationOptions = {
   /**
    * Which nav item is the active route, as booleans rather than the pathname, so that
@@ -42,10 +68,10 @@ export type NavigationOptions = {
   isHomeActive: boolean
   isConfiguratorActive: boolean
   /**
-   * The current path when it is one of the PACB pages, otherwise null — so moving between
-   * two non-PACB routes still leaves the tree's inputs unchanged.
+   * The current path when it is one of the PACB or Playground pages, otherwise null — so
+   * moving between two routes outside them still leaves the tree's inputs unchanged.
    */
-  activePacbPath: string | null
+  activeModulePath: string | null
   /** Router push. Blend's NavItem does no routing of its own — see below. */
   navigate: (to: string) => void
 }
@@ -63,7 +89,7 @@ export type NavigationOptions = {
 export function buildNavigationData({
   isHomeActive,
   isConfiguratorActive,
-  activePacbPath,
+  activeModulePath,
   navigate,
 }: NavigationOptions): DirectoryData[] {
   return [
@@ -145,15 +171,30 @@ export function buildNavigationData({
           label: 'PACB Recon',
           leftSlot: <FileSearch size={ICON_SIZE} />,
           showOnMobile: true,
-          items: PACB_ROUTES.map(({ label, path }) => ({
+          items: PACB_ROUTES.filter(({ hideInNav }) => !hideInNav).map(({ label, path }) => ({
             label,
             href: path,
             onClick: () => navigate(path),
-            isSelected: activePacbPath === path,
+            isSelected: activeModulePath === path,
             showOnMobile: true,
           })),
         },
       ],
+    },
+    {
+      // Components built and shown in every state on their own, Storybook-style
+      // (src/pages/playground/routes.ts).
+      label: 'Playground',
+      isCollapsible: true,
+      defaultOpen: true,
+      items: PLAYGROUND_ROUTES.map(({ label, path }) => ({
+        label,
+        leftSlot: <LayoutTemplate size={ICON_SIZE} />,
+        href: path,
+        onClick: () => navigate(path),
+        isSelected: activeModulePath === path,
+        showOnMobile: true,
+      })),
     },
     ...PLACEHOLDER_SECTIONS.map((label) => ({
       label,

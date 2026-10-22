@@ -189,13 +189,19 @@ const seededPayments = (count: number): Payment[] => {
       paymentFile: {
         name: `JuspayA2_${entityId}_${stamp}.txt.gpg`,
         uuid: uuid(),
-        stagedAt: ist('2026-09-28', `${two(16 + Math.floor(rand() * 3))}:${two(Math.floor(rand() * 60))}`),
+        stagedAt: ist(
+          '2026-09-28',
+          `${two(16 + Math.floor(rand() * 3))}:${two(Math.floor(rand() * 60))}`,
+        ),
         createdAt: ist(date, `${two(hour)}:${two(minute)}`),
       },
       supportingFile: {
         name: `JuspayNonLRSSUP_${paymentId}_${entityId}_PACB_${stamp}.zip`,
         uuid: uuid(),
-        stagedAt: ist('2026-09-28', `${two(16 + Math.floor(rand() * 3))}:${two(Math.floor(rand() * 60))}`),
+        stagedAt: ist(
+          '2026-09-28',
+          `${two(16 + Math.floor(rand() * 3))}:${two(Math.floor(rand() * 60))}`,
+        ),
         createdAt: ist(date, `${two(hour)}:${two(minute + 1 + Math.floor(rand() * 3))}`),
       },
       form145FileId: uuid(),
@@ -290,8 +296,7 @@ const generateRows = (file: (p: Payment) => FileRecord, offset: number): Generat
       fileUuid: fileStatus === 'PENDING' ? EMPTY : file(p).uuid,
       createdAt: file(p).createdAt,
       // The payment file's own life is the Payment File tab's, read from offset 0.
-      paymentFileCreatedAt:
-        lifecycle(i, 0).file === 'PENDING' ? EMPTY : p.paymentFile.createdAt,
+      paymentFileCreatedAt: lifecycle(i, 0).file === 'PENDING' ? EMPTY : p.paymentFile.createdAt,
     }
   })
 
@@ -485,7 +490,7 @@ const hex = (rand: () => number, length: number) =>
 const uuid = (rand: () => number) =>
   `${hex(rand, 8)}-${hex(rand, 4)}-4${hex(rand, 3)}-${hex(rand, 4)}-${hex(rand, 12)}`
 
-const pick = <T,>(rand: () => number, items: readonly T[]) =>
+const pick = <T>(rand: () => number, items: readonly T[]) =>
   items[Math.floor(rand() * items.length)]
 
 const pad = (n: number) => String(n).padStart(2, '0')
@@ -535,19 +540,22 @@ export type SettlementComponents = {
   refundCount: number
 }
 
-const r3 = (n: number) => Math.round(n * 1000) / 1000
+export const r3 = (n: number) => Math.round(n * 1000) / 1000
+
+/** The fee on every order amount, and the tax on that fee. */
+export const FEE_RATE = 0.0035
+export const TAX_RATE = 0.18
 
 /**
  * Splits a settlement into parts with the shape the product's breakdown shows: refunds on
  * some settlements, a 0.35% fee on every order amount, 18% tax on the fee, the rest zero.
  */
-function componentsOf(settlement: number, rand: () => number): SettlementComponents {
+export function componentsOf(settlement: number, rand: () => number): SettlementComponents {
   const refundRate = rand() < 0.5 ? 0 : rand() * 0.15
-  const feeRate = 0.0035
-  const grossOrder = settlement / (1 - refundRate - feeRate * 1.18)
+  const grossOrder = settlement / (1 - refundRate - FEE_RATE * (1 + TAX_RATE))
   const refundAmount = r3(grossOrder * refundRate)
-  const feeAmount = r3(grossOrder * feeRate)
-  const taxAmount = r3(feeAmount * 0.18)
+  const feeAmount = r3(grossOrder * FEE_RATE)
+  const taxAmount = r3(feeAmount * TAX_RATE)
   return {
     orderAmount: r3(settlement + refundAmount + feeAmount + taxAmount),
     refundAmount,
@@ -565,16 +573,34 @@ function componentsOf(settlement: number, rand: () => number): SettlementCompone
   }
 }
 
-const PAYMENT_ENTITY = 'yes_biz_77367ac0'
+export const PAYMENT_ENTITY = 'yes_biz_77367ac0'
 
 type ReconBase = Omit<ReconRow, 'rowId' | 'updatedAt' | keyof SettlementComponents>
 
 const RECON_SHOWN: ReconBase[] = [
-  ['6d634d0c-a477-4525-8376-ee3d09c07d50', 'jpappx', 'jpconx', 26874.302, ist('2026-09-29', '12:14')],
-  ['6d634d0c-a477-4525-8376-ee3d09c07d50', 'jpappx', 'jpappx', 2243751.871, ist('2026-09-29', '12:14')],
+  [
+    '6d634d0c-a477-4525-8376-ee3d09c07d50',
+    'jpappx',
+    'jpconx',
+    26874.302,
+    ist('2026-09-29', '12:14'),
+  ],
+  [
+    '6d634d0c-a477-4525-8376-ee3d09c07d50',
+    'jpappx',
+    'jpappx',
+    2243751.871,
+    ist('2026-09-29', '12:14'),
+  ],
   ['6d634d0c-a477-4525-8376-ee3d09c07d50', 'jpytbx', EMPTY, 158.537, ist('2026-09-29', '12:14')],
   ['6d634d0c-a477-4525-8376-ee3d09c07d50', 'jpswgx', 'jpswgx', 58.664, ist('2026-09-29', '12:14')],
-  ['b405e06a-98a6-4c05-93db-b73e7443542e', 'jpappx', 'jpappx', 2566571.342, ist('2026-09-28', '13:02')],
+  [
+    'b405e06a-98a6-4c05-93db-b73e7443542e',
+    'jpappx',
+    'jpappx',
+    2566571.342,
+    ist('2026-09-28', '13:02'),
+  ],
 ].map(([reconId, entityId, lineOfBusiness, settlementAmount, createdAt]) => ({
   reconId: reconId as string,
   paymentId: EMPTY,
@@ -617,11 +643,15 @@ function padRecon(count: number): ReconBase[] {
       paymentEntity: PAYMENT_ENTITY,
       piStatus: 'HOLD',
       // Mostly small, occasionally a large settlement — the shape of the real page.
-      settlementAmount: Math.round((rand() < 0.3 ? rand() * 2_600_000 : rand() * 30_000) * 1000) / 1000,
+      settlementAmount:
+        Math.round((rand() < 0.3 ? rand() * 2_600_000 : rand() * 30_000) * 1000) / 1000,
       adUtrNo: EMPTY,
       merchantUtrNo: EMPTY,
       settlementId: EMPTY,
-      createdAt: ist(`2026-09-${pad(day)}`, `${pad(10 + Math.floor(rand() * 12))}:${pad(Math.floor(rand() * 60))}`),
+      createdAt: ist(
+        `2026-09-${pad(day)}`,
+        `${pad(10 + Math.floor(rand() * 12))}:${pad(Math.floor(rand() * 60))}`,
+      ),
     })
   }
   return rows
@@ -673,16 +703,86 @@ export type EscrowRow = {
 
 const ESCROW_SHOWN: EscrowRow[] = (
   [
-    ['sid-b9385b6f08bd4089b6a7ab3f6b941495', 998.75, 'YESAP62716445181', 'hyperpg_pragati_katiyar', 'hyperpg_sushmitha', ist('2026-09-28', '16:04')],
-    ['sid-359403e731c142dfa6e00fcb637821b5', 27931.19, 'YESAP62716444307', 'hyperpg_pragati_katiyar', 'hyperpg_sushmitha', ist('2026-09-28', '16:05')],
-    ['sid-9a0dbea41a6448a5b49cf1733bc8d738', 2183871.18, 'YESAP62716445084', 'hyperpg_pragati_katiyar', 'hyperpg_sushmitha', ist('2026-09-28', '16:04')],
-    ['sid-0bc71e848d4e4e9f8008eaa2cf3418da', 27210.45, 'YESAP62706541892', 'hyperpg_naveen_a', 'hyperpg_sushmitha', ist('2026-09-27', '19:46')],
-    ['sid-f799b9a4a0044ee8bab42ae8894aa16c', 2167009.13, 'YESAP62706541805', 'hyperpg_naveen_a', 'hyperpg_sushmitha', ist('2026-09-27', '19:45')],
-    ['sid-5146022693604174afa8fb5dc31b9aa2', 98.82, 'YESAP62696650254', 'hyperpg_naveen_a', 'hyperpg_sushmitha', ist('2026-09-26', '20:15')],
-    ['sid-ded95769b6ec47d7a333a5b44450d5db', 20553.92, 'YESAP62696651066', 'hyperpg_naveen_a', 'hyperpg_sushmitha', ist('2026-09-26', '20:15')],
-    ['sid-f83172d9d2224fcbb1d8ed88f53c4546', 2087513.43, 'YESAP62696651128', 'hyperpg_naveen_a', 'hyperpg_sushmitha', ist('2026-09-26', '20:15')],
-    ['sid-4c2a5a37259043c585bf763896c601ba', 2014429.3, 'YESAP62686908654', 'hyperpg_naveen_a', 'hyperpg_garima_suryavanshi', ist('2026-09-25', '20:06')],
-    ['sid-a9c5838e3d374157be0885bab591f26e', 24329.97, 'YESAP62686908750', 'hyperpg_naveen_a', 'hyperpg_garima_suryavanshi', ist('2026-09-25', '20:07')],
+    [
+      'sid-b9385b6f08bd4089b6a7ab3f6b941495',
+      998.75,
+      'YESAP62716445181',
+      'hyperpg_pragati_katiyar',
+      'hyperpg_sushmitha',
+      ist('2026-09-28', '16:04'),
+    ],
+    [
+      'sid-359403e731c142dfa6e00fcb637821b5',
+      27931.19,
+      'YESAP62716444307',
+      'hyperpg_pragati_katiyar',
+      'hyperpg_sushmitha',
+      ist('2026-09-28', '16:05'),
+    ],
+    [
+      'sid-9a0dbea41a6448a5b49cf1733bc8d738',
+      2183871.18,
+      'YESAP62716445084',
+      'hyperpg_pragati_katiyar',
+      'hyperpg_sushmitha',
+      ist('2026-09-28', '16:04'),
+    ],
+    [
+      'sid-0bc71e848d4e4e9f8008eaa2cf3418da',
+      27210.45,
+      'YESAP62706541892',
+      'hyperpg_naveen_a',
+      'hyperpg_sushmitha',
+      ist('2026-09-27', '19:46'),
+    ],
+    [
+      'sid-f799b9a4a0044ee8bab42ae8894aa16c',
+      2167009.13,
+      'YESAP62706541805',
+      'hyperpg_naveen_a',
+      'hyperpg_sushmitha',
+      ist('2026-09-27', '19:45'),
+    ],
+    [
+      'sid-5146022693604174afa8fb5dc31b9aa2',
+      98.82,
+      'YESAP62696650254',
+      'hyperpg_naveen_a',
+      'hyperpg_sushmitha',
+      ist('2026-09-26', '20:15'),
+    ],
+    [
+      'sid-ded95769b6ec47d7a333a5b44450d5db',
+      20553.92,
+      'YESAP62696651066',
+      'hyperpg_naveen_a',
+      'hyperpg_sushmitha',
+      ist('2026-09-26', '20:15'),
+    ],
+    [
+      'sid-f83172d9d2224fcbb1d8ed88f53c4546',
+      2087513.43,
+      'YESAP62696651128',
+      'hyperpg_naveen_a',
+      'hyperpg_sushmitha',
+      ist('2026-09-26', '20:15'),
+    ],
+    [
+      'sid-4c2a5a37259043c585bf763896c601ba',
+      2014429.3,
+      'YESAP62686908654',
+      'hyperpg_naveen_a',
+      'hyperpg_garima_suryavanshi',
+      ist('2026-09-25', '20:06'),
+    ],
+    [
+      'sid-a9c5838e3d374157be0885bab591f26e',
+      24329.97,
+      'YESAP62686908750',
+      'hyperpg_naveen_a',
+      'hyperpg_garima_suryavanshi',
+      ist('2026-09-25', '20:07'),
+    ],
   ] as const
 ).map(([settlementId, settlementAmount, utrNo, createdBy, approvedBy, settledAt]) => ({
   settlementId,
@@ -705,7 +805,10 @@ function padEscrow(count: number): EscrowRow[] {
     utrNo: `YESAP626${String(76000000 + Math.floor(rand() * 999999)).padStart(8, '0')}`,
     createdBy: 'hyperpg_naveen_a',
     approvedBy: i % 2 ? 'hyperpg_sushmitha' : 'hyperpg_garima_suryavanshi',
-    settledAt: ist(`2026-09-${pad(22 + (i % 3))}`, `${pad(19 + (i % 3))}:${pad(Math.floor(rand() * 60))}`),
+    settledAt: ist(
+      `2026-09-${pad(22 + (i % 3))}`,
+      `${pad(19 + (i % 3))}:${pad(Math.floor(rand() * 60))}`,
+    ),
   }))
 }
 
@@ -725,12 +828,18 @@ function pendingEscrow(count: number): EscrowRow[] {
     utrNo: EMPTY,
     createdBy: i % 2 ? 'hyperpg_pragati_katiyar' : 'hyperpg_naveen_a',
     approvedBy: EMPTY,
-    settledAt: ist(`2026-09-${pad(29 - Math.floor(i / 3))}`, `${pad(18 - i)}:${pad(Math.floor(rand() * 60))}`),
+    settledAt: ist(
+      `2026-09-${pad(29 - Math.floor(i / 3))}`,
+      `${pad(18 - i)}:${pad(Math.floor(rand() * 60))}`,
+    ),
   }))
 }
 
-export const ESCROW_ROWS: EscrowRow[] = [
-  ...pendingEscrow(5),
-  ...ESCROW_SHOWN,
-  ...padEscrow(6),
-]
+/**
+ * "Now", for the escrow page's ageing — Sep 29, 20:00 IST, just after the latest pending
+ * movement was raised. The demo data sits in late September; against the real clock every
+ * pending movement would be days old and "pending more than a day" would mean all of them.
+ */
+export const ESCROW_AS_OF = ist('2026-09-29', '20:00')
+
+export const ESCROW_ROWS: EscrowRow[] = [...pendingEscrow(5), ...ESCROW_SHOWN, ...padEscrow(6)]

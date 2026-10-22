@@ -21,15 +21,8 @@ import {
   type ColumnDefinition,
   type DateRange,
 } from '@juspay/blend-design-system'
-import {
-  CircleCheck,
-  FileCheck,
-  Layers,
-  Undo2,
-  Wallet,
-  X,
-} from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { CircleCheck, Eye, FileCheck, Layers, Undo2, Wallet, X } from 'lucide-react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { BREAKDOWN_CATEGORIES, RECON_ROWS, type PiStatus, type ReconRow } from './data'
 import { formatRange } from './dates'
 import { ReconDetailSheet } from './ReconDetailSheet'
@@ -41,7 +34,7 @@ import {
   withinColumns,
   type ReconQuery,
 } from './recon-query'
-import { useReconSummaryDials, useReconSummarySpacing } from './recon-summary-layout'
+import { statCardProps, useReconSummaryDials, useReconSummarySpacing } from './recon-summary-layout'
 import {
   AmountCell,
   PacbPage,
@@ -60,6 +53,7 @@ import {
   amountCol,
   copyCol,
   dateCol,
+  elementCol,
   hugColumns,
   idCol,
   inRange,
@@ -71,6 +65,9 @@ import {
 } from './helpers'
 
 const { colors } = FOUNDATION_THEME
+
+/** The table's Actions column — hidden for now (2026-10-07); flip to bring it back. */
+const SHOW_ROW_ACTIONS = false
 
 const COLUMNS = [
   idCol<ReconRow>('reconId', 'Recon ID', { copyable: true }),
@@ -157,6 +154,23 @@ const plural = (n: number, one: string) =>
 /** The period, written the way the range picker writes it (dates.ts). */
 const rangeLabel = ({ startDate, endDate }: DateRange) => formatRange(startDate, endDate)
 
+/**
+ * A row's action buttons. The row itself opens the detail sheet on click, so a click on a
+ * button stops here rather than also opening it. Keyboard reaches the buttons directly, so
+ * the wrapper takes no focus.
+ */
+function RowActions({ children }: { children: ReactNode }) {
+  return (
+    <div
+      role="presentation"
+      className="flex items-center gap-2"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </div>
+  )
+}
+
 function ReconSummary() {
   const [range, setRange] = useState<DateRange>(() => rangeOf('2026-09-22', '2026-09-29'))
   const [rows, setRows] = useState(RECON_ROWS)
@@ -165,9 +179,17 @@ function ReconSummary() {
   const [openRowId, setOpenRowId] = useState<string | null>(null)
   const openRow = rows.find((row) => row.rowId === openRowId) ?? null
   const { selected, onRowSelectionChange, clear: clearSelection, tableKey } = useSelection()
-  const { layout, columns: columnSet, cards: cardOrder, cardSize, selectionBar } =
-    useReconSummaryDials()
-  const bulkInside = selectionBar === 'inside'
+  const {
+    layout,
+    columns: columnSet,
+    cards: cardOrder,
+    cardSize,
+    selectionBar,
+  } = useReconSummaryDials()
+  // Layout 8 has neither selection bar: its Mark Ready and Revert to Hold sit on a row of
+  // their own between the cards and the table, at its right (body.open below).
+  const selectionPlace = layout === 'open' ? 'row' : selectionBar
+  const bulkInside = selectionPlace === 'inside'
   const spacing = useReconSummarySpacing()
 
   const [query, setQuery] = useState<ReconQuery>(EMPTY_QUERY)
@@ -185,7 +207,11 @@ function ReconSummary() {
   // all act on what is shown, so nothing counts or generates a row a filter has hidden.
   // Anything on a column the table is not showing is dropped first (withinColumns).
   const activeQuery = useMemo(
-    () => withinColumns(query, shownColumns.map((column) => String(column.field))),
+    () =>
+      withinColumns(
+        query,
+        shownColumns.map((column) => String(column.field)),
+      ),
     [query, shownColumns],
   )
   const visible = useMemo(() => applyQuery(inRangeRows, activeQuery), [inRangeRows, activeQuery])
@@ -227,6 +253,58 @@ function ReconSummary() {
     return ids.size
   }
 
+  /** One row's PI status — the Actions column's buttons and the detail sheet's footer. */
+  const setStatus = useCallback(
+    (rowId: string, to: PiStatus) =>
+      setRows((current) =>
+        current.map((row) => (row.rowId === rowId ? { ...row, piStatus: to } : row)),
+      ),
+    [],
+  )
+
+  /**
+   * The Actions column: the selection bar's Mark Ready / Revert to Hold for one row, and the
+   * detail sheet the row click opens. Last, after the filters are attached — a drawn column
+   * has no values to filter on.
+   */
+  const columns = useMemo(() => {
+    if (!SHOW_ROW_ACTIONS) return tableColumns
+    const actions = elementCol<ReconRow>('rowActions', 'Actions', (row) => (
+      <RowActions>
+        {row.piStatus === 'HOLD' && (
+          <ButtonV2
+            buttonType={ButtonV2Type.SECONDARY}
+            size={ButtonV2Size.SMALL}
+            text="Mark Ready"
+            leftSlot={{
+              slot: <CircleCheck size={14} color={colors.primary[600]} />,
+              maxHeight: 14,
+            }}
+            onClick={() => setStatus(row.rowId, 'READY')}
+          />
+        )}
+        {row.piStatus === 'READY' && (
+          <ButtonV2
+            buttonType={ButtonV2Type.SECONDARY}
+            size={ButtonV2Size.SMALL}
+            text="Revert to Hold"
+            leftSlot={{ slot: <Undo2 size={14} color={colors.orange[600]} />, maxHeight: 14 }}
+            onClick={() => setStatus(row.rowId, 'HOLD')}
+          />
+        )}
+        <ButtonV2
+          buttonType={ButtonV2Type.SECONDARY}
+          subType={ButtonV2SubType.ICON_ONLY}
+          size={ButtonV2Size.SMALL}
+          aria-label={`View details for ${row.reconId}`}
+          leftSlot={{ slot: <Eye size={14} />, maxHeight: 14 }}
+          onClick={() => setOpenRowId(row.rowId)}
+        />
+      </RowActions>
+    ))
+    return [...tableColumns, actions]
+  }, [tableColumns, setStatus])
+
   const generate = () => {
     const ids = new Set(ready.map((row) => row.rowId))
     setRows((current) =>
@@ -257,12 +335,9 @@ function ReconSummary() {
   )
 
   const cardProps = {
+    ...statCardProps(cardOrder, cardSize),
     onClick: () => setShowBreakdown(true),
-    compact: true,
-    tone: 'gray' as const,
     bare: layout === 'inline' || layout === 'strip',
-    valueFirst: cardOrder === 'value-first',
-    minimal: cardSize === 'minimal',
   }
   // Layout 6 names its container by the period it scopes — see recon-summary-layout.ts.
   const period = rangeLabel(range)
@@ -322,34 +397,51 @@ function ReconSummary() {
     </div>
   )
 
-  // Mark Ready and Revert to Hold, each only when the selection has a row it applies to
-  // rather than drawn and disabled: in a bar that exists only for the selection, a control
-  // that cannot act on it is noise. With neither applicable (every ticked row GENERATED) the
-  // bar is the count and Deselect all.
+  // Mark Ready and Revert to Hold. Disabled when the selection has no row they apply to —
+  // which only layout 8's row shows, since it keeps both on screen at all times.
+  const markReadyButton = (
+    <ButtonV2
+      buttonType={ButtonV2Type.SECONDARY}
+      size={ButtonV2Size.SMALL}
+      text="Mark Ready"
+      disabled={!canMarkReady}
+      // Each action's icon takes the colour of the status it moves rows to — READY is
+      // primary, HOLD orange (STATUS_COLOR in kit.tsx). Labels keep the button's colour.
+      // Disabled, the icon drops it and greys with the label (the slot's own colour).
+      leftSlot={{
+        slot: <CircleCheck size={14} color={canMarkReady ? colors.primary[600] : undefined} />,
+        maxHeight: 14,
+      }}
+      // The ticked rows have done their job once they are READY, so the selection clears.
+      onClick={() => {
+        move('HOLD', 'READY')
+        deselectAll()
+      }}
+    />
+  )
+  const revertButton = (
+    <ButtonV2
+      buttonType={ButtonV2Type.SECONDARY}
+      size={ButtonV2Size.SMALL}
+      text="Revert to Hold"
+      disabled={!canRevert}
+      // Undo rather than a pause glyph: this takes back a Mark Ready, and HOLD is where
+      // every row starts, not a state you put one into.
+      leftSlot={{
+        slot: <Undo2 size={14} color={canRevert ? colors.orange[600] : undefined} />,
+        maxHeight: 14,
+      }}
+      onClick={() => move('READY', 'HOLD')}
+    />
+  )
+  // In the selection bars, each only when the selection has a row it applies to rather than
+  // drawn and disabled: in a bar that exists only for the selection, a control that cannot
+  // act on it is noise. With neither applicable (every ticked row GENERATED) the bar is the
+  // count and Deselect all.
   const selectionActions = (
     <>
-      {canMarkReady && (
-        <ButtonV2
-          buttonType={ButtonV2Type.SECONDARY}
-          size={ButtonV2Size.SMALL}
-          text="Mark Ready"
-          // Each action's icon takes the colour of the status it moves rows to — READY is
-          // primary, HOLD orange (STATUS_COLOR in kit.tsx). Labels keep the button's colour.
-          leftSlot={{ slot: <CircleCheck size={14} color={colors.primary[600]} />, maxHeight: 14 }}
-          onClick={() => move('HOLD', 'READY')}
-        />
-      )}
-      {canRevert && (
-        <ButtonV2
-          buttonType={ButtonV2Type.SECONDARY}
-          size={ButtonV2Size.SMALL}
-          text="Revert to Hold"
-          // Undo rather than a pause glyph: this takes back a Mark Ready, and HOLD is where
-          // every row starts, not a state you put one into.
-          leftSlot={{ slot: <Undo2 size={14} color={colors.orange[600]} />, maxHeight: 14 }}
-          onClick={() => move('READY', 'HOLD')}
-        />
-      )}
+      {canMarkReady && markReadyButton}
+      {canRevert && revertButton}
     </>
   )
 
@@ -374,15 +466,15 @@ function ReconSummary() {
     </>
   )
 
-  /* By default the selection bar sits above the table, not over it (SelectionBar in kit.tsx):
-     Blend's own floats over the rows, and these are rows you read before marking them
-     Ready. The selection-bar dial puts Blend's back, inside the table, to compare.
+  /* By default the selection bar is Blend's own, floating over the rows inside the table. The
+     selection-bar dial swaps in ours (SelectionBar in kit.tsx), a bar above the table that
+     leaves the rows uncovered, to compare.
 
      The wrapper sizes the columns to their content (FIT_COLUMNS) and lines the table's edge
      up with the cards' (TABLE_OUTSET) — both in helpers.tsx. */
   const table = (
     <div className="flex flex-col" style={{ gap: spacing.selectionToTable }}>
-      {selected.length > 0 && !bulkInside && (
+      {selected.length > 0 && selectionPlace === 'above' && (
         <SelectionBar count={selected.length} actions={selectionActions} onClear={deselectAll} />
       )}
       <div
@@ -410,7 +502,9 @@ function ReconSummary() {
           // Remounted by Deselect all — the only way to clear DataTable's checkboxes (useSelection).
           key={tableKey}
           data={pageRows}
-          columns={tableColumns}
+          columns={columns}
+          // The table is wider than its panel; Actions stays pinned to the right edge.
+          columnFreezeRight={SHOW_ROW_ACTIONS ? 1 : 0}
           idField="rowId"
           // Layout 1 puts Generate in the table's own header, beside a title naming the rows it
           // acts on. Elsewhere — layout 6 included, whose range bar already names the period
@@ -439,7 +533,7 @@ function ReconSummary() {
     </div>
   )
 
-  // The seven arrangements — see recon-summary-layout.ts. Each one places the same pieces.
+  // The eight arrangements — see recon-summary-layout.ts. Each one places the same pieces.
   const body = {
     table: (
       <>
@@ -558,6 +652,26 @@ function ReconSummary() {
         {table}
       </RangePanel>
     ),
+    open: (
+      // Layout 7's panel with no border and no padding, so the cards and table line up with
+      // the title above them; the range and Generate have moved up beside it (actions).
+      <section
+        aria-label={`Payment info generator for ${period}`}
+        className="flex flex-col"
+        style={{ gap: spacing.cardsToTable }}
+      >
+        {cardStack}
+        <div className="flex flex-col" style={{ gap: spacing.selectionToTable }}>
+          {/* The ticked rows' actions, at the right of a row above the table — always there,
+              disabled until the selection has a row each one applies to. */}
+          <div className="flex min-h-8 items-center justify-end gap-2">
+            {markReadyButton}
+            {revertButton}
+          </div>
+          {table}
+        </div>
+      </section>
+    ),
   }[layout]
 
   const actions = {
@@ -574,6 +688,12 @@ function ReconSummary() {
     // The range lives on the container it scopes instead — or, in 7, on the row above it.
     scoped: undefined,
     aligned: undefined,
+    open: (
+      <>
+        {picker}
+        {generateButton}
+      </>
+    ),
   }[layout]
 
   return (
@@ -612,7 +732,7 @@ function ReconSummary() {
         </div>
       </ModalV2>
 
-      <ReconDetailSheet row={openRow} onClose={() => setOpenRowId(null)} />
+      <ReconDetailSheet row={openRow} onClose={() => setOpenRowId(null)} onSetStatus={setStatus} />
     </PacbPage>
   )
 }

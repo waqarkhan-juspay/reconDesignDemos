@@ -36,11 +36,17 @@ import { MiddleTruncate } from '../middle-truncate'
 import { FEEDBACK_EASING, MICRO_MS } from '../motion'
 import { PrimitiveText, font } from '../primitives'
 import type { Categorised } from '../report-config'
-import { sectionTabsTokens } from '../theme'
+import { configSectionTabsTokens, viewTabsTokens } from '../theme'
 
 const { colors } = FOUNDATION_THEME
 
-/** The page-level tabs under the title. Labels are the identity — keep them unique. */
+/**
+ * The "Configurator" heading under the tabs. Off for now (2026-10-09): the topbar already
+ * names the page. Turn it back on to show it again.
+ */
+const SHOW_PAGE_TITLE = false
+
+/** The page-level tabs above the title. Labels are the identity — keep them unique. */
 const SECTION_TABS = [
   'Report Config',
   'SFTP Config',
@@ -63,7 +69,7 @@ const SECTION_TABS = [
  * rows — it is a different set, with a different vocabulary in Status and a different
  * control in Actions — which is the thing a tab is actually for.
  */
-const ALL_REPORTS = 'All Reports'
+const ALL_REPORTS = 'Reports'
 const DRAFTS = 'Drafts'
 const VIEW_TABS = [ALL_REPORTS, DRAFTS]
 
@@ -949,24 +955,13 @@ function Configurator() {
       className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
       style={{ paddingTop: spacing.aboveTitle }}
     >
-      <PrimitiveText
-        as="h1"
-        // heading.md — 20/28. The token rather than the numbers, so the page heading keeps
-        // moving with the scale rather than pinning itself to today's value of it.
-        {...font(FOUNDATION_THEME.font.size.heading.md)}
-        color={colors.gray[700]}
-        fontWeight={FOUNDATION_THEME.font.weight[600]}
-      >
-        Configurator
-      </PrimitiveText>
-
-      {/* The class carries the 24px inter-tab gap the design specifies — see index.css.
-          TabsV2List takes no className, so it has to be reached through this wrapper. */}
-      {/* Its own ThemeProvider, so the 24px trigger gap reaches these tabs and not the
-          boxed filter tabs below — `tabList.gap` is a single token, not keyed by variant.
-          See sectionTabsTokens in src/theme.ts. */}
-      <div style={{ marginTop: spacing.titleToTabs }}>
-        <ThemeProvider componentTokens={sectionTabsTokens}>
+      {/* The page's sections as Blend's underline tabs over a full-width hairline — with no
+          side padding, so the first label starts on the page's keyline (see
+          configSectionTabsTokens). A row of places to go reads as tabs; the segmented
+          control is kept for the Reports / Drafts switch below, which picks between two
+          views of one table. They open the page, above its title. */}
+      <div>
+        <ThemeProvider componentTokens={configSectionTabsTokens}>
           <TabsV2
             variant={TabsV2Variant.UNDERLINE}
             size={TabsV2Size.MD}
@@ -982,6 +977,25 @@ function Configurator() {
             </TabsV2List>
           </TabsV2>
         </ThemeProvider>
+      </div>
+
+      {/* The page's h1, out of sight while SHOW_PAGE_TITLE is off but kept for screen
+          readers, so the page still has its one heading. `sr-only` takes it out of the flow,
+          so the tabs sit straight over the toolbar. */}
+      <div
+        className={SHOW_PAGE_TITLE ? undefined : 'sr-only'}
+        style={SHOW_PAGE_TITLE ? { marginTop: spacing.titleToTabs } : undefined}
+      >
+        <PrimitiveText
+          as="h1"
+          // heading.md — 20/28. The token rather than the numbers, so the page heading keeps
+          // moving with the scale rather than pinning itself to today's value of it.
+          {...font(FOUNDATION_THEME.font.size.heading.md)}
+          color={colors.gray[700]}
+          fontWeight={FOUNDATION_THEME.font.weight[600]}
+        >
+          Configurator
+        </PrimitiveText>
       </div>
 
       {/* No horizontal padding of its own. The panel used to carry `px-6` so it read as
@@ -1002,28 +1016,29 @@ function Configurator() {
               parent, which would stretch the tablist — and with it the triggers' hover and
               active targets — across several hundred pixels of dead space running to the
               button. TabsV2 takes no className (rule 2), so the width is capped on a wrapper
-              we own. It mattered more under BOXED, which painted that space grey; it still
-              matters now that the space is merely invisible rather than absent. */}
+              we own. Under BOXED it is also what keeps the grey track hugging the pair
+              instead of running to the button. */}
           <div className="w-fit shrink-0">
-            <TabsV2
-              // FLOATING: no track, no radius on the list, and the only mark is a fill under
-              // the tab you are on (gray[100] active, gray[50] on hover) — so the switch
-              // reads as two words, one of them current, rather than as a segmented control
-              // sitting on its own grey ground. The table below is what it changes, and this
-              // keeps the eye on that rather than on the chrome that chose it.
-              variant={TabsV2Variant.FLOATING}
-              size={TabsV2Size.LG}
-              value={view}
-              onValueChange={handleViewChange}
-            >
-              <TabsV2List>
-                {VIEW_TABS.map((label) => (
-                  <TabsV2Trigger key={label} value={label}>
-                    {label}
-                  </TabsV2Trigger>
-                ))}
-              </TabsV2List>
-            </TabsV2>
+            {/* Its own ThemeProvider for the track's 12px radius — viewTabsTokens. */}
+            <ThemeProvider componentTokens={viewTabsTokens}>
+              <TabsV2
+                // BOXED: a segmented control — the pair on a grey track, the tab you are on a
+                // white surface lifted out of it. It reads as one switch with two positions,
+                // which is what it is: the table below shows one set of rows or the other.
+                variant={TabsV2Variant.BOXED}
+                size={TabsV2Size.LG}
+                value={view}
+                onValueChange={handleViewChange}
+              >
+                <TabsV2List>
+                  {VIEW_TABS.map((label) => (
+                    <TabsV2Trigger key={label} value={label}>
+                      {label}
+                    </TabsV2Trigger>
+                  ))}
+                </TabsV2List>
+              </TabsV2>
+            </ThemeProvider>
           </div>
 
           {/* ButtonV2 sizes to its text; without this it is a flex item that can shrink
@@ -1031,7 +1046,8 @@ function Configurator() {
           <div className="shrink-0">
             <ButtonV2
               buttonType={ButtonV2Type.PRIMARY}
-              size={ButtonV2Size.LARGE}
+              // SMALL, ButtonV2's smallest — kept quiet beside the switch and the table.
+              size={ButtonV2Size.SMALL}
               text="Create report config"
               onClick={() => navigate('/configurator/create')}
             />

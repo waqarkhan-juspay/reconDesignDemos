@@ -7,7 +7,9 @@ import {
   getTableToken,
   type ComponentTokenType,
   type DirectoryTokenType,
+  type ResponsiveAccordionV2Tokens,
   type ResponsiveDirectoryTokens,
+  type ResponsiveMultiSelectV2Tokens,
   type ResponsiveTableTokens,
   type ResponsiveTabsV2Tokens,
   type ResponsiveSidebarV2Tokens,
@@ -17,6 +19,7 @@ import { ACCORDIONV2_TOKENS } from './tokens/AccordionV2'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
 import { MENU_V2_TOKENS } from './tokens/MenuV2'
+import { MULTI_SELECT_V2_TOKENS } from './tokens/MultiSelectV2'
 import { POPOVERV2_TOKENS } from './tokens/PopoverV2'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
 import { SIDEBARV2_TOKENS } from './tokens/SidebarV2'
@@ -46,7 +49,7 @@ import { TAGV2_TOKENS } from './tokens/TagV2'
  * Mapped over the keys rather than naming `sm` and `lg`, so a third breakpoint could not
  * silently keep the default.
  */
-const perBreakpoint = <T,>(tokens: Record<string, T>, edit: (token: T) => T) =>
+const perBreakpoint = <T>(tokens: Record<string, T>, edit: (token: T) => T) =>
   Object.fromEntries(Object.entries(tokens).map(([bp, token]) => [bp, edit(token)]))
 
 /**
@@ -181,11 +184,114 @@ export const sectionTabsTokens: ComponentTokenType = {
   ) as unknown as ResponsiveTabsV2Tokens,
 }
 
+type UnderlineTabsPadding = Record<
+  'sm' | 'md' | 'lg',
+  Record<string, Record<'top' | 'right' | 'bottom' | 'left', unknown>>
+>
+/** `trigger` sits inside `tabList` in Blend's tree (tabsV2.tokens.ts), not beside it. */
+type UnderlineTabsToken = {
+  tabList: { gap: unknown; trigger: { padding: UnderlineTabsPadding } }
+}
+
+/**
+ * The Configurator's section tabs — TabsV2 UNDERLINE with no side padding on the tabs (Blend:
+ * 8px a side), so the first label starts on the page's keyline, with the toolbar and the
+ * table under it. The 16px that padding put between neighbours goes into the gap instead
+ * (8 → 24), so the labels sit as far apart as before. The indicator now spans the label
+ * alone.
+ */
+export const configSectionTabsTokens: ComponentTokenType = {
+  ...componentTokens,
+  TABSV2: perBreakpoint(TABSV2_TOKENS as unknown as Record<string, UnderlineTabsToken>, (token) => {
+    const { trigger } = token.tabList
+    const padding = Object.fromEntries(
+      Object.entries(trigger.padding).map(([size, variants]) => [
+        size,
+        { ...variants, underline: { ...variants.underline, left: 0, right: 0 } },
+      ]),
+    ) as unknown as UnderlineTabsPadding
+    return {
+      ...token,
+      tabList: {
+        ...token.tabList,
+        gap: FOUNDATION_THEME.unit[24],
+        trigger: { ...trigger, padding },
+      },
+    }
+  }) as unknown as ResponsiveTabsV2Tokens,
+}
+
+type BoxedTabsToken = {
+  tabList: { borderRadius: Record<'sm' | 'md' | 'lg', Record<string, unknown>> }
+}
+
+/**
+ * The Configurator's Reports / Drafts switch — TabsV2 BOXED, a segmented control. Its
+ * grey track at the 12px radius (Blend: 8) so it rounds a step more than the 8px white tab
+ * sitting 4px inside it, the way nested corners should: an inner radius as large as the
+ * outer one makes the gap between them look pinched at the corners.
+ *
+ * Scoped by a nested ThemeProvider for the reason sectionTabsTokens gives — any other BOXED
+ * tabs keep Blend's radius.
+ */
+export const viewTabsTokens: ComponentTokenType = {
+  ...componentTokens,
+  TABSV2: perBreakpoint(TABSV2_TOKENS as unknown as Record<string, BoxedTabsToken>, (token) => ({
+    ...token,
+    tabList: {
+      ...token.tabList,
+      borderRadius: {
+        ...token.tabList.borderRadius,
+        lg: { ...token.tabList.borderRadius.lg, boxed: FOUNDATION_THEME.border.radius[12] },
+      },
+    },
+  })) as unknown as ResponsiveTabsV2Tokens,
+}
+
+type ClearButtonToken = {
+  trigger: { clearButton?: { outline: Record<string, unknown> } }
+}
+
+/**
+ * Filter chips (the PACB Workflow sandbox's Status / Merchant Payment Status): the clear ×
+ * MultiSelectV2 draws beside a set filter loses its hairline, so it reads as part of the chip
+ * rather than a second boxed button. Blend outlines it in every state
+ * (multiSelectV2.light.tokens.ts:239-245); only keyboard focus keeps a ring here, so Tab
+ * still shows where it is.
+ *
+ * Scoped like sectionTabsTokens — wrap only the filter row. Every other MultiSelectV2 is a
+ * form field, where the boxed × sits inside a bordered input and belongs.
+ */
+export const filterChipTokens: ComponentTokenType = {
+  ...componentTokens,
+  MULTI_SELECT_V2: perBreakpoint(
+    MULTI_SELECT_V2_TOKENS as unknown as Record<string, ClearButtonToken>,
+    (token) => ({
+      ...token,
+      trigger: {
+        ...token.trigger,
+        clearButton: token.trigger.clearButton && {
+          ...token.trigger.clearButton,
+          outline: {
+            ...token.trigger.clearButton.outline,
+            open: 'none !important',
+            closed: 'none !important',
+            hover: 'none !important',
+            error: 'none !important',
+          },
+        },
+      },
+    }),
+  ) as unknown as ResponsiveMultiSelectV2Tokens,
+}
+
 type Sides = 'top' | 'right' | 'bottom' | 'left'
 /** Blend's own size keys — `ButtonV2Size` is `sm | md | lg` (buttonV2.types.ts:11). */
 type GhostSize = 'sm' | 'md' | 'lg'
 type GhostButtonToken = {
-  backgroundColor: { secondary: { inline: Record<'default' | 'hover' | 'active' | 'disabled', unknown> } }
+  backgroundColor: {
+    secondary: { inline: Record<'default' | 'hover' | 'active' | 'disabled', unknown> }
+  }
   borderRadius: Record<GhostSize, { secondary: { inline: unknown } }>
   padding: Record<Sides, Record<GhostSize, { secondary: { inline: unknown } }>>
 }
@@ -281,7 +387,13 @@ export const dangerSecondaryButtonTokens: ComponentTokenType = {
  */
 const ghostButton = (
   size: GhostSize,
-  { x, y, radius }: { x: string; y: string; radius: unknown },
+  {
+    x,
+    y,
+    radius,
+    hover = FOUNDATION_THEME.colors.gray[50],
+    active = FOUNDATION_THEME.colors.gray[100],
+  }: { x: string; y: string; radius: unknown; hover?: string; active?: string },
 ): ComponentTokenType => ({
   ...componentTokens,
   BUTTONV2: perBreakpoint(
@@ -302,8 +414,8 @@ const ghostButton = (
             ...token.backgroundColor.secondary,
             inline: {
               default: 'transparent',
-              hover: FOUNDATION_THEME.colors.gray[50],
-              active: FOUNDATION_THEME.colors.gray[100],
+              hover,
+              active,
               disabled: 'transparent',
             },
           },
@@ -335,6 +447,49 @@ export const ghostButtonTokens = ghostButton('lg', {
   x: '16px',
   y: '10px',
   radius: FOUNDATION_THEME.border.radius[10],
+})
+
+/**
+ * Reupload and Delete beside an uploaded form (src/pages/pacb/FormUploadCard.tsx) — ghost
+ * buttons at 8 / 4 with an 8px radius, filling gray[100] on hover: gray[50] barely shows on
+ * the card's white.
+ */
+export const formActionTokens = ghostButton('md', {
+  x: '8px',
+  y: '4px',
+  radius: FOUNDATION_THEME.border.radius[8],
+  hover: FOUNDATION_THEME.colors.gray[100],
+})
+
+/**
+ * A borderless icon button — the PACB Workflow's drilled-in back arrow and a Playground
+ * story's full-screen toggle (src/pages/playground/StoryFrame.tsx). The secondary icon-only
+ * button without its border, drawn as an INLINE button with a 14px glyph. 10px all round
+ * keeps it the 34px square the bordered one was, and gray[100] on hover for the reason
+ * formActionTokens gives.
+ */
+export const ghostIconTokens = ghostButton('sm', {
+  x: '10px',
+  y: '10px',
+  radius: FOUNDATION_THEME.border.radius[10],
+  hover: FOUNDATION_THEME.colors.gray[100],
+})
+
+/** A token colour at a fraction of its strength — a wash over whatever is underneath. */
+const wash = (color: string | undefined, percent: number) =>
+  `color-mix(in srgb, ${color} ${percent}%, transparent)`
+
+/**
+ * Version 3's info buttons, over the settlements and over the payments. ghostIconTokens'
+ * shape, but hover and press are see-through washes of gray[200] rather than a solid fill:
+ * the button sits on headings, and an opaque square there read as a block behind the glyph.
+ */
+export const ghostInfoTokens = ghostButton('sm', {
+  x: '10px',
+  y: '10px',
+  radius: FOUNDATION_THEME.border.radius[10],
+  hover: wash(FOUNDATION_THEME.colors.gray[200], 40),
+  active: wash(FOUNDATION_THEME.colors.gray[200], 70),
 })
 
 /**
@@ -419,31 +574,34 @@ type FabButtonToken = {
  */
 export const faqLauncherTokens: ComponentTokenType = {
   ...componentTokens,
-  BUTTONV2: perBreakpoint(BUTTONV2_TOKENS as unknown as Record<string, FabButtonToken>, (token) => ({
-    ...token,
-    backgroundColor: {
-      ...token.backgroundColor,
-      secondary: {
-        ...token.backgroundColor.secondary,
-        iconOnly: {
-          ...token.backgroundColor.secondary.iconOnly,
-          default: FOUNDATION_THEME.colors.gray[100],
-          hover: FOUNDATION_THEME.colors.gray[150],
-          active: FOUNDATION_THEME.colors.gray[100],
-        },
-      },
-    },
-    borderRadius: {
-      ...token.borderRadius,
-      lg: {
-        ...token.borderRadius.lg,
+  BUTTONV2: perBreakpoint(
+    BUTTONV2_TOKENS as unknown as Record<string, FabButtonToken>,
+    (token) => ({
+      ...token,
+      backgroundColor: {
+        ...token.backgroundColor,
         secondary: {
-          ...token.borderRadius.lg.secondary,
-          iconOnly: FOUNDATION_THEME.border.radius.full,
+          ...token.backgroundColor.secondary,
+          iconOnly: {
+            ...token.backgroundColor.secondary.iconOnly,
+            default: FOUNDATION_THEME.colors.gray[100],
+            hover: FOUNDATION_THEME.colors.gray[150],
+            active: FOUNDATION_THEME.colors.gray[100],
+          },
         },
       },
-    },
-  })) as unknown as ComponentTokenType['BUTTONV2'],
+      borderRadius: {
+        ...token.borderRadius,
+        lg: {
+          ...token.borderRadius.lg,
+          secondary: {
+            ...token.borderRadius.lg.secondary,
+            iconOnly: FOUNDATION_THEME.border.radius.full,
+          },
+        },
+      },
+    }),
+  ) as unknown as ComponentTokenType['BUTTONV2'],
   ACCORDIONV2: perBreakpoint(
     ACCORDIONV2_TOKENS as unknown as Record<string, FaqAccordionToken>,
     (token) => ({
@@ -639,33 +797,30 @@ export const recipientTagTokens: ComponentTokenType = {
  */
 export const fieldTagTokens: ComponentTokenType = {
   ...componentTokens,
-  TAGV2: perBreakpoint(
-    TAGV2_TOKENS as unknown as Record<string, TagChromeToken>,
-    (token) => ({
-      ...token,
-      backgroundColor: {
-        ...token.backgroundColor,
-        subtle: {
-          ...token.backgroundColor.subtle,
-          warning: token.backgroundColor.subtle.neutral,
-        },
+  TAGV2: perBreakpoint(TAGV2_TOKENS as unknown as Record<string, TagChromeToken>, (token) => ({
+    ...token,
+    backgroundColor: {
+      ...token.backgroundColor,
+      subtle: {
+        ...token.backgroundColor.subtle,
+        warning: token.backgroundColor.subtle.neutral,
       },
-      border: {
-        ...token.border,
-        noFill: {
-          ...token.border.noFill,
-          neutral: TAG_HAIRLINE,
-          warning: TAG_HAIRLINE,
-          purple: TAG_HAIRLINE,
-        },
-        subtle: {
-          ...token.border.subtle,
-          neutral: TAG_HAIRLINE,
-          warning: TAG_HAIRLINE,
-        },
+    },
+    border: {
+      ...token.border,
+      noFill: {
+        ...token.border.noFill,
+        neutral: TAG_HAIRLINE,
+        warning: TAG_HAIRLINE,
+        purple: TAG_HAIRLINE,
       },
-    }),
-  ) as unknown as ComponentTokenType['TAGV2'],
+      subtle: {
+        ...token.border.subtle,
+        neutral: TAG_HAIRLINE,
+        warning: TAG_HAIRLINE,
+      },
+    },
+  })) as unknown as ComponentTokenType['TAGV2'],
 }
 
 type SelectTriggerToken = { trigger: { selectedValue: { color: unknown } } }
@@ -774,6 +929,16 @@ export const detailSheetTokens: ComponentTokenType = {
     >,
     (token) => ({ ...token, gap: { ...token.gap, vertical: FOUNDATION_THEME.unit[8] } }),
   ) as unknown as ComponentTokenType['KEYVALUEPAIRV2'],
+}
+
+/**
+ * The PACB detail sheet's tokens: Blend's own drawer, unmoved — its 20px content padding, as
+ * the design system's side drawer ships it — with only the Configurator sheet's 8px
+ * key/value gap, which its label/value rows share.
+ */
+export const pacbSheetTokens: ComponentTokenType = {
+  ...componentTokens,
+  KEYVALUEPAIRV2: detailSheetTokens.KEYVALUEPAIRV2,
 }
 
 /**
@@ -915,3 +1080,59 @@ export function desaturate(hex: string) {
  * under the table header's gray[25], so the bar reads as the container's header band.
  */
 export const NEUTRAL_BAND = desaturate(FOUNDATION_THEME.colors.gray[50]!)
+
+type AccordionToken = ResponsiveAccordionV2Tokens['lg']
+/** One value in every interaction state of a token slot. */
+const everyState = <T extends object>(looks: T, value: string | undefined) =>
+  Object.fromEntries(Object.keys(looks).map((state) => [state, value])) as T
+
+/**
+ * The payment detail's rows (src/pages/pacb/PaymentDetailV3.tsx) — the design's Accordion
+ * Item, on Blend's BORDER accordion. Against Blend's defaults:
+ *
+ * - 8px between rows at every width (Blend: 0 below 1024px, 24 above).
+ * - 12px corners (Blend: 8) — rule 10's radius for a card.
+ * - 16px top and bottom, 24 at the sides (Blend: 20 / 16).
+ * - White at rest; gray 25 on hover and while open (Blend: gray 50).
+ * - The title at body.md's own 20px leading (Blend: 16).
+ *
+ * Scoped by a ThemeProvider round that panel only, so no other accordion moves.
+ */
+export const paymentAccordionTokens: ComponentTokenType = {
+  ...componentTokens,
+  ACCORDIONV2: perBreakpoint(
+    ACCORDIONV2_TOKENS as unknown as Record<string, AccordionToken>,
+    (token) => {
+      const { trigger } = token
+      const border = AccordionV2Type.BORDER
+      const { colors } = FOUNDATION_THEME
+      return {
+        ...token,
+        gap: { ...token.gap, [border]: FOUNDATION_THEME.unit[8] },
+        borderRadius: { ...token.borderRadius, [border]: FOUNDATION_THEME.border.radius[12] },
+        trigger: {
+          ...trigger,
+          backgroundColor: {
+            ...trigger.backgroundColor,
+            [border]: {
+              ...everyState(trigger.backgroundColor[border], colors.gray[25]),
+              default: colors.gray[0],
+              disabled: trigger.backgroundColor[border].disabled,
+            },
+          },
+          padding: {
+            ...trigger.padding,
+            [border]: `${FOUNDATION_THEME.unit[16]} ${FOUNDATION_THEME.unit[24]}`,
+          },
+          text: {
+            ...trigger.text,
+            title: {
+              ...trigger.text.title,
+              lineHeight: `${FOUNDATION_THEME.font.size.body.md.lineHeight}px`,
+            },
+          },
+        },
+      }
+    },
+  ) as unknown as ComponentTokenType['ACCORDIONV2'],
+}
