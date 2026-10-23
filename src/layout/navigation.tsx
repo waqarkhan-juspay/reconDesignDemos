@@ -8,6 +8,7 @@ import {
   type NavbarItem,
 } from '@juspay/blend-design-system'
 import {
+  BellRing,
   BookOpen,
   FileSearch,
   House,
@@ -30,6 +31,7 @@ import { ICON_SIZE } from './chrome'
  */
 export const HOME_PATH = '/home'
 export const CONFIGURATOR_PATH = '/configurator'
+export const ALERTS_PATH = '/alerts'
 
 /**
  * The collapsed sections below Reconciliation — node 4405:10766 draws each as a label and a
@@ -72,6 +74,7 @@ export type NavigationOptions = {
    * moving between two routes outside them still leaves the tree's inputs unchanged.
    */
   activeModulePath: string | null
+  isAlertsActive: boolean
   /** Router push. Blend's NavItem does no routing of its own — see below. */
   navigate: (to: string) => void
 }
@@ -82,14 +85,15 @@ export type NavigationOptions = {
  * so `href` alone goes nowhere and an `onClick` is required. `href` still earns its place —
  * cmd/ctrl-click bails out before that handler and opens the real URL in a new tab.
  *
- * Only Home and Configurator have routes. The rest are the design's labels, drawn so the
- * rail reads as the product's nav rather than the two pages that exist — they are
- * deliberately inert rather than pointing at a 404.
+ * Home, Configurator, Alerts and the PACB Recon and Playground pages have routes. The rest
+ * are the design's labels, drawn so the rail reads as the product's nav rather than only the
+ * pages that exist — they are deliberately inert rather than pointing at a 404.
  */
 export function buildNavigationData({
   isHomeActive,
   isConfiguratorActive,
   activeModulePath,
+  isAlertsActive,
   navigate,
 }: NavigationOptions): DirectoryData[] {
   return [
@@ -163,6 +167,14 @@ export function buildNavigationData({
           isSelected: isConfiguratorActive,
           // Without this the item is absent from the mobile drawer, where the desktop
           // nav is display:none — i.e. unreachable between 320px and 1024px.
+          showOnMobile: true,
+        },
+        {
+          label: 'Alerts',
+          leftSlot: <BellRing size={ICON_SIZE} />,
+          href: ALERTS_PATH,
+          onClick: () => navigate(ALERTS_PATH),
+          isSelected: isAlertsActive,
           showOnMobile: true,
         },
         {

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, createBrowserRouter } from 'react-router'
 import App from './App.tsx'
 import About from './pages/About.tsx'
+import Alerts from './pages/alerts'
 import Blend from './pages/Blend.tsx'
 import Configurator from './pages/Configurator.tsx'
 import CreateReportConfig from './pages/create-report-config'
@@ -17,7 +18,7 @@ import { PLAYGROUND_ROUTES } from './pages/playground/routes.ts'
 import FormUploads from './pages/playground/FormUploads.tsx'
 import PaymentCards from './pages/playground/PaymentCards.tsx'
 import SettlementCards from './pages/playground/SettlementCards.tsx'
-import { CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.tsx'
+import { ALERTS_PATH, CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.tsx'
 
 /** PACB pages by their nav label — the label is the route's identity (src/pages/pacb/routes.ts). */
 const PACB_PAGES: Record<string, ReactNode> = {
@@ -49,6 +50,7 @@ export const router = createBrowserRouter([
       { path: 'about', element: <About /> },
       { path: 'blend', element: <Blend /> },
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
+      { path: ALERTS_PATH.slice(1), element: <Alerts /> },
       // A PACB route with no page of its own yet (LRS Files) falls back to the placeholder.
       ...PACB_ROUTES.map(({ label, path }) => ({
         path: path.slice(1),

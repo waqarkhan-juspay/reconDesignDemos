@@ -393,7 +393,7 @@ const ghostButton = (
     radius,
     hover = FOUNDATION_THEME.colors.gray[50],
     active = FOUNDATION_THEME.colors.gray[100],
-  }: { x: string; y: string; radius: unknown; hover?: string; active?: string },
+  }: { x: string; y: string; radius: unknown; hover?: unknown; active?: unknown },
 ): ComponentTokenType => ({
   ...componentTokens,
   BUTTONV2: perBreakpoint(
@@ -490,6 +490,27 @@ export const ghostInfoTokens = ghostButton('sm', {
   radius: FOUNDATION_THEME.border.radius[10],
   hover: wash(FOUNDATION_THEME.colors.gray[200], 40),
   active: wash(FOUNDATION_THEME.colors.gray[200], 70),
+})
+
+/**
+ * Alerts' row actions — Edit and History — as ghost icon buttons at SMALL: an even 8px around
+ * a 16px glyph makes each a 32px square, the height the secondary SMALL button has, so the
+ * rows keep their height. Same 10px radius as that button, so the hover fill is its shape.
+ *
+ * INLINE rather than ICON_ONLY, because secondary ICON_ONLY is the outlined button: INLINE is
+ * the subtype with no border and no fill, and with no `text` ButtonV2 draws just the slot.
+ *
+ * The fill is a step darker than the default ghost's. These sit in table rows, and hovering
+ * a button hovers its row too — DataTable paints a hovered row gray[100]. The default
+ * gray[50] is lighter than that, so the hovered button read as a pale hole in a grey row.
+ * gray[150] / gray[200] sit one step above the row instead.
+ */
+export const smallGhostIconButtonTokens = ghostButton('sm', {
+  x: '8px',
+  y: '8px',
+  radius: FOUNDATION_THEME.border.radius[10],
+  hover: FOUNDATION_THEME.colors.gray[150],
+  active: FOUNDATION_THEME.colors.gray[200],
 })
 
 /**

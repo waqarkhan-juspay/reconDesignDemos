@@ -25,6 +25,7 @@ import { CHROME_HOVER } from './chrome'
 import { PACB_ROUTES } from '../pages/pacb/routes'
 import { PLAYGROUND_ROUTES } from '../pages/playground/routes'
 import {
+  ALERTS_PATH,
   CONFIGURATOR_PATH,
   HOME_PATH,
   buildNavigationData,
@@ -199,16 +200,26 @@ function AppShell({ children }: { children?: ReactNode }) {
 
   const isHomeActive = pathname === HOME_PATH
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
+  const isAlertsActive = pathname === ALERTS_PATH
   const moduleRoute = [...PACB_ROUTES, ...PLAYGROUND_ROUTES].find(({ path }) => path === pathname)
   const activeModulePath = moduleRoute ? pathname : null
   const pageTitle = isHomeActive
     ? 'Home'
     : isConfiguratorActive
       ? 'Configurator'
-      : moduleRoute?.label
+      : isAlertsActive
+        ? 'Alerts'
+        : moduleRoute?.label
   const navigationData = useMemo(
-    () => buildNavigationData({ isHomeActive, isConfiguratorActive, activeModulePath, navigate }),
-    [isHomeActive, isConfiguratorActive, activeModulePath, navigate],
+    () =>
+      buildNavigationData({
+        isHomeActive,
+        isConfiguratorActive,
+        isAlertsActive,
+        activeModulePath,
+        navigate,
+      }),
+    [isHomeActive, isConfiguratorActive, isAlertsActive, activeModulePath, navigate],
   )
   // Every nested menu starts open on this branch — see use-open-nested-menus.ts.
   useOpenNestedMenus(expandableItemLabels(navigationData))
