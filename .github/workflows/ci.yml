@@ -1,0 +1,27 @@
+# Lint and build on every push and pull request — the same check AGENTS.md asks for before
+# calling anything done. `build` runs `tsc -b` before `vite build`, so it typechecks too.
+#
+# `npm run tokens:check` is deliberately left out: it exits 1 whenever src/tokens differs from
+# Blend's defaults, and this app overrides some on purpose, so it would never be green.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
