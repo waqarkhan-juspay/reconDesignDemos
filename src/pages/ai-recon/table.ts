@@ -19,6 +19,12 @@ export type ParseOptions = {
 export type Row = Record<string, string>
 export type Table = { columns: string[]; rows: Row[] }
 
+/** What a file must be to be read here. CSV only — nothing in the app reads a spreadsheet. */
+export const ACCEPTED_TYPES = ['.csv']
+export const MAX_FILE_BYTES = 25 * 1024 * 1024
+/** The limits in words, for the upload box's error and the assistant's answers. */
+export const LIMITS_TEXT = `CSV, up to ${MAX_FILE_BYTES / 1024 / 1024} MB`
+
 type Choice<T> = { value: T; label: string }
 
 export const DELIMITERS: Choice<Delimiter>[] = [
@@ -44,68 +50,50 @@ export const QUOTES: Choice<Quote>[] = [
 export const labelOf = <T>(choices: Choice<T>[], value: T) =>
   choices.find((choice) => choice.value === value)?.label ?? String(value)
 
-export const decode = (bytes: ArrayBuffer, encoding: Encoding) =>
-  new TextDecoder(encoding).decode(bytes)
+export const formatCount = (n: number) => n.toLocaleString('en-IN')
+
+/** "1,203 rows", "1 column". */
+export const count = (n: number, noun: string) => `${formatCount(n)} ${noun}${n === 1 ? '' : 's'}`
+
+/** `name`, or `name (2)`, `name (3)`… — the first not already taken. */
+export function uniqueName(name: string, taken: string[]) {
+  let candidate = name
+  for (let n = 2; taken.includes(candidate); n++) candidate = `${name} (${n})`
+  return candidate
+}
 
 /**
- * The delimiter that splits the most lines into the same, widest shape. Taking the most
- * common field count rather than the first line's keeps a banner line above the header
- * from deciding it.
+ * The few most recent results per file — the settings in use plus a draft being tried —
+ * without holding every variant of a 25 MB file. Keyed weakly on the bytes, so removing a
+ * file frees all of it.
  */
-function delimiterScore(lines: string[], delimiter: Delimiter) {
-  const counts = new Map<number, number>()
-  for (const line of lines) {
-    const fields = line.split(delimiter).length
-    counts.set(fields, (counts.get(fields) ?? 0) + 1)
+const CACHE_SIZE = 3
+function cached<V>(store: WeakMap<ArrayBuffer, Map<string, V>>, bytes: ArrayBuffer, key: string, make: () => V) {
+  let entries = store.get(bytes)
+  if (!entries) store.set(bytes, (entries = new Map()))
+  const hit = entries.get(key)
+  if (hit !== undefined) {
+    // Most recent last, so the oldest is the one that goes.
+    entries.delete(key)
+    entries.set(key, hit)
+    return hit
   }
-  let best = 0
-  counts.forEach((lineCount, fields) => {
-    if (fields > 1) best = Math.max(best, lineCount * fields)
-  })
-  return best
+  const value = make()
+  entries.set(key, value)
+  if (entries.size > CACHE_SIZE) entries.delete(entries.keys().next().value!)
+  return value
 }
 
-/** The field count most of these records share — the table's real width. */
-function modalWidth(rows: string[][]) {
-  const counts = new Map<number, number>()
-  for (const row of rows) counts.set(row.length, (counts.get(row.length) ?? 0) + 1)
-  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0
-}
+const texts = new WeakMap<ArrayBuffer, Map<string, string>>()
+const splits = new WeakMap<ArrayBuffer, Map<string, string[][]>>()
+const tables = new WeakMap<ArrayBuffer, Map<string, Table>>()
 
-/** Lines that are not the table, at most this many at either end. */
-const MAX_SKIP = 5
-
-/**
- * How the file most likely reads. A UTF-16 byte-order mark says so outright; else UTF-8.
- *
- * Exports often wrap the table in a banner ("Settlement Report", a date range) and a total
- * line. The header is the first record as wide as most of the file; a trailing record with
- * at most one value filled in is a summary, not data.
- */
-export function detect(bytes: ArrayBuffer): ParseOptions {
-  const [first, second] = new Uint8Array(bytes.slice(0, 2))
-  const encoding: Encoding = first === 0xff && second === 0xfe ? 'utf-16le' : 'utf-8'
-  const text = decode(bytes, encoding)
-  const lines = text.split(/\r?\n/).filter(Boolean).slice(0, 25)
-  const delimiter = DELIMITERS.map(({ value }) => value).reduce((best, candidate) =>
-    delimiterScore(lines, candidate) > delimiterScore(lines, best) ? candidate : best,
-  )
-
-  const all = records(text, delimiter, '"')
-  const width = modalWidth(all.slice(0, 25))
-  const skipTop = Math.min(MAX_SKIP, Math.max(0, all.slice(0, 25).findIndex((row) => row.length === width)))
-  let skipBottom = 0
-  while (skipBottom < MAX_SKIP && all.length - skipBottom > skipTop + 2) {
-    const row = all[all.length - 1 - skipBottom]
-    const filled = row.filter((value) => value.trim() !== '').length
-    if (row.length === width && filled > 1) break
-    skipBottom++
-  }
-  return { delimiter, encoding, quote: '"', skipTop, skipBottom }
-}
+/** TextDecoder drops a byte-order mark itself, so the text starts at the first character. */
+const decoded = (bytes: ArrayBuffer, encoding: Encoding) =>
+  cached(texts, bytes, encoding, () => new TextDecoder(encoding).decode(bytes))
 
 /** Split text into records, honouring quoted fields — a quoted delimiter or newline is data. */
-function records(text: string, delimiter: Delimiter, quote: Quote) {
+function split(text: string, delimiter: Delimiter, quote: Quote) {
   const out: string[][] = []
   let record: string[] = []
   let field = ''
@@ -145,36 +133,110 @@ function records(text: string, delimiter: Delimiter, quote: Quote) {
   return out.filter((fields) => fields.some((value) => value.trim() !== ''))
 }
 
+/**
+ * The file's records under one way of splitting it. Skipping lines does not change these,
+ * so trying a different skip costs nothing.
+ */
+const recordsOf = (bytes: ArrayBuffer, { encoding, delimiter, quote }: ParseOptions) =>
+  cached(splits, bytes, `${encoding}|${delimiter}|${quote}`, () =>
+    split(decoded(bytes, encoding), delimiter, quote),
+  )
+
+/** The records the table is made of: banner and summary lines left out. */
+const keptOf = (all: string[][], { skipTop, skipBottom }: ParseOptions) =>
+  all.slice(skipTop, all.length - skipBottom)
+
 /** Header names, made unique and never empty — a column needs a name to be picked by. */
 function headerNames(header: string[]) {
-  const seen = new Map<string, number>()
-  return header.map((raw, index) => {
-    const name = raw.trim() || `Column ${index + 1}`
-    const count = (seen.get(name) ?? 0) + 1
-    seen.set(name, count)
-    return count === 1 ? name : `${name} (${count})`
-  })
-}
-
-export function parse(text: string, options: ParseOptions): Table {
-  const all = records(text.replace(/^﻿/, ''), options.delimiter, options.quote)
-  const kept = all.slice(options.skipTop, all.length - options.skipBottom)
-  const [header = [], ...data] = kept
-  const columns = headerNames(header)
-  return {
-    columns,
-    rows: data.map((fields) =>
-      Object.fromEntries(columns.map((column, index) => [column, fields[index] ?? ''])),
-    ),
-  }
+  const names: string[] = []
+  header.forEach((raw, index) => names.push(uniqueName(raw.trim() || `Column ${index + 1}`, names)))
+  return names
 }
 
 export const readTable = (bytes: ArrayBuffer, options: ParseOptions) =>
-  parse(decode(bytes, options.encoding), options)
+  cached(tables, bytes, JSON.stringify(options), () => {
+    const [header = [], ...data] = keptOf(recordsOf(bytes, options), options)
+    const columns = headerNames(header)
+    return {
+      columns,
+      rows: data.map((fields) => {
+        const row: Row = {}
+        columns.forEach((column, index) => (row[column] = fields[index] ?? ''))
+        return row
+      }),
+    }
+  })
 
-const count = (n: number, noun: string) =>
-  `${n.toLocaleString('en-IN')} ${noun}${n === 1 ? '' : 's'}`
+const shape = (rows: number, columns: number) => `${count(rows, 'row')} · ${count(columns, 'column')}`
 
 /** "1,203 rows · 3 columns" */
-export const shapeOf = ({ rows, columns }: Table) =>
-  `${count(rows.length, 'row')} · ${count(columns.length, 'column')}`
+export const shapeOf = ({ rows, columns }: Table) => shape(rows.length, columns.length)
+
+/** The shape a file would read as under these settings — counted, without building rows. */
+export function shapeWith(bytes: ArrayBuffer, options: ParseOptions) {
+  const kept = keptOf(recordsOf(bytes, options), options)
+  return shape(Math.max(0, kept.length - 1), kept[0]?.length ?? 0)
+}
+
+/** How many times each value occurs. */
+function tally(values: number[]) {
+  const counts = new Map<number, number>()
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1)
+  return counts
+}
+
+/** Lines looked at to decide how a file reads. */
+const SAMPLE_LINES = 25
+
+/**
+ * The delimiter that splits the most lines into the same, widest shape. Taking the most
+ * common field count rather than the first line's keeps a banner line above the header
+ * from deciding it.
+ */
+function delimiterScore(lines: string[], delimiter: Delimiter) {
+  let best = 0
+  tally(lines.map((line) => line.split(delimiter).length)).forEach((lineCount, fields) => {
+    if (fields > 1) best = Math.max(best, lineCount * fields)
+  })
+  return best
+}
+
+/** Lines that are not the table, at most this many at either end. */
+const MAX_SKIP = 5
+
+/**
+ * How the file most likely reads. A UTF-16 byte-order mark says so outright; else UTF-8.
+ *
+ * Exports often wrap the table in a banner ("Settlement Report", a date range) and a total
+ * line. The header is the first record as wide as most of the file; a trailing record with
+ * at most one value filled in is a summary, not data.
+ *
+ * It decodes and splits through the same caches the table is read from, so reading the
+ * file afterwards repeats neither.
+ */
+export function detect(bytes: ArrayBuffer): ParseOptions {
+  const [first, second] = new Uint8Array(bytes.slice(0, 2))
+  const encoding: Encoding = first === 0xff && second === 0xfe ? 'utf-16le' : 'utf-8'
+  const lines = decoded(bytes, encoding)
+    .slice(0, 64 * 1024)
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(0, SAMPLE_LINES)
+  const delimiter = DELIMITERS.map(({ value }) => value).reduce((best, candidate) =>
+    delimiterScore(lines, candidate) > delimiterScore(lines, best) ? candidate : best,
+  )
+
+  const options: ParseOptions = { delimiter, encoding, quote: '"', skipTop: 0, skipBottom: 0 }
+  const all = recordsOf(bytes, options)
+  const head = all.slice(0, SAMPLE_LINES)
+  const width = [...tally(head.map((row) => row.length))].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0
+  const skipTop = Math.min(MAX_SKIP, Math.max(0, head.findIndex((row) => row.length === width)))
+  let skipBottom = 0
+  while (skipBottom < MAX_SKIP && all.length - skipBottom > skipTop + 2) {
+    const row = all[all.length - 1 - skipBottom]
+    const filled = row.filter((value) => value.trim() !== '').length
+    if (row.length === width && filled > 1) break
+    skipBottom++
+  }
+  return { ...options, skipTop, skipBottom }
+}

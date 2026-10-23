@@ -12,9 +12,9 @@ import {
   TextInputV2,
 } from '@juspay/blend-design-system'
 import { ArrowRight, Check, FileText, X } from 'lucide-react'
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { PrimitiveText, font } from '../../primitives'
-import type { Card, FileContext } from './assistant'
+import { ROLE_LABEL, type Card, type FileContext } from './assistant'
 import {
   ALL_COLUMNS,
   GROUPS,
@@ -63,46 +63,70 @@ function Settled({ applied, children }: { applied: boolean; children: ReactNode 
   )
 }
 
-function Actions({
+/** The shell the form cards share: a bold title, the fields, then Cancel and Apply. */
+function FormCard({
+  title,
   canApply,
   onApply,
   onCancel,
+  children,
 }: {
+  title: string
   canApply: boolean
   onApply: () => void
   onCancel: () => void
+  children: ReactNode
 }) {
   return (
-    <div className="flex justify-end gap-2 [&_button]:cursor-pointer">
-      <ButtonV2
-        buttonType={ButtonV2Type.SECONDARY}
-        size={ButtonV2Size.SMALL}
-        text="Cancel"
-        onClick={onCancel}
-      />
-      <ButtonV2
-        buttonType={ButtonV2Type.PRIMARY}
-        size={ButtonV2Size.SMALL}
-        text="Apply"
-        disabled={!canApply}
-        onClick={onApply}
-      />
+    <CardV2 variant={CardV2Variant.OUTLINED} padding={CardV2Padding.COMPACT}>
+      <div className="flex flex-col gap-3">
+        <PrimitiveText
+          {...BODY}
+          color={colors.gray[900]}
+          fontWeight={FOUNDATION_THEME.font.weight[600]}
+        >
+          {title}
+        </PrimitiveText>
+        {children}
+        <div className="flex justify-end gap-2">
+          <ButtonV2
+            buttonType={ButtonV2Type.SECONDARY}
+            size={ButtonV2Size.SMALL}
+            text="Cancel"
+            onClick={onCancel}
+          />
+          <ButtonV2
+            buttonType={ButtonV2Type.PRIMARY}
+            size={ButtonV2Size.SMALL}
+            text="Apply"
+            disabled={!canApply}
+            onClick={onApply}
+          />
+        </div>
+      </div>
+    </CardV2>
+  )
+}
+
+/** The grey box a card shows its outcome in — a step's preview, or a file's new shape. */
+function NoteBox({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="flex flex-col gap-1.5 px-3 py-2"
+      style={{ backgroundColor: colors.gray[50], borderRadius: FOUNDATION_THEME.border.radius[8] }}
+    >
+      {children}
     </div>
   )
 }
 
 /** Before → after for a few values, so the change is seen before it is made. */
 function Preview({ table, op }: { table?: Table; op: Operation }) {
-  const result = table && preview(table, op)
+  // Memoised: the card re-renders as its fields change, and a preview reads the file.
+  const result = useMemo(() => table && preview(table, op), [table, op])
   if (!result) return null
   return (
-    <div
-      className="flex flex-col gap-1.5 px-3 py-2"
-      style={{
-        backgroundColor: colors.gray[50],
-        borderRadius: FOUNDATION_THEME.border.radius[8],
-      }}
-    >
+    <NoteBox>
       {result.kind === 'note' ? (
         <PrimitiveText {...SMALL} color={colors.gray[600]}>
           {result.text}
@@ -126,7 +150,7 @@ function Preview({ table, op }: { table?: Table; op: Operation }) {
           </div>
         ))
       )}
-    </div>
+    </NoteBox>
   )
 }
 
@@ -164,83 +188,74 @@ export function StepCard({ card, files, tableFor, onApply, onCancel }: StepCardP
   const set = (key: keyof Operation, value: string) => setOp((current) => ({ ...current, [key]: value }))
 
   return (
-    <CardV2 variant={CardV2Variant.OUTLINED} padding={CardV2Padding.COMPACT}>
-      <div className="flex flex-col gap-3">
-        <PrimitiveText
-          {...BODY}
-          color={colors.gray[900]}
-          fontWeight={FOUNDATION_THEME.font.weight[600]}
-        >
-          {spec.label}
-        </PrimitiveText>
+    <FormCard
+      title={spec.label}
+      canApply={complete}
+      onApply={() => onApply(card.id, fileId, op)}
+      onCancel={() => onCancel(card.id)}
+    >
+      {/* The file is only a question when there are two to choose from. */}
+      {files.length > 1 && (
+        <SingleSelectV2
+          label="File"
+          placeholder="Choose a file"
+          size={SingleSelectV2Size.SM}
+          triggerDimensions={FULL_WIDTH}
+          items={options(
+            files.map((each) => ({ value: each.id, label: `${ROLE_LABEL[each.role]} · ${each.name}` })),
+          )}
+          selected={fileId}
+          onSelect={(next) => {
+            setFileId(next)
+            // A column picked in one file means nothing in the other.
+            setOp((current) => {
+              const nextColumns = files.find((each) => each.id === next)?.columns ?? []
+              const keep = (value?: string) =>
+                value === ALL_COLUMNS || (value && nextColumns.includes(value)) ? value : undefined
+              return { ...current, column: keep(current.column), second: keep(current.second) }
+            })
+          }}
+        />
+      )}
 
-        {/* The file is only a question when there are two to choose from. */}
-        {files.length > 1 && (
-          <SingleSelectV2
-            label="File"
-            placeholder="Choose a file"
-            size={SingleSelectV2Size.SM}
-            triggerDimensions={FULL_WIDTH}
-            items={options(files.map((each) => ({ value: each.id, label: `${each.role === 'source' ? 'Source' : 'Target'} · ${each.name}` })))}
-            selected={fileId}
-            onSelect={(next) => {
-              setFileId(next)
-              // A column picked in one file means nothing in the other.
-              setOp((current) => {
-                const nextColumns = files.find((each) => each.id === next)?.columns ?? []
-                const keep = (value?: string) =>
-                  value === ALL_COLUMNS || (value && nextColumns.includes(value)) ? value : undefined
-                return { ...current, column: keep(current.column), second: keep(current.second) }
-              })
-            }}
-          />
-        )}
-
-        {spec.fields.map((field) => {
-          const value = op[field.key] ?? ''
-          if (field.type === 'column' || field.type === 'choice') {
-            const items =
-              field.type === 'choice'
-                ? field.options.map((choice) => ({ value: choice, label: choice }))
-                : [
-                    ...(field.allowAll ? [{ value: ALL_COLUMNS, label: 'Every column' }] : []),
-                    ...columns.map((column) => ({ value: column, label: column })),
-                  ]
-            return (
-              <SingleSelectV2
-                key={field.key}
-                label={field.label}
-                placeholder={field.type === 'column' ? 'Choose a column' : 'Choose one'}
-                size={SingleSelectV2Size.SM}
-                triggerDimensions={FULL_WIDTH}
-                items={options(items)}
-                selected={value}
-                onSelect={(next) => set(field.key, next)}
-              />
-            )
-          }
+      {spec.fields.map((field) => {
+        const value = op[field.key] ?? ''
+        if (field.type === 'column' || field.type === 'choice') {
+          const items =
+            field.type === 'choice'
+              ? field.options.map((choice) => ({ value: choice, label: choice }))
+              : [
+                  ...(field.allowAll ? [{ value: ALL_COLUMNS, label: 'Every column' }] : []),
+                  ...columns.map((column) => ({ value: column, label: column })),
+                ]
           return (
-            <TextInputV2
+            <SingleSelectV2
               key={field.key}
               label={field.label}
-              placeholder={field.type === 'text' ? field.placeholder : undefined}
-              size={InputSizeV2.SM}
-              type={field.type === 'number' ? 'number' : 'text'}
-              value={value}
-              onChange={(event) => set(field.key, event.target.value)}
+              placeholder={field.type === 'column' ? 'Choose a column' : 'Choose one'}
+              size={SingleSelectV2Size.SM}
+              triggerDimensions={FULL_WIDTH}
+              items={options(items)}
+              selected={value}
+              onSelect={(next) => set(field.key, next)}
             />
           )
-        })}
+        }
+        return (
+          <TextInputV2
+            key={field.key}
+            label={field.label}
+            placeholder={field.type === 'text' ? field.placeholder : undefined}
+            size={InputSizeV2.SM}
+            type={field.type === 'number' ? 'number' : 'text'}
+            value={value}
+            onChange={(event) => set(field.key, event.target.value)}
+          />
+        )
+      })}
 
-        {complete && <Preview table={table} op={op} />}
-
-        <Actions
-          canApply={complete}
-          onApply={() => onApply(card.id, fileId, op)}
-          onCancel={() => onCancel(card.id)}
-        />
-      </div>
-    </CardV2>
+      {complete && <Preview table={table} op={op} />}
+    </FormCard>
   )
 }
 
@@ -252,6 +267,21 @@ type ParseCardProps = {
   onApply: (cardId: string, fileId: string, options: ParseOptions) => void
   onCancel: (cardId: string) => void
 }
+
+/** The read settings a card offers, as data — the select fields, then the line skips. */
+const PARSE_SELECTS = [
+  { key: 'delimiter', label: 'Delimiter', choices: DELIMITERS },
+  { key: 'encoding', label: 'Encoding', choices: ENCODINGS },
+  { key: 'quote', label: 'Quotes', choices: QUOTES },
+] as const
+const PARSE_SKIPS = [
+  { key: 'skipTop', label: 'Skip lines at the top' },
+  { key: 'skipBottom', label: 'Skip lines at the bottom' },
+] as const
+
+/** A select can't hold an empty value, so "no quote character" travels as `none`. */
+const asItem = (value: string) => value || 'none'
+const fromItem = (value: string) => (value === 'none' ? '' : value)
 
 const settingsLine = ({ delimiter, encoding, skipTop, skipBottom }: ParseOptions) =>
   [
@@ -289,7 +319,7 @@ export function ParseCard({ card, file, shapeWith, onOpen, onApply, onCancel }: 
           </PrimitiveText>
         </span>
         {file && (
-          <span className="flex shrink-0 [&_button]:cursor-pointer">
+          <span className="flex shrink-0">
             <ButtonV2
               buttonType={ButtonV2Type.SECONDARY}
               size={ButtonV2Size.SMALL}
@@ -310,83 +340,51 @@ export function ParseCard({ card, file, shapeWith, onOpen, onApply, onCancel }: 
     )
   }
 
-  const set = <K extends keyof ParseOptions>(key: K, value: ParseOptions[K]) =>
-    setDraft((current) => ({ ...current, [key]: value }))
+  const set = (key: keyof ParseOptions, value: string | number) =>
+    setDraft((current) => ({ ...current, [key]: value }) as ParseOptions)
   const lines = (value: string) => Math.max(0, Math.floor(Number(value) || 0))
 
   return (
-    <CardV2 variant={CardV2Variant.OUTLINED} padding={CardV2Padding.COMPACT}>
-      <div className="flex flex-col gap-3">
-        <PrimitiveText
-          {...BODY}
-          color={colors.gray[900]}
-          fontWeight={FOUNDATION_THEME.font.weight[600]}
-        >
-          How {name} is read
-        </PrimitiveText>
-        <div className="grid grid-cols-2 gap-3">
+    <FormCard
+      title={`How ${name} is read`}
+      canApply={Boolean(file)}
+      onApply={() => file && onApply(card.id, file.id, draft)}
+      onCancel={() => onCancel(card.id)}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        {PARSE_SELECTS.map(({ key, label, choices }) => (
           <SingleSelectV2
-            label="Delimiter"
-            placeholder="Delimiter"
+            key={key}
+            label={label}
+            placeholder={label}
             size={SingleSelectV2Size.SM}
             triggerDimensions={FULL_WIDTH}
-            items={options(DELIMITERS)}
-            selected={draft.delimiter}
-            onSelect={(next) => set('delimiter', next as ParseOptions['delimiter'])}
+            items={options(choices.map((choice) => ({ ...choice, value: asItem(choice.value) })))}
+            selected={asItem(draft[key])}
+            onSelect={(next) => set(key, fromItem(next))}
           />
-          <SingleSelectV2
-            label="Encoding"
-            placeholder="Encoding"
-            size={SingleSelectV2Size.SM}
-            triggerDimensions={FULL_WIDTH}
-            items={options(ENCODINGS)}
-            selected={draft.encoding}
-            onSelect={(next) => set('encoding', next as ParseOptions['encoding'])}
-          />
-          <SingleSelectV2
-            label="Quotes"
-            placeholder="Quotes"
-            size={SingleSelectV2Size.SM}
-            triggerDimensions={FULL_WIDTH}
-            items={options(QUOTES.map((quote) => ({ ...quote, value: quote.value || 'none' })))}
-            selected={draft.quote || 'none'}
-            onSelect={(next) => set('quote', (next === 'none' ? '' : next) as ParseOptions['quote'])}
-          />
-          <div />
+        ))}
+        <div />
+        {PARSE_SKIPS.map(({ key, label }) => (
           <TextInputV2
-            label="Skip lines at the top"
+            key={key}
+            label={label}
             size={InputSizeV2.SM}
             type="number"
             min={0}
-            value={String(draft.skipTop)}
-            onChange={(event) => set('skipTop', lines(event.target.value))}
+            value={String(draft[key])}
+            onChange={(event) => set(key, lines(event.target.value))}
           />
-          <TextInputV2
-            label="Skip lines at the bottom"
-            size={InputSizeV2.SM}
-            type="number"
-            min={0}
-            value={String(draft.skipBottom)}
-            onChange={(event) => set('skipBottom', lines(event.target.value))}
-          />
-        </div>
-        {file && (
-          <div
-            className="px-3 py-2"
-            style={{ backgroundColor: colors.gray[50], borderRadius: FOUNDATION_THEME.border.radius[8] }}
-          >
-            <PrimitiveText {...SMALL} color={colors.gray[600]}>
-              Reads as {shapeWith(file.id, draft)}
-            </PrimitiveText>
-          </div>
-        )}
-        <Actions
-          canApply={Boolean(file)}
-          onApply={() => file && onApply(card.id, file.id, draft)}
-          onCancel={() => onCancel(card.id)}
-        />
+        ))}
       </div>
-    </CardV2>
+      {file && (
+        <NoteBox>
+          <PrimitiveText {...SMALL} color={colors.gray[600]}>
+            Reads as {shapeWith(file.id, draft)}
+          </PrimitiveText>
+        </NoteBox>
+      )}
+    </FormCard>
   )
 }
 
@@ -416,7 +414,7 @@ export function MenuCard({
   return (
     <CardV2 variant={CardV2Variant.OUTLINED} padding={CardV2Padding.COMPACT}>
       {/* Label beside its buttons rather than over them: half the height for the same list. */}
-      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5 [&_button]:cursor-pointer">
+      <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2.5">
         {GROUPS.map((group) =>
           row(
             group,

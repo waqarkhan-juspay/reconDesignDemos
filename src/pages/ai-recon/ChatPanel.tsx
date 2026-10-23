@@ -63,7 +63,6 @@ function ChatPanel({
   onAttach,
   renderCard,
 }: ChatPanelProps) {
-  const [draft, setDraft] = useState('')
   const listRef = useRef<HTMLDivElement>(null)
 
   // Keep the newest message in view. The list is its own scroll container, so this moves it
@@ -72,13 +71,6 @@ function ChatPanel({
     const list = listRef.current
     if (list) list.scrollTop = list.scrollHeight
   }, [messages.length, isReplying])
-
-  const send = (text: string) => {
-    const trimmed = text.trim()
-    if (!trimmed || isReplying) return
-    onSend(trimmed)
-    setDraft('')
-  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={PANEL_MOTION}>
@@ -140,34 +132,63 @@ function ChatPanel({
         )}
       </div>
 
-      <div className="flex flex-col gap-3 p-4 pt-0">
-        {/* Above the input and in view from the start — not ChatInputV2's `topQueries`,
-            which open inside the input's border and only while it has focus. */}
-        {suggestions.length > 0 && (
-          <div className="flex flex-wrap gap-2 [&_button]:cursor-pointer">
-            {suggestions.map((text) => (
-              <ButtonV2
-                key={text}
-                buttonType={ButtonV2Type.SECONDARY}
-                size={ButtonV2Size.SMALL}
-                text={text}
-                onClick={() => send(text)}
-              />
-            ))}
-          </div>
-        )}
-        {/* blend-gap: ChatInputV2 labels its send button "Secondary action" and takes no
-            aria-label for it, so that is what a screen reader announces. Enter sends too. */}
-        <ChatInputV2
-          value={draft}
-          onChange={setDraft}
-          onEnter={() => send(draft)}
-          placeholder="Ask, or say what to change…"
-          secondaryAction={<ArrowUp size={16} />}
-          onSecondaryActionClick={() => send(draft)}
-          onAttachFiles={onAttach}
-        />
-      </div>
+      <Composer
+        suggestions={suggestions}
+        canSend={!isReplying}
+        onSend={onSend}
+        onAttach={onAttach}
+      />
+    </div>
+  )
+}
+
+/**
+ * The suggestions and the input, holding the draft. Its own component so a keystroke
+ * re-renders only this, not every message and card in the conversation above it.
+ */
+function Composer({
+  suggestions,
+  canSend,
+  onSend,
+  onAttach,
+}: Pick<ChatPanelProps, 'suggestions' | 'onSend' | 'onAttach'> & { canSend: boolean }) {
+  const [draft, setDraft] = useState('')
+
+  const send = (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || !canSend) return
+    onSend(trimmed)
+    setDraft('')
+  }
+
+  return (
+    <div className="flex flex-col gap-3 p-4 pt-0">
+      {/* Above the input and in view from the start — not ChatInputV2's `topQueries`,
+          which open inside the input's border and only while it has focus. */}
+      {suggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {suggestions.map((text) => (
+            <ButtonV2
+              key={text}
+              buttonType={ButtonV2Type.SECONDARY}
+              size={ButtonV2Size.SMALL}
+              text={text}
+              onClick={() => send(text)}
+            />
+          ))}
+        </div>
+      )}
+      {/* blend-gap: ChatInputV2 labels its send button "Secondary action" and takes no
+          aria-label for it, so that is what a screen reader announces. Enter sends too. */}
+      <ChatInputV2
+        value={draft}
+        onChange={setDraft}
+        onEnter={() => send(draft)}
+        placeholder="Ask, or say what to change…"
+        secondaryAction={<ArrowUp size={16} />}
+        onSecondaryActionClick={() => send(draft)}
+        onAttachFiles={onAttach}
+      />
     </div>
   )
 }
