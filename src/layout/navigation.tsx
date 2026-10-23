@@ -36,6 +36,12 @@ export const LEDGER_V1_PATH = `${LEDGER_PATH}/v1`
 export const LEDGER_V2_PATH = `${LEDGER_PATH}/v2`
 
 /**
+ * Ledger v1's sidebar item. Hidden on 2026-10-23, when V2 became the one Ledger; the page
+ * still opens at its path. Flip to `true` to list it again.
+ */
+const SHOW_LEDGER_V1 = false
+
+/**
  * The collapsed sections below Reconciliation — node 4405:10766 draws each as a label and a
  * chevron with nothing under it, which is a section whose items have not been designed yet
  * rather than an empty one. `items: []` is what Directory renders for that: the label, the
@@ -178,18 +184,23 @@ export function buildNavigationData({
           isSelected: isAlertsActive,
           showOnMobile: true,
         },
-        // Two icons, not one: the rail opens collapsed, where an item is only its icon, and
-        // two identical books would be told apart by hovering each.
+        // Two icons, not one: while both are listed the rail can be collapsed, where an item
+        // is only its icon, and two identical books would be told apart by hovering each.
+        ...(SHOW_LEDGER_V1
+          ? [
+              {
+                label: 'Ledger v1',
+                leftSlot: <BookText size={ICON_SIZE} />,
+                href: LEDGER_V1_PATH,
+                onClick: () => navigate(LEDGER_V1_PATH),
+                isSelected: isLedgerV1Active,
+                showOnMobile: true,
+              },
+            ]
+          : []),
         {
-          label: 'Ledger v1',
-          leftSlot: <BookText size={ICON_SIZE} />,
-          href: LEDGER_V1_PATH,
-          onClick: () => navigate(LEDGER_V1_PATH),
-          isSelected: isLedgerV1Active,
-          showOnMobile: true,
-        },
-        {
-          label: 'Ledger v2',
+          // V2, the reviewed design — the one Ledger. Its path keeps the version.
+          label: 'Ledger',
           leftSlot: <BookCheck size={ICON_SIZE} />,
           href: LEDGER_V2_PATH,
           onClick: () => navigate(LEDGER_V2_PATH),
