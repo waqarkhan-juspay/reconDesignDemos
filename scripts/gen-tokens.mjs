@@ -30,6 +30,7 @@ const RENDERED = [
   'CardV2',
   'SelectorV2/CheckboxV2',
   'MenuV2',
+  'MultiSelectV2',
   'ModalV2',
   'PopoverV2',
   'ProgressBarV2',

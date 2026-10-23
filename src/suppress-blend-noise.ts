@@ -73,6 +73,30 @@ const SUPPRESSED: Rule[] = [
       'ConfigDetailSheet also passes an aria-label), radix just cannot see it. Nothing a ' +
       'caller passes can change the id Blend writes.',
   },
+  {
+    match: 'React does not recognize the `%s` prop on a DOM element',
+    args: ['customMargin'],
+    why:
+      "DrawerBase.tsx's StyledContent is styled(VaulDrawer.Content) with no shouldForwardProp, " +
+      'so the `offSet` prop it renames to customMargin reaches the DOM. Fires wherever a ' +
+      'DrawerContent is given offSet — the PACB detail sheet (DetailSheet.tsx).',
+  },
+  {
+    match: 'React does not recognize the `%s` prop on a DOM element',
+    args: ['mobileOffset'],
+    why:
+      'Same StyledContent as customMargin above: mobileOffset is read for its styles and then ' +
+      'forwarded to the DOM. Fires wherever a DrawerContent is given mobileOffset.',
+  },
+  {
+    match: 'Cannot update a component (`%s`) while rendering a different component (`%s`)',
+    args: ['DataTable', 'TableHeader'],
+    why:
+      'DataTable/TableHeader/handlers.ts:197 calls onColumnFilter — which sets DataTable ' +
+      "state — from inside a setFilterState updater, and updaters run during TableHeader's " +
+      'render. Fires on every pick in a column header value filter (the Payment Info ' +
+      'Generator).',
+  },
 ]
 
 /**

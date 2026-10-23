@@ -5,12 +5,14 @@ import {
   TagV2SubType,
   TagV2Type,
   type DirectoryData,
+  type NavbarItem,
 } from '@juspay/blend-design-system'
 import {
   BellRing,
   BookCheck,
   BookOpen,
   BookText,
+  FileSearch,
   House,
   MessageSquareCheck,
   User,
@@ -19,6 +21,7 @@ import {
 import announcementIcon from '../assets/icons/announcement-01.svg'
 import globeIcon from '../assets/icons/globe-01.svg'
 import MaskIcon from '../components/MaskIcon'
+import { PACB_ROUTES } from '../pages/pacb/routes'
 import { ICON_SIZE } from './chrome'
 
 export const CONFIGURATOR_PATH = '/configurator'
@@ -43,6 +46,22 @@ export const LEDGER_V2_PATH = `${LEDGER_PATH}/v2`
  */
 const PLACEHOLDER_SECTIONS = ['Offers', 'Mandates', 'Smart Convert', 'Monitoring']
 
+/**
+ * The label of every nav item that has children — the nested menus useOpenNestedMenus opens.
+ * NavItem labels its toggle with the item's own label, so that is what identifies one.
+ */
+export function expandableItemLabels(data: DirectoryData[]): string[] {
+  const labels: string[] = []
+  const walk = (items: NavbarItem[] = []) =>
+    items.forEach((item) => {
+      if (!item.items?.length) return
+      labels.push(item.label)
+      walk(item.items)
+    })
+  data.forEach((section) => walk(section.items))
+  return labels
+}
+
 export type NavigationOptions = {
   /**
    * Whether the Configurator is the active route, as a boolean rather than the pathname, so that
@@ -54,6 +73,11 @@ export type NavigationOptions = {
   isAlertsActive: boolean
   isLedgerV1Active: boolean
   isLedgerV2Active: boolean
+  /**
+   * The current path when it is one of the PACB Recon pages, otherwise null — so moving
+   * between two routes outside them still leaves the tree's inputs unchanged.
+   */
+  activeModulePath: string | null
   /** Router push. Blend's NavItem does no routing of its own — see below. */
   navigate: (to: string) => void
 }
@@ -64,7 +88,7 @@ export type NavigationOptions = {
  * so `href` alone goes nowhere and an `onClick` is required. `href` still earns its place —
  * cmd/ctrl-click bails out before that handler and opens the real URL in a new tab.
  *
- * Only Configurator, Alerts and the two Ledgers have routes. The rest are the design's labels,
+ * Only Configurator, Alerts, the two Ledgers and the PACB Recon pages have routes. The rest are the design's labels,
  * drawn so the rail reads as the product's nav rather than the pages that exist — they are
  * deliberately inert rather than pointing at a 404.
  */
@@ -73,6 +97,7 @@ export function buildNavigationData({
   isAlertsActive,
   isLedgerV1Active,
   isLedgerV2Active,
+  activeModulePath,
   navigate,
 }: NavigationOptions): DirectoryData[] {
   return [
@@ -170,6 +195,20 @@ export function buildNavigationData({
           onClick: () => navigate(LEDGER_V2_PATH),
           isSelected: isLedgerV2Active,
           showOnMobile: true,
+        },
+        {
+          // A parent row with nested `items`: Directory draws the chevron and the hierarchy
+          // line itself. The parent has no page of its own — clicking it only expands.
+          label: 'PACB Recon',
+          leftSlot: <FileSearch size={ICON_SIZE} />,
+          showOnMobile: true,
+          items: PACB_ROUTES.map(({ label, path }) => ({
+            label,
+            href: path,
+            onClick: () => navigate(path),
+            isSelected: activeModulePath === path,
+            showOnMobile: true,
+          })),
         },
       ],
     },

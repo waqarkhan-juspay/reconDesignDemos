@@ -19,6 +19,7 @@ import tenantLogo from '../assets/icons/tenant-logo.svg'
 import merchantOrb from '../assets/merchant-hyper-recon.png'
 import MaskIcon from '../components/MaskIcon'
 import { font } from '../primitives'
+import { PACB_ROUTES } from '../pages/pacb/routes'
 import { CHROME_HOVER } from './chrome'
 import {
   ALERTS_PATH,
@@ -26,8 +27,10 @@ import {
   LEDGER_V1_PATH,
   LEDGER_V2_PATH,
   buildNavigationData,
+  expandableItemLabels,
 } from './navigation'
 import { TopbarStatusIcons } from './topbar'
+import { useOpenNestedMenus } from './use-open-nested-menus'
 
 const { colors } = FOUNDATION_THEME
 
@@ -204,6 +207,7 @@ function AppShell({ children }: { children?: ReactNode }) {
   const isAlertsActive = pathname === ALERTS_PATH
   const isLedgerV1Active = pathname === LEDGER_V1_PATH
   const isLedgerV2Active = pathname === LEDGER_V2_PATH
+  const activeModulePath = PACB_ROUTES.some(({ path }) => path === pathname) ? pathname : null
   const navigationData = useMemo(
     () =>
       buildNavigationData({
@@ -211,10 +215,20 @@ function AppShell({ children }: { children?: ReactNode }) {
         isAlertsActive,
         isLedgerV1Active,
         isLedgerV2Active,
+        activeModulePath,
         navigate,
       }),
-    [isConfiguratorActive, isAlertsActive, isLedgerV1Active, isLedgerV2Active, navigate],
+    [
+      isConfiguratorActive,
+      isAlertsActive,
+      isLedgerV1Active,
+      isLedgerV2Active,
+      activeModulePath,
+      navigate,
+    ],
   )
+  // Nested menus start open, so the current PACB page shows — see use-open-nested-menus.ts.
+  useOpenNestedMenus(expandableItemLabels(navigationData))
 
   return (
     <SidebarV2

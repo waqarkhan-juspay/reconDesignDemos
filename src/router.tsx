@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { Navigate, createBrowserRouter } from 'react-router'
 import App from './App.tsx'
 import Alerts from './pages/alerts'
@@ -7,12 +8,24 @@ import Ledger from './pages/ledger'
 import LedgerV1 from './pages/ledger/LedgerV1.tsx'
 import LedgerV2 from './pages/ledger/LedgerV2.tsx'
 import NotFound from './pages/NotFound.tsx'
+import EscrowToOca from './pages/pacb/EscrowToOca.tsx'
+import { PacbPage } from './pages/pacb/kit'
+import PacbWorkflowSandbox from './pages/pacb/PacbWorkflowSandbox.tsx'
+import ReconSummary from './pages/pacb/ReconSummary.tsx'
+import { PACB_ROUTES } from './pages/pacb/routes.ts'
 import {
   ALERTS_PATH,
   CONFIGURATOR_PATH,
   LEDGER_PATH,
   LEDGER_V2_PATH,
 } from './layout/navigation.tsx'
+
+/** PACB Recon pages by their nav label (src/pages/pacb/routes.ts). */
+const PACB_PAGES: Record<string, ReactNode> = {
+  'Payment Info Generator': <ReconSummary />,
+  'Escrow to OCA Fund Movement': <EscrowToOca />,
+  'PACB Workflow': <PacbWorkflowSandbox />,
+}
 
 export const router = createBrowserRouter([
   {
@@ -37,6 +50,11 @@ export const router = createBrowserRouter([
           { path: 'v2', element: <LedgerV2 /> },
         ],
       },
+      // A PACB route with no page of its own yet (LRS Files) falls back to the placeholder.
+      ...PACB_ROUTES.map(({ label, path }) => ({
+        path: path.slice(1),
+        element: PACB_PAGES[label] ?? <PacbPage title={label} />,
+      })),
     ],
   },
   // Deliberately a sibling of the shell route, not a child: this flow is a full-screen

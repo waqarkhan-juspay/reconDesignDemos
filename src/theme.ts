@@ -3,10 +3,13 @@ import {
   FOUNDATION_THEME,
   getDirectoryTokens,
   getKeyValuePairV2Tokens,
+  getStatCardV2Tokens,
   getTableToken,
   type ComponentTokenType,
   type DirectoryTokenType,
+  type ResponsiveAccordionV2Tokens,
   type ResponsiveDirectoryTokens,
+  type ResponsiveMultiSelectV2Tokens,
   type ResponsiveTableTokens,
   type ResponsiveTabsV2Tokens,
   type ResponsiveSidebarV2Tokens,
@@ -16,6 +19,7 @@ import { ACCORDIONV2_TOKENS } from './tokens/AccordionV2'
 import { BUTTONV2_TOKENS } from './tokens/ButtonV2'
 import { DRAWER_TOKENS } from './tokens/Drawer'
 import { MENU_V2_TOKENS } from './tokens/MenuV2'
+import { MULTI_SELECT_V2_TOKENS } from './tokens/MultiSelectV2'
 import { POPOVERV2_TOKENS } from './tokens/PopoverV2'
 import { TABSV2_TOKENS } from './tokens/TabsV2'
 import { SIDEBARV2_TOKENS } from './tokens/SidebarV2'
@@ -911,4 +915,258 @@ export const detailSheetTokens: ComponentTokenType = {
     >,
     (token) => ({ ...token, gap: { ...token.gap, vertical: FOUNDATION_THEME.unit[8] } }),
   ) as unknown as ComponentTokenType['KEYVALUEPAIRV2'],
+}
+
+type ClearButtonToken = {
+  trigger: { clearButton?: { outline: Record<string, unknown> } }
+}
+
+/**
+ * Filter chips (the PACB Workflow sandbox's Status / Merchant Payment Status): the clear ×
+ * MultiSelectV2 draws beside a set filter loses its hairline, so it reads as part of the chip
+ * rather than a second boxed button. Blend outlines it in every state
+ * (multiSelectV2.light.tokens.ts:239-245); only keyboard focus keeps a ring here, so Tab
+ * still shows where it is.
+ *
+ * Scoped like sectionTabsTokens — wrap only the filter row. Every other MultiSelectV2 is a
+ * form field, where the boxed × sits inside a bordered input and belongs.
+ */
+export const filterChipTokens: ComponentTokenType = {
+  ...componentTokens,
+  MULTI_SELECT_V2: perBreakpoint(
+    MULTI_SELECT_V2_TOKENS as unknown as Record<string, ClearButtonToken>,
+    (token) => ({
+      ...token,
+      trigger: {
+        ...token.trigger,
+        clearButton: token.trigger.clearButton && {
+          ...token.trigger.clearButton,
+          outline: {
+            ...token.trigger.clearButton.outline,
+            open: 'none !important',
+            closed: 'none !important',
+            hover: 'none !important',
+            error: 'none !important',
+          },
+        },
+      },
+    }),
+  ) as unknown as ResponsiveMultiSelectV2Tokens,
+}
+
+/**
+ * Reupload and Delete beside an uploaded form (src/pages/pacb/FormUploadCard.tsx) — ghost
+ * buttons at 8 / 4 with an 8px radius, filling gray[100] on hover: gray[50] barely shows on
+ * the card's white.
+ */
+export const formActionTokens = ghostButton('md', {
+  x: '8px',
+  y: '4px',
+  radius: FOUNDATION_THEME.border.radius[8],
+  hover: FOUNDATION_THEME.colors.gray[100],
+})
+
+/**
+ * A borderless icon button — the PACB Workflow's drilled-in back arrow. The secondary
+ * icon-only button without its border, drawn as an INLINE button with a 14px glyph. 10px all round
+ * keeps it the 34px square the bordered one was, and gray[100] on hover for the reason
+ * formActionTokens gives.
+ */
+export const ghostIconTokens = ghostButton('sm', {
+  x: '10px',
+  y: '10px',
+  radius: FOUNDATION_THEME.border.radius[10],
+  hover: FOUNDATION_THEME.colors.gray[100],
+})
+
+/** A token colour at a fraction of its strength — a wash over whatever is underneath. */
+const wash = (color: string | undefined, percent: number) =>
+  `color-mix(in srgb, ${color} ${percent}%, transparent)`
+
+/**
+ * The PACB Workflow's info buttons, over the settlements and over the payments. ghostIconTokens'
+ * shape, but hover and press are see-through washes of gray[200] rather than a solid fill:
+ * the button sits on headings, and an opaque square there read as a block behind the glyph.
+ */
+export const ghostInfoTokens = ghostButton('sm', {
+  x: '10px',
+  y: '10px',
+  radius: FOUNDATION_THEME.border.radius[10],
+  hover: wash(FOUNDATION_THEME.colors.gray[200], 40),
+  active: wash(FOUNDATION_THEME.colors.gray[200], 70),
+})
+
+/**
+ * The PACB detail sheet's tokens: Blend's own drawer, unmoved — its 20px content padding, as
+ * the design system's side drawer ships it — with only the Configurator sheet's 8px
+ * key/value gap, which its label/value rows share.
+ */
+export const pacbSheetTokens: ComponentTokenType = {
+  ...componentTokens,
+  KEYVALUEPAIRV2: detailSheetTokens.KEYVALUEPAIRV2,
+}
+
+/**
+ * `neutral` is Blend's own value colour (gray[800]); `gray` is one step lighter, gray[700],
+ * for a figure that should read as information rather than as a status — the Recon
+ * Summary's totals.
+ */
+export type StatTone = 'neutral' | 'gray' | 'warning' | 'success' | 'primary' | 'error'
+
+const STAT_TONE_COLOR: Record<StatTone, unknown> = {
+  neutral: FOUNDATION_THEME.colors.gray[800],
+  gray: FOUNDATION_THEME.colors.gray[700],
+  warning: FOUNDATION_THEME.colors.orange[500],
+  success: FOUNDATION_THEME.colors.green[600],
+  primary: FOUNDATION_THEME.colors.primary[600],
+  error: FOUNDATION_THEME.colors.red[600],
+}
+
+/**
+ * How big a stat card's figure is.
+ * `regular` — Blend's NUMBER value, 32/38.
+ * `compact` — heading/lg, 24/32: the size Blend gives the value in its other two variants
+ *             (statcardV2.light.tokens.ts:47-56).
+ * `minimal` — one step down again on Blend's own scale throughout: the value at heading/sm
+ *             (18/24), the label at body/sm (12/18), 2px between them. For a card that
+ *             reports beside a page title (20/28) rather than competing with it. Padding
+ *             stays Blend's 16 on every side, so the icon in the corner is square to both
+ *             edges.
+ */
+export type StatCardSize = 'regular' | 'compact' | 'minimal'
+
+type StatCardValueToken = {
+  paddingTop: unknown
+  paddingBottom: unknown
+  topContainer: {
+    dataContainer: {
+      gap: unknown
+      titleContainer: { title: { fontSize: unknown; lineHeight: unknown } }
+      statsContainer: {
+        value: Record<string, { color: unknown; fontSize: unknown; lineHeight: unknown }>
+      }
+    }
+  }
+}
+
+/** A tone's colour at one of the sizes above — every size is a step on Blend's own scale. */
+const statCardTone = (color: unknown, size: StatCardSize = 'regular'): ComponentTokenType => ({
+  ...componentTokens,
+  STATCARDV2: perBreakpoint(
+    getStatCardV2Tokens(FOUNDATION_THEME) as unknown as Record<string, StatCardValueToken>,
+    (token) => {
+      const data = token.topContainer.dataContainer
+      const value = data.statsContainer.value
+      const valueSize =
+        size === 'minimal'
+          ? FOUNDATION_THEME.font.size.heading.sm
+          : size === 'compact'
+            ? FOUNDATION_THEME.font.size.heading.lg
+            : null
+      return {
+        ...token,
+        topContainer: {
+          ...token.topContainer,
+          dataContainer: {
+            ...data,
+            ...(size === 'minimal' && {
+              gap: FOUNDATION_THEME.unit[2],
+              titleContainer: {
+                ...data.titleContainer,
+                title: {
+                  ...data.titleContainer.title,
+                  fontSize: FOUNDATION_THEME.font.size.body.sm.fontSize,
+                  lineHeight: FOUNDATION_THEME.font.size.body.sm.lineHeight,
+                },
+              },
+            }),
+            statsContainer: {
+              ...data.statsContainer,
+              value: {
+                ...value,
+                number: {
+                  ...value.number,
+                  color,
+                  // The weight is already 600, the semiBold both heading sizes ask for.
+                  ...(valueSize && {
+                    fontSize: valueSize.fontSize,
+                    lineHeight: valueSize.lineHeight,
+                  }),
+                },
+              },
+            },
+          },
+        },
+      }
+    },
+  ) as unknown as ComponentTokenType['STATCARDV2'],
+})
+
+export const statCardToneTokens = Object.fromEntries(
+  Object.entries(STAT_TONE_COLOR).map(([tone, color]) => [tone, statCardTone(color)]),
+) as Record<StatTone, ComponentTokenType>
+
+export const compactStatCardToneTokens = Object.fromEntries(
+  Object.entries(STAT_TONE_COLOR).map(([tone, color]) => [tone, statCardTone(color, 'compact')]),
+) as Record<StatTone, ComponentTokenType>
+
+export const minimalStatCardToneTokens = Object.fromEntries(
+  Object.entries(STAT_TONE_COLOR).map(([tone, color]) => [tone, statCardTone(color, 'minimal')]),
+) as Record<StatTone, ComponentTokenType>
+
+type AccordionToken = ResponsiveAccordionV2Tokens['lg']
+
+/** One value in every interaction state of a token slot. */
+const everyState = <T extends object>(looks: T, value: string | undefined) =>
+  Object.fromEntries(Object.keys(looks).map((state) => [state, value])) as T
+
+/**
+ * The payment detail's rows (src/pages/pacb/PaymentDetailV3.tsx) — the design's Accordion
+ * Item, on Blend's BORDER accordion. Against Blend's defaults:
+ *
+ * - 8px between rows at every width (Blend: 0 below 1024px, 24 above).
+ * - 12px corners (Blend: 8) — rule 10's radius for a card.
+ * - 16px top and bottom, 24 at the sides (Blend: 20 / 16).
+ * - White at rest; gray 25 on hover and while open (Blend: gray 50).
+ * - The title at body.md's own 20px leading (Blend: 16).
+ *
+ * Scoped by a ThemeProvider round that panel only, so no other accordion moves.
+ */
+export const paymentAccordionTokens: ComponentTokenType = {
+  ...componentTokens,
+  ACCORDIONV2: perBreakpoint(
+    ACCORDIONV2_TOKENS as unknown as Record<string, AccordionToken>,
+    (token) => {
+      const { trigger } = token
+      const border = AccordionV2Type.BORDER
+      const { colors } = FOUNDATION_THEME
+      return {
+        ...token,
+        gap: { ...token.gap, [border]: FOUNDATION_THEME.unit[8] },
+        borderRadius: { ...token.borderRadius, [border]: FOUNDATION_THEME.border.radius[12] },
+        trigger: {
+          ...trigger,
+          backgroundColor: {
+            ...trigger.backgroundColor,
+            [border]: {
+              ...everyState(trigger.backgroundColor[border], colors.gray[25]),
+              default: colors.gray[0],
+              disabled: trigger.backgroundColor[border].disabled,
+            },
+          },
+          padding: {
+            ...trigger.padding,
+            [border]: `${FOUNDATION_THEME.unit[16]} ${FOUNDATION_THEME.unit[24]}`,
+          },
+          text: {
+            ...trigger.text,
+            title: {
+              ...trigger.text.title,
+              lineHeight: `${FOUNDATION_THEME.font.size.body.md.lineHeight}px`,
+            },
+          },
+        },
+      }
+    },
+  ) as unknown as ComponentTokenType['ACCORDIONV2'],
 }
