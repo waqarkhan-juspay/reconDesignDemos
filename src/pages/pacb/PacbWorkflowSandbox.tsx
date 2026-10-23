@@ -684,7 +684,7 @@ function CurrentWorkflow({
     >
       <PageHeader
         title="PACB Workflow"
-        description={routeDescription('PACB Workflow (Sandbox)')}
+        description={routeDescription('PACB Workflow')}
         query={query}
         onQueryChange={setQuery}
         range={range}

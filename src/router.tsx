@@ -24,8 +24,8 @@ import { ALERTS_PATH, CONFIGURATOR_PATH, HOME_PATH } from './layout/navigation.t
 const PACB_PAGES: Record<string, ReactNode> = {
   'Payment Info Generator': <ReconSummary />,
   'Escrow to OCA Fund Movement': <EscrowToOca />,
-  'PACB Workflow': <PacbWorkflow />,
-  'PACB Workflow (Sandbox)': <PacbWorkflowSandbox />,
+  'PACB Workflow (v1)': <PacbWorkflow />,
+  'PACB Workflow': <PacbWorkflowSandbox />,
 }
 
 /** Playground pages by their nav label (src/pages/playground/routes.ts). */

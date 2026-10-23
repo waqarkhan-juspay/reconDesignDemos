@@ -26,6 +26,7 @@ import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { sectionTabsTokens } from '../../theme'
 import { FileDetailSheet } from './FileDetailSheet'
+import { routeDescription } from './routes'
 import {
   EMPTY,
   FORM_ROWS,
@@ -547,6 +548,8 @@ function PacbWorkflow() {
   return (
     <PacbPage
       title="PACB Workflow"
+      // Its own row's subtitle — matched by title, it would take the shipped page's.
+      description={routeDescription('PACB Workflow (v1)')}
       actions={
         <>
           {/* Drawn as the design has it; what it filters on is not specified yet. */}

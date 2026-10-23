@@ -44,15 +44,18 @@ export const PACB_ROUTES: PacbRoute[] = [
     path: `${PACB_BASE_PATH}/escrow-to-oca-fund-movement`,
     description: 'What moved from escrow to the OCA account in the period, and what is waiting.',
   },
+  // The first workflow page, kept hidden behind SHOW_PACB_WORKFLOW. Labelled "(v1)" so the
+  // shipped page below can take the plain name — labels are nav and router identity.
   {
-    label: 'PACB Workflow',
+    label: 'PACB Workflow (v1)',
     path: `${PACB_BASE_PATH}/workflow`,
     description: 'Each payment through its five stages, from payment file to merchant report.',
     hideInNav: !SHOW_PACB_WORKFLOW,
   },
-  // A scratch copy of the workflow page to tinker with (PacbWorkflowSandbox.tsx).
+  // The PACB Workflow as shipped (PacbWorkflowSandbox.tsx). Built as a sandbox, hence the
+  // path; renamed in the nav on 2026-10-23 when the module shipped.
   {
-    label: 'PACB Workflow (Sandbox)',
+    label: 'PACB Workflow',
     path: `${PACB_BASE_PATH}/workflow-sandbox`,
     description: 'Settlements and their merchant payouts, from escrow to the payment report.',
   },

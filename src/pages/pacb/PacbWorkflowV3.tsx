@@ -178,7 +178,7 @@ function Header({
 
   return (
     <header className="flex flex-wrap items-center justify-between gap-4 py-5 pr-6 pl-5">
-      <PageTitle title="PACB Workflow" description={routeDescription('PACB Workflow (Sandbox)')} />
+      <PageTitle title="PACB Workflow" description={routeDescription('PACB Workflow')} />
       <div className="flex flex-wrap items-center gap-4">
         <div className="w-full sm:w-80">
           <TextInputV2
