@@ -22,6 +22,7 @@ import { font } from '../primitives'
 import { PACB_ROUTES } from '../pages/pacb/routes'
 import { CHROME_HOVER } from './chrome'
 import {
+  AI_RECON_PATH,
   ALERTS_PATH,
   CONFIGURATOR_PATH,
   LEDGER_V1_PATH,
@@ -205,6 +206,7 @@ function AppShell({ children }: { children?: ReactNode }) {
 
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
   const isAlertsActive = pathname === ALERTS_PATH
+  const isAiReconActive = pathname === AI_RECON_PATH
   const isLedgerV1Active = pathname === LEDGER_V1_PATH
   const isLedgerV2Active = pathname === LEDGER_V2_PATH
   const activeModulePath = PACB_ROUTES.some(({ path }) => path === pathname) ? pathname : null
@@ -213,6 +215,7 @@ function AppShell({ children }: { children?: ReactNode }) {
       buildNavigationData({
         isConfiguratorActive,
         isAlertsActive,
+        isAiReconActive,
         isLedgerV1Active,
         isLedgerV2Active,
         activeModulePath,
@@ -221,6 +224,7 @@ function AppShell({ children }: { children?: ReactNode }) {
     [
       isConfiguratorActive,
       isAlertsActive,
+      isAiReconActive,
       isLedgerV1Active,
       isLedgerV2Active,
       activeModulePath,

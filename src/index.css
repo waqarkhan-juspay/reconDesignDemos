@@ -966,3 +966,60 @@ button[aria-label='Close modal'] {
 [data-main-content]:has(.pacb-full-bleed) {
   container-type: inline-size;
 }
+
+/*
+ * AI Recon's chat panel (src/pages/ai-recon/ChatPanel.tsx).
+ *
+ * Durations and curves arrive as custom properties set on the panel from src/motion.ts. A
+ * message arrives by mounting, so it is a keyframe: a freshly mounted element starts at
+ * `from` whenever the frame lands.
+ */
+@keyframes chat-message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.chat-message {
+  animation: chat-message-enter var(--chat-feedback) var(--chat-feedback-ease) both;
+}
+
+/*
+ * The "thinking" dots, each brightening in turn. 1.2s is a loop's cadence rather than one of
+ * motion.ts's gestures — nothing here enters or leaves, it only says work is under way.
+ */
+@keyframes chat-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.chat-typing-dot {
+  animation: chat-typing 1.2s ease-in-out infinite;
+}
+
+.chat-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Reveal-only, so plain `none` is safe here — nothing waits on an animationend to unmount. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-message {
+    animation: none;
+  }
+
+  .chat-typing-dot {
+    animation: none;
+    opacity: 0.6;
+  }
+}

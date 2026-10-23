@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate, createBrowserRouter } from 'react-router'
 import App from './App.tsx'
+import AiRecon from './pages/ai-recon'
 import Alerts from './pages/alerts'
 import Configurator from './pages/Configurator.tsx'
 import CreateReportConfig from './pages/create-report-config'
@@ -14,6 +15,7 @@ import PacbWorkflowSandbox from './pages/pacb/PacbWorkflowSandbox.tsx'
 import ReconSummary from './pages/pacb/ReconSummary.tsx'
 import { PACB_ROUTES } from './pages/pacb/routes.ts'
 import {
+  AI_RECON_PATH,
   ALERTS_PATH,
   CONFIGURATOR_PATH,
   LEDGER_PATH,
@@ -39,6 +41,7 @@ export const router = createBrowserRouter([
       { index: true, element: <Navigate to={CONFIGURATOR_PATH} replace /> },
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
       { path: ALERTS_PATH.slice(1), element: <Alerts /> },
+      { path: AI_RECON_PATH.slice(1), element: <AiRecon /> },
       // A layout route: Ledger holds the entries and the dialogs, and the version renders
       // into its Outlet. Moving between v1 and v2 keeps the ledger as it was left.
       {
