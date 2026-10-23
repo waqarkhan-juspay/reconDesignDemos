@@ -25,6 +25,7 @@ import { CHROME_HOVER } from './chrome'
 import { PACB_ROUTES } from '../pages/pacb/routes'
 import { PLAYGROUND_ROUTES } from '../pages/playground/routes'
 import {
+  AI_RECON_PATH,
   ALERTS_PATH,
   CONFIGURATOR_PATH,
   HOME_PATH,
@@ -203,6 +204,7 @@ function AppShell({ children }: { children?: ReactNode }) {
   const isHomeActive = pathname === HOME_PATH
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
   const isAlertsActive = pathname === ALERTS_PATH
+  const isAiReconActive = pathname === AI_RECON_PATH
   const moduleRoute = [...PACB_ROUTES, ...PLAYGROUND_ROUTES].find(({ path }) => path === pathname)
   const activeModulePath = moduleRoute ? pathname : null
   const pageTitle = isHomeActive
@@ -211,7 +213,9 @@ function AppShell({ children }: { children?: ReactNode }) {
       ? 'Configurator'
       : isAlertsActive
         ? 'Alerts'
-        : moduleRoute?.label
+        : isAiReconActive
+          ? 'AI Recon'
+          : moduleRoute?.label
   const isLedgerV1Active = pathname === LEDGER_V1_PATH
   const isLedgerV2Active = pathname === LEDGER_V2_PATH
   const navigationData = useMemo(
@@ -220,6 +224,7 @@ function AppShell({ children }: { children?: ReactNode }) {
         isHomeActive,
         isConfiguratorActive,
         isAlertsActive,
+        isAiReconActive,
         isLedgerV1Active,
         isLedgerV2Active,
         activeModulePath,
@@ -229,6 +234,7 @@ function AppShell({ children }: { children?: ReactNode }) {
       isHomeActive,
       isConfiguratorActive,
       isAlertsActive,
+      isAiReconActive,
       isLedgerV1Active,
       isLedgerV2Active,
       activeModulePath,

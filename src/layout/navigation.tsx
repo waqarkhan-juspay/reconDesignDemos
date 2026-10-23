@@ -1,9 +1,12 @@
 import {
+  FOUNDATION_THEME,
   TagV2,
   TagV2Color,
   TagV2Size,
   TagV2SubType,
   TagV2Type,
+  TooltipV2,
+  TooltipV2Side,
   type DirectoryData,
   type NavbarItem,
 } from '@juspay/blend-design-system'
@@ -14,10 +17,12 @@ import {
   BookText,
   FileSearch,
   House,
+  Info,
   LayoutTemplate,
   MessageSquareCheck,
   User,
   Wrench,
+  Zap,
 } from 'lucide-react'
 import announcementIcon from '../assets/icons/announcement-01.svg'
 import globeIcon from '../assets/icons/globe-01.svg'
@@ -34,6 +39,8 @@ import { ICON_SIZE } from './chrome'
 export const HOME_PATH = '/home'
 export const CONFIGURATOR_PATH = '/configurator'
 export const ALERTS_PATH = '/alerts'
+export const AI_RECON_PATH = '/ai-recon'
+
 /**
  * The Ledger, in its two designs: V1 is the prototype as first rebuilt, V2 the reviewed one.
  * Both are children of LEDGER_PATH, which holds the ledger they share — so an entry recorded
@@ -91,6 +98,7 @@ export type NavigationOptions = {
    */
   activeModulePath: string | null
   isAlertsActive: boolean
+  isAiReconActive: boolean
   isLedgerV1Active: boolean
   isLedgerV2Active: boolean
   /** Router push. Blend's NavItem does no routing of its own — see below. */
@@ -103,15 +111,17 @@ export type NavigationOptions = {
  * so `href` alone goes nowhere and an `onClick` is required. `href` still earns its place —
  * cmd/ctrl-click bails out before that handler and opens the real URL in a new tab.
  *
- * Home, Configurator, Alerts, the Ledger and the PACB Recon and Playground pages have routes.
- * The rest are the design's labels, drawn so the rail reads as the product's nav rather than
- * only the pages that exist — they are deliberately inert rather than pointing at a 404.
+ * Home, Configurator, Alerts, AI Recon, the Ledger and the PACB Recon and Playground
+ * pages have routes. The rest are the design's labels, drawn so the rail reads as the
+ * product's nav rather than only the pages that exist — they are deliberately inert
+ * rather than pointing at a 404.
  */
 export function buildNavigationData({
   isHomeActive,
   isConfiguratorActive,
   activeModulePath,
   isAlertsActive,
+  isAiReconActive,
   isLedgerV1Active,
   isLedgerV2Active,
   navigate,
@@ -218,6 +228,24 @@ export function buildNavigationData({
           href: LEDGER_V2_PATH,
           onClick: () => navigate(LEDGER_V2_PATH),
           isSelected: isLedgerV2Active,
+          showOnMobile: true,
+        },
+        {
+          label: 'AI Recon',
+          leftSlot: <Zap size={ICON_SIZE} />,
+          // Beside the label, as Action Center's badge is. The tooltip opens on hovering the
+          // icon only; NavItem wraps the slot in `aria-hidden` (NavItem.tsx:449), so to a
+          // screen reader the row is just "AI Recon". Clicking the icon still opens the page.
+          rightSlot: (
+            <TooltipV2 content="Under construction" side={TooltipV2Side.RIGHT}>
+              <span className="flex" style={{ color: FOUNDATION_THEME.colors.gray[500] }}>
+                <Info size={ICON_SIZE} />
+              </span>
+            </TooltipV2>
+          ),
+          href: AI_RECON_PATH,
+          onClick: () => navigate(AI_RECON_PATH),
+          isSelected: isAiReconActive,
           showOnMobile: true,
         },
         {
