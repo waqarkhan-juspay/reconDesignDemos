@@ -5,7 +5,7 @@
  * fill in whichever fields it understood from a sentence and the card can ask for the rest,
  * without a form per operation.
  */
-import type { Row, Table } from './table'
+import { formatCount, uniqueName, type Row, type Table } from './table'
 
 export type OperationKind =
   | 'rename'
@@ -24,14 +24,14 @@ export type OperationKind =
   | 'date'
   | 'concat'
 
-export type FieldKey = 'column' | 'second' | 'text' | 'with' | 'into' | 'count' | 'format'
+type FieldKey = 'column' | 'second' | 'text' | 'with' | 'into' | 'count' | 'format'
 
 export type Operation = { kind: OperationKind } & Partial<Record<FieldKey, string>>
 
 /** Every column at once — offered only where doing the same thing everywhere makes sense. */
 export const ALL_COLUMNS = '*'
 
-export const DATE_FORMATS = ['YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY', 'DD MMM YYYY'] as const
+const DATE_FORMATS = ['YYYY-MM-DD', 'DD/MM/YYYY', 'MM/DD/YYYY', 'DD MMM YYYY'] as const
 
 type Field =
   | { key: 'column' | 'second'; label: string; type: 'column'; allowAll?: boolean }
@@ -39,7 +39,9 @@ type Field =
   | { key: 'count'; label: string; type: 'number' }
   | { key: 'format'; label: string; type: 'choice'; options: readonly string[] }
 
-export type OperationGroup = 'Columns' | 'Clean' | 'Text' | 'Format'
+export const GROUPS = ['Columns', 'Clean', 'Text', 'Format'] as const
+
+type OperationGroup = (typeof GROUPS)[number]
 
 type Spec = {
   label: string
@@ -159,8 +161,6 @@ export const SPECS: Record<OperationKind, Spec> = {
   },
 }
 
-export const GROUPS: OperationGroup[] = ['Columns', 'Clean', 'Text', 'Format']
-
 export const describe = (op: Operation) => SPECS[op.kind].describe(op)
 
 /** Whether every field the step needs is filled, and filled with something usable. */
@@ -261,14 +261,19 @@ function mapValue(op: Operation): ((value: string) => string) | undefined {
   }
 }
 
-const uniqueName = (name: string, taken: string[]) => {
-  let candidate = name
-  for (let n = 2; taken.includes(candidate); n++) candidate = `${name} (${n})`
-  return candidate
+/** Whether a drop-rows step takes this row out: its column empty, or equal to the match. */
+const isDropped = (row: Row, op: Operation) => {
+  const value = (row[op.column ?? ''] ?? '').trim()
+  const match = op.text?.trim() ?? ''
+  return match === '' ? value === '' : value === match
 }
 
+/** A join step's new value for one row — the two values, blanks left out. */
+const joined = (row: Row, op: Operation) =>
+  [row[op.column ?? ''], row[op.second ?? '']].filter((value) => value !== '').join(op.with ?? '')
+
 /** Apply one step. A step whose column has since gone (renamed, removed) does nothing. */
-export function apply(table: Table, op: Operation): Table {
+function apply(table: Table, op: Operation): Table {
   const { columns, rows } = table
   const column = op.column ?? ''
   const applies = column === ALL_COLUMNS || columns.includes(column)
@@ -304,25 +309,15 @@ export function apply(table: Table, op: Operation): Table {
         columns: columns.filter((name) => name !== column),
         rows: rows.map(({ [column]: _removed, ...rest }) => rest),
       }
-    case 'dropRows': {
-      const match = op.text?.trim() ?? ''
-      return {
-        columns,
-        rows: rows.filter((row) =>
-          match === '' ? (row[column] ?? '').trim() !== '' : (row[column] ?? '').trim() !== match,
-        ),
-      }
-    }
+    case 'dropRows':
+      return { columns, rows: rows.filter((row) => !isDropped(row, op)) }
     case 'concat': {
       const second = op.second ?? ''
       if (!columns.includes(second)) return table
       const into = uniqueName(op.into?.trim() || `${column}_${second}`, columns)
       return {
         columns: [...columns, into],
-        rows: rows.map((row) => ({
-          ...row,
-          [into]: [row[column], row[second]].filter((value) => value !== '').join(op.with ?? ''),
-        })),
+        rows: rows.map((row) => ({ ...row, [into]: joined(row, op) })),
       }
     }
     default:
@@ -332,52 +327,51 @@ export function apply(table: Table, op: Operation): Table {
 
 export const applyAll = (table: Table, steps: Operation[]) => steps.reduce(apply, table)
 
-export type Preview =
+type PreviewResult =
   | { kind: 'values'; pairs: [string, string][] }
   | { kind: 'note'; text: string }
 
 /**
  * What a step would do, shown on its card before it is applied: a few values before and
  * after, or one line for steps that change shape rather than values.
+ *
+ * Only as much work as it shows — the first few changed values, or a count — rather than
+ * applying the step to every row of the file to look at three of them.
  */
-export function preview(table: Table, op: Operation): Preview | undefined {
+export function preview(table: Table, op: Operation): PreviewResult | undefined {
   if (!isComplete(op, table.columns)) return undefined
-  const after = apply(table, op)
+  const { rows } = table
 
   switch (op.kind) {
     case 'rename':
     case 'deleteColumn':
       return undefined
     case 'dropRows': {
-      const dropped = table.rows.length - after.rows.length
+      const dropped = rows.filter((row) => isDropped(row, op)).length
       return {
         kind: 'note',
         text:
           dropped === 0
             ? 'No rows match — nothing would be dropped.'
-            : `${dropped.toLocaleString('en-IN')} of ${table.rows.length.toLocaleString('en-IN')} rows would be dropped.`,
+            : `${formatCount(dropped)} of ${formatCount(rows.length)} rows would be dropped.`,
       }
     }
-    case 'concat': {
-      const into = after.columns[after.columns.length - 1]
+    case 'concat':
       return {
         kind: 'values',
-        pairs: after.rows
-          .slice(0, 3)
-          .map((row) => [`${row[op.column!]} + ${row[op.second!]}`, row[into]]),
+        pairs: rows.slice(0, 3).map((row) => [`${row[op.column!]} + ${row[op.second!]}`, joined(row, op)]),
       }
-    }
   }
 
-  const column = op.column === ALL_COLUMNS ? undefined : op.column
+  const mapper = mapValue(op)!
+  const names = op.column === ALL_COLUMNS ? table.columns : [op.column!]
   const pairs: [string, string][] = []
-  for (let i = 0; i < table.rows.length && pairs.length < 3; i++) {
-    const names = column ? [column] : table.columns
+  for (let i = 0; i < rows.length && pairs.length < 3; i++) {
     for (const name of names) {
-      const before = table.rows[i][name] ?? ''
-      const next = after.rows[i][name] ?? ''
-      if (before !== next) {
-        pairs.push([before, next])
+      const before = rows[i][name] ?? ''
+      const after = mapper(before)
+      if (before !== after) {
+        pairs.push([before, after])
         break
       }
     }

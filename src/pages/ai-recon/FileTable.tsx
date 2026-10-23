@@ -10,8 +10,9 @@ import {
 } from '@juspay/blend-design-system'
 import { X } from 'lucide-react'
 import { useMemo } from 'react'
+import { MiddleTruncate } from '../../middle-truncate'
 import { PrimitiveText, font } from '../../primitives'
-import type { FileRole } from './assistant'
+import { ROLE_LABEL, type FileRole } from './assistant'
 import { describe, type Operation } from './operations'
 import { shapeOf, type Table } from './table'
 
@@ -72,11 +73,12 @@ function FileTable({ role, name, table, steps, onRemoveStep }: FileTableProps) {
           color={colors.gray[900]}
           fontWeight={FOUNDATION_THEME.font.weight[600]}
         >
-          {role === 'source' ? 'Source' : 'Target'}
+          {ROLE_LABEL[role]}
         </PrimitiveText>
-        <span className="min-w-0 truncate">
+        {/* Cut in the middle: two exports of one report differ at the end of their names. */}
+        <span className="min-w-0 max-w-full">
           <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.md)} color={colors.gray[500]}>
-            {name}
+            <MiddleTruncate text={name} />
           </PrimitiveText>
         </span>
         {table && (

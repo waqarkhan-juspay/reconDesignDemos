@@ -17,7 +17,9 @@ import FileTable from './FileTable'
 import {
   DEMO_RESULT,
   GREETING,
+  MAX_FILES,
   REPLY_MS,
+  ROLES,
   RUN_MS,
   announce,
   interpret,
@@ -32,18 +34,19 @@ import {
 } from './assistant'
 import { MenuCard, ParseCard, StepCard } from './cards'
 import { applyAll, describe, isComplete, type Operation, type OperationKind } from './operations'
-import { detect, readTable, shapeOf, type ParseOptions, type Table } from './table'
+import {
+  ACCEPTED_TYPES,
+  LIMITS_TEXT,
+  MAX_FILE_BYTES,
+  detect,
+  formatCount,
+  readTable,
+  shapeWith,
+  type ParseOptions,
+  type Table,
+} from './table'
 
 const { colors } = FOUNDATION_THEME
-
-/**
- * What the upload box takes, and the chat's paperclip is held to the same list. CSV only:
- * the preview reads the file in the browser, and nothing here can read a spreadsheet yet.
- */
-const ACCEPTED_TYPES = ['.csv']
-const MAX_FILE_BYTES = 25 * 1024 * 1024
-/** A source and a target — the first file in is the source, the second the target. */
-const MAX_FILES = 2
 
 /**
  * The hairline between workspace and chat: on top of the chat when the two stack, on its
@@ -58,6 +61,13 @@ const keyOf = (upload: UploadFileV2) => upload.id ?? `${upload.file.name}-${uplo
 
 const validOf = (uploads: UploadFileV2[]) => uploads.filter((upload) => upload.isValid)
 
+/** An upload as the page names it: its key, and its role from the order it arrived in. */
+const contextOf = (upload: UploadFileV2, index: number) => ({
+  id: keyOf(upload),
+  role: ROLES[index],
+  name: upload.file.name,
+})
+
 /**
  * The line under the box when a file is turned away, by why. Blend prints `errorText`
  * whether or not anything is wrong (UploadV2.tsx:282), so there is none otherwise.
@@ -66,7 +76,7 @@ function rejectionText(files: UploadFileV2[]) {
   const reason = files.find((upload) => !upload.isValid)?.errorReason
   if (!reason) return undefined
   if (reason === UploadErrorReason.MAX_FILES) return 'Two files: a source and a target'
-  return 'CSV, up to 25 MB'
+  return LIMITS_TEXT
 }
 
 const isAccepted = (file: File) =>
@@ -87,16 +97,14 @@ const SKELETON_HEIGHT = '64px'
 type FileWork = { bytes: ArrayBuffer; parse: ParseOptions; steps: Operation[] }
 
 /**
- * Parsing is the expensive part and changes least — only when the read settings do — so it
- * is kept per file and per settings, and a new step re-runs the steps alone.
+ * Each file's table with its steps run, kept against the file's own work object. Editing
+ * one file replaces only that file's object, so the other's table is not rebuilt. Parsing
+ * is cached under the table (table.ts), so a new step re-runs the steps alone.
  */
-const parsedCache = new WeakMap<ArrayBuffer, { key: string; table: Table }>()
-function parsed(bytes: ArrayBuffer, options: ParseOptions) {
-  const key = JSON.stringify(options)
-  const hit = parsedCache.get(bytes)
-  if (hit?.key === key) return hit.table
-  const table = readTable(bytes, options)
-  parsedCache.set(bytes, { key, table })
+const finished = new WeakMap<FileWork, Table>()
+function finishedTable(file: FileWork) {
+  let table = finished.get(file)
+  if (!table) finished.set(file, (table = applyAll(readTable(file.bytes, file.parse), file.steps)))
   return table
 }
 
@@ -158,24 +166,19 @@ function AiRecon() {
 
   const tables = useMemo(
     () =>
-      Object.fromEntries(
-        Object.entries(work).map(([id, file]) => [id, applyAll(parsed(file.bytes, file.parse), file.steps)]),
-      ) as Record<string, Table>,
+      Object.fromEntries(Object.entries(work).map(([id, file]) => [id, finishedTable(file)])) as Record<
+        string,
+        Table
+      >,
     [work],
   )
 
-  const valid = validOf(uploads)
+  const uploaded = validOf(uploads).map(contextOf)
   // Only files that have been read — a column list is what the assistant works from.
-  const files: FileContext[] = valid
-    .map((upload, index) => ({
-      id: keyOf(upload),
-      role: index === 0 ? ('source' as const) : ('target' as const),
-      name: upload.file.name,
-      columns: tables[keyOf(upload)]?.columns ?? [],
-      sample: tables[keyOf(upload)]?.rows.slice(0, 20),
-    }))
-    .filter((file) => work[file.id])
-  const canRun = files.length === 2 && !isRunning
+  const files: FileContext[] = uploaded
+    .filter((file) => tables[file.id])
+    .map((file) => ({ ...file, columns: tables[file.id].columns, sample: tables[file.id].rows.slice(0, 20) }))
+  const canRun = files.length === MAX_FILES && !isRunning
 
   /** Anything that changes a file's table makes an earlier result stale. */
   const editWork = (fileId: string, change: (file: FileWork) => FileWork) => {
@@ -206,24 +209,15 @@ function AiRecon() {
       ) as Record<string, FileWork>
       setWork((current) => ({ ...current, ...read }))
 
-      const contexts = nextValid.map((upload, index) => ({
-        id: keyOf(upload),
-        role: index === 0 ? ('source' as const) : ('target' as const),
-        name: upload.file.name,
-        columns: [],
-      }))
       say(
         uploadPrompt(
-          contexts.filter((file) => read[file.id]).map((file) => ({ ...file, parse: read[file.id].parse })),
-          contexts,
+          nextValid
+            .map(contextOf)
+            .filter((file) => read[file.id])
+            .map((file) => ({ ...file, parse: read[file.id].parse })),
+          nextValid.length,
         ),
-        loaded.map(([id]) => ({
-          id: messageId(),
-          type: 'parse' as const,
-          fileId: id,
-          options: read[id].parse,
-          state: 'summary' as const,
-        })),
+        loaded.map(([id]) => parseCard(id, read[id].parse, 'summary')),
       )
     })
   }
@@ -264,31 +258,37 @@ function AiRecon() {
     say('Nothing to undo yet.')
   }
 
+  const parseCard = (fileId: string, options: ParseOptions, state: 'summary' | 'open'): Card => ({
+    id: messageId(),
+    type: 'parse',
+    fileId,
+    options,
+    state,
+  })
+  const stepCardOf = (op: Operation, fileId?: string): Card => ({
+    id: messageId(),
+    type: 'step',
+    fileId,
+    op,
+    state: 'open',
+  })
+  const cancelCard = (cardId: string) => updateCard(cardId, { state: 'cancelled' })
+
   /** Each file's read settings as a one-line card, for "which file did you mean?". */
-  const parseSummaries = (): Card[] =>
-    files.map((file) => ({
-      id: messageId(),
-      type: 'parse',
-      fileId: file.id,
-      options: work[file.id].parse,
-      state: 'summary',
-    }))
+  const parseSummaries = () => files.map((file) => parseCard(file.id, work[file.id].parse, 'summary'))
 
   const stepCard = (op: Operation, fileId?: string) => {
     const columns = files.find((file) => file.id === (fileId ?? files[0]?.id))?.columns ?? []
     const ready = Boolean(fileId ?? files.length === 1) && isComplete(op, columns)
     say(
       ready ? 'Here’s that change. Check it, then apply.' : 'I’ve filled in what I could — pick the rest, then apply.',
-      [{ id: messageId(), type: 'step', fileId, op, state: 'open' }],
+      [stepCardOf(op, fileId)],
     )
   }
 
-  const pick = (kind: OperationKind, fileId?: string) => {
-    // The card is titled with the step, so the line above it says what to do, not what it is.
-    say('Pick the details, then apply.', [
-      { id: messageId(), type: 'step', fileId, op: { kind }, state: 'open' },
-    ])
-  }
+  // The card is titled with the step, so the line above it says what to do, not what it is.
+  const pick = (kind: OperationKind, fileId?: string) =>
+    say('Pick the details, then apply.', [stepCardOf({ kind }, fileId)])
 
   const respond = (intent: Intent) => {
     switch (intent.type) {
@@ -297,7 +297,7 @@ function AiRecon() {
       case 'done':
         setIsCleaned(true)
         return say(
-          files.length === 2
+          files.length === MAX_FILES
             ? 'Great — run the recon when you’re ready.'
             : 'Add the other file when you’re ready.',
         )
@@ -318,15 +318,7 @@ function AiRecon() {
           changed
             ? 'Here’s that change — check the shape it reads as, then apply.'
             : 'Here’s how it’s read now. Change what’s off, then apply.',
-          [
-            {
-              id: messageId(),
-              type: 'parse',
-              fileId,
-              options: { ...work[fileId].parse, ...intent.patch },
-              state: 'open',
-            },
-          ],
+          [parseCard(fileId, { ...work[fileId].parse, ...intent.patch }, 'open')],
         )
       }
       case 'step':
@@ -359,7 +351,7 @@ function AiRecon() {
     const notes: string[] = []
     if (rejected.length > 0) {
       notes.push(
-        `I can only read CSV files up to 25 MB, so I left out ${rejected.map((file) => file.name).join(', ')}.`,
+        `I left out ${rejected.map((file) => file.name).join(', ')} — files need to be ${LIMITS_TEXT}.`,
       )
     }
     if (overflow.length > 0) {
@@ -378,7 +370,7 @@ function AiRecon() {
             files={files}
             tableFor={(id) => tables[id]}
             onApply={applyStep}
-            onCancel={(cardId) => updateCard(cardId, { state: 'cancelled' })}
+            onCancel={cancelCard}
           />
         )
       case 'parse':
@@ -386,10 +378,14 @@ function AiRecon() {
           <ParseCard
             card={card}
             file={files.find((file) => file.id === card.fileId)}
-            shapeWith={(id, options) => (work[id] ? shapeOf(parsed(work[id].bytes, options)) : '')}
-            onOpen={(cardId) => updateCard(cardId, { state: 'open' })}
+            shapeWith={(id, options) => (work[id] ? shapeWith(work[id].bytes, options) : '')}
+            onOpen={(cardId) => updateCard(cardId, { state: 'open', adjusting: true })}
             onApply={applyParse}
-            onCancel={(cardId) => updateCard(cardId, { state: 'cancelled' })}
+            // Backing out of Adjust leaves the settings as they were, so the one-line summary
+            // comes back rather than a "cancelled" mark on a file that was read fine.
+            onCancel={(cardId) =>
+              card.adjusting ? updateCard(cardId, { state: 'summary', adjusting: false }) : cancelCard(cardId)
+            }
           />
         )
       case 'menu':
@@ -424,18 +420,14 @@ function AiRecon() {
             >
               AI Recon
             </PrimitiveText>
-            {/* blend-gap: ButtonV2 sets `cursor: default` with no prop or token to change
-                it, so the pointer comes from this wrapper. */}
-            <div className="flex [&_button]:cursor-pointer">
-              <ButtonV2
-                buttonType={ButtonV2Type.PRIMARY}
-                size={ButtonV2Size.MEDIUM}
-                text="Run recon"
-                loading={isRunning}
-                disabled={!canRun}
-                onClick={run}
-              />
-            </div>
+            <ButtonV2
+              buttonType={ButtonV2Type.PRIMARY}
+              size={ButtonV2Size.MEDIUM}
+              text="Run recon"
+              loading={isRunning}
+              disabled={!canRun}
+              onClick={run}
+            />
           </div>
 
           {/* One box for both files. Once one is in, Blend swaps the header for its own
@@ -461,16 +453,14 @@ function AiRecon() {
               The skeleton's own default is 106px tall (StatCardV2Skeleton.tsx:18); this is
               the filled card's content height, so the row does not jump when numbers land. */}
           {(isRunning || result) && (
-            <section
-              aria-label="Results"
-              className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4"
-            >
+            // One row of four wherever four fit; a phone takes them two by two.
+            <section aria-label="Results" className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {RESULT_CARDS.map(({ key, title }) => (
                 <StatCardV2
                   key={key}
                   variant={StatCardV2Variant.NUMBER}
                   title={title}
-                  value={result?.[key].toLocaleString('en-IN')}
+                  value={result && formatCount(result[key])}
                   maxWidth="none"
                   skeleton={{ variant: 'pulse', show: isRunning, height: SKELETON_HEIGHT }}
                 />
@@ -479,21 +469,18 @@ function AiRecon() {
           )}
 
           {/* Source above target, each the first few rows of the file as it will be matched. */}
-          {valid.length > 0 && (
+          {uploaded.length > 0 && (
             <div className="flex flex-col gap-6">
-              {valid.map((upload, index) => {
-                const id = keyOf(upload)
-                return (
-                  <FileTable
-                    key={id}
-                    role={index === 0 ? 'source' : 'target'}
-                    name={upload.file.name}
-                    table={tables[id]}
-                    steps={work[id]?.steps ?? []}
-                    onRemoveStep={(at) => removeStep(id, at)}
-                  />
-                )
-              })}
+              {uploaded.map(({ id, role, name }) => (
+                <FileTable
+                  key={id}
+                  role={role}
+                  name={name}
+                  table={tables[id]}
+                  steps={work[id]?.steps ?? []}
+                  onRemoveStep={(at) => removeStep(id, at)}
+                />
+              ))}
             </div>
           )}
         </div>

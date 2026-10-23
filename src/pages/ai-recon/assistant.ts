@@ -7,18 +7,28 @@
  * paragraph: the sentence chooses the step, the card shows exactly what will happen and
  * lets anything it got wrong be fixed by hand before it is applied.
  */
-import { ALL_COLUMNS, type Operation } from './operations'
-import type { Delimiter, Encoding, ParseOptions, Quote, Row } from './table'
+import { ALL_COLUMNS, type Operation, type OperationKind } from './operations'
+import { LIMITS_TEXT, count, type Delimiter, type Encoding, type ParseOptions, type Quote, type Row } from './table'
 
-export type ChatRole = 'assistant' | 'user'
+type ChatRole = 'assistant' | 'user'
 
-export type CardState = 'open' | 'applied' | 'cancelled'
+type CardState = 'open' | 'applied' | 'cancelled'
 
 /** Interactive pieces the assistant puts in the conversation. `fileId` is the upload's id. */
 export type Card =
   | { id: string; type: 'step'; fileId?: string; op: Operation; state: CardState }
-  /** `summary` is the one-line "how I read it" shown on upload, which opens into the form. */
-  | { id: string; type: 'parse'; fileId: string; options: ParseOptions; state: CardState | 'summary' }
+  /**
+   * `summary` is the one-line "how I read it" shown on upload, which opens into the form;
+   * `adjusting` marks a form opened from one, so cancelling it goes back to the summary.
+   */
+  | {
+      id: string
+      type: 'parse'
+      fileId: string
+      options: ParseOptions
+      state: CardState | 'summary'
+      adjusting?: boolean
+    }
   | { id: string; type: 'menu'; fileId?: string }
 
 export type ChatMessage = {
@@ -28,7 +38,13 @@ export type ChatMessage = {
   cards?: Card[]
 }
 
-export type FileRole = 'source' | 'target'
+/** A recon takes two files, and which is which is the order they arrive in. */
+export const ROLES = ['source', 'target'] as const
+export const MAX_FILES = ROLES.length
+
+export type FileRole = (typeof ROLES)[number]
+
+export const ROLE_LABEL: Record<FileRole, string> = { source: 'Source', target: 'Target' }
 
 /** One uploaded file as the assistant sees it, cleanup steps applied. */
 export type FileContext = {
@@ -68,8 +84,6 @@ export const GREETING: ChatMessage = {
   text: 'Add two files and I’ll match them.',
 }
 
-const format = (count: number) => count.toLocaleString('en-IN')
-
 const exceptionCount = ({ amountMismatch, missingInTarget, missingInSource }: ReconResult) =>
   amountMismatch + missingInTarget + missingInSource
 
@@ -77,31 +91,24 @@ const exceptionCount = ({ amountMismatch, missingInTarget, missingInSource }: Re
 export const announce = (result: ReconResult) =>
   `Done — ${exceptionCount(result)} rows need a look. Ask me about any of them.`
 
-export function summarise(result: ReconResult) {
-  const { matched, amountMismatch, missingInTarget, missingInSource } = result
-  return (
-    `${format(matched)} rows matched and ${exceptionCount(result)} need a look: ` +
-    `${amountMismatch} differ on amount, ${missingInTarget} are missing from the target and ` +
-    `${missingInSource} are missing from the source.`
-  )
-}
-
 /** What reading a file left out, said once so it is never a surprise. */
 function skipped(name: string, { skipTop, skipBottom }: ParseOptions) {
-  const lines = (count: number, what: string) => `${count} ${what}${count > 1 ? 's' : ''}`
   const parts = [
-    ...(skipTop ? [`${lines(skipTop, 'line')} above the header`] : []),
-    ...(skipBottom ? [`${lines(skipBottom, 'summary line')} at the end`] : []),
+    ...(skipTop ? [`${count(skipTop, 'line')} above the header`] : []),
+    ...(skipBottom ? [`${count(skipBottom, 'summary line')} at the end`] : []),
   ]
   return parts.length > 0 ? `In ${name} I skipped ${parts.join(' and ')}.` : undefined
 }
 
 /** The question asked the moment files are read — the point of the upload step. */
-export function uploadPrompt(read: (FileContext & { parse: ParseOptions })[], all: FileContext[]) {
+export function uploadPrompt(
+  read: { name: string; role: FileRole; parse: ParseOptions }[],
+  total: number,
+) {
   const named = read.map((file) => `${file.name} as the ${file.role}`).join(' and ')
   const notes = read.map((file) => skipped(file.name, file.parse)).filter(Boolean)
   const ask =
-    all.length < 2
+    total < MAX_FILES
       ? 'Anything to clean up in it while you add the other file?'
       : 'Anything to clean up before I match them?'
   return [`Read ${named}.`, ...notes, ask].join(' ')
@@ -127,7 +134,8 @@ type Mention = { fileId: string; column: string; at: number }
  */
 function mentions(text: string, files: FileContext[]) {
   const said = squash(text)
-  const hits: (Mention & { length: number })[] = []
+  type Hit = Mention & { length: number }
+  const hits: Hit[] = []
   for (const file of files) {
     for (const column of file.columns) {
       const name = squash(column)
@@ -137,13 +145,10 @@ function mentions(text: string, files: FileContext[]) {
       }
     }
   }
-  const taken: Mention[] = []
-  const used: [number, number][] = []
+  const taken: Hit[] = []
   for (const hit of hits.sort((a, b) => b.length - a.length)) {
-    const end = hit.at + hit.length
-    if (used.some(([start, stop]) => hit.at < stop && end > start)) continue
-    used.push([hit.at, end])
-    taken.push(hit)
+    const overlaps = taken.some((kept) => hit.at < kept.at + kept.length && hit.at + hit.length > kept.at)
+    if (!overlaps) taken.push(hit)
   }
   return taken.sort((a, b) => a.at - b.at)
 }
@@ -214,23 +219,42 @@ const SEPARATORS: Record<string, string> = {
 const DELIMITER_WORDS: Record<string, Delimiter> = {
   comma: ',',
   semicolon: ';',
-  'semi-colon': ';',
   pipe: '|',
   tab: '\t',
 }
 
-function dateFormatIn(lower: string) {
-  if (/dd\s*\/\s*mm\s*\/\s*yyyy|day first/.test(lower)) return 'DD/MM/YYYY'
-  if (/mm\s*\/\s*dd\s*\/\s*yyyy|month first|us format/.test(lower)) return 'MM/DD/YYYY'
-  if (/dd\s*mmm|\d{1,2}\s+[a-z]{3}\s+\d{4}|month name/.test(lower)) return 'DD MMM YYYY'
-  if (/yyyy-mm-dd|iso/.test(lower)) return 'YYYY-MM-DD'
-  return undefined
-}
+/** A regex for any key of a word map, so the words are written once. */
+const wordsOf = (map: Record<string, string>) => Object.keys(map).join('|')
+const SEPARATOR_WORD = new RegExp(`\\bwith an? (${wordsOf(SEPARATORS)})\\b`)
+const DELIMITER_WORD = new RegExp(`\\b(${wordsOf(DELIMITER_WORDS)})\\b`)
+
+/** First match wins; anything else falls to the default after `.find`. */
+const ENCODING_WORDS: [RegExp, Encoding][] = [
+  [/utf-?16/, 'utf-16le'],
+  [/latin|iso/, 'iso-8859-1'],
+  [/windows|1252|ansi/, 'windows-1252'],
+]
+
+const DATE_FORMAT_WORDS: [RegExp, string][] = [
+  [/dd\s*\/\s*mm\s*\/\s*yyyy|day first/, 'DD/MM/YYYY'],
+  [/mm\s*\/\s*dd\s*\/\s*yyyy|month first|us format/, 'MM/DD/YYYY'],
+  [/dd\s*mmm|\d{1,2}\s+[a-z]{3}\s+\d{4}|month name/, 'DD MMM YYYY'],
+  [/yyyy-mm-dd|iso/, 'YYYY-MM-DD'],
+]
+
+/** Steps that change every value the same way, and default to every column. */
+const WHOLE_VALUE_STEPS: [RegExp, OperationKind][] = [
+  [/\btrim|whitespace|extra spaces|\bspaces\b/, 'trim'],
+  [/upper ?case|capitali[sz]e|all caps|\bcaps\b/, 'upper'],
+  [/lower ?case/, 'lower'],
+]
+
+const lookup = <T>(table: [RegExp, T][], text: string) => table.find(([pattern]) => pattern.test(text))?.[1]
 
 /** Questions about the product, answered in words rather than with a card. */
 function answer(lower: string, files: FileContext[], result?: ReconResult) {
   if (/\b(what|which)\b.*\b(formats?|file types?|files can)\b/.test(lower)) {
-    return 'CSV files up to 25 MB each, with the column names in the first row. If yours has lines above the header, I can skip them.'
+    return `Each file: ${LIMITS_TEXT}, with the column names in the first row. If yours has lines above the header, I can skip them.`
   }
   if (/\b(which|what) columns?\b.*\bmatch\b|\bmatch on\b/.test(lower)) {
     return (
@@ -295,19 +319,12 @@ export function interpret(text: string, files: FileContext[], result?: ReconResu
   const step = (op: Operation, id = fileId): Intent => ({ type: 'step', fileId: id, op })
 
   // How the file is read.
-  const delimiter = lower.match(/\b(semi-?colon|pipe|tab|comma)\b/)?.[1]
+  const delimiter = lower.replace('semi-colon', 'semicolon').match(DELIMITER_WORD)?.[1]
   if (delimiter && /separat|delimit|split|\bcsv\b|columns are/.test(lower)) {
-    return { type: 'parse', fileId, patch: { delimiter: DELIMITER_WORDS[delimiter.replace('-', '')] } }
+    return { type: 'parse', fileId, patch: { delimiter: DELIMITER_WORDS[delimiter] } }
   }
   if (/encod|utf|latin|iso-?8859|windows|ansi|garbled|weird characters/.test(lower)) {
-    const encoding: Encoding = /utf-?16/.test(lower)
-      ? 'utf-16le'
-      : /latin|iso/.test(lower)
-        ? 'iso-8859-1'
-        : /windows|1252|ansi/.test(lower)
-          ? 'windows-1252'
-          : 'utf-8'
-    return { type: 'parse', fileId, patch: { encoding } }
+    return { type: 'parse', fileId, patch: { encoding: lookup(ENCODING_WORDS, lower) ?? 'utf-8' } }
   }
   if (/single quotes?|no quotes|without quotes|quote char/.test(lower)) {
     const quote: Quote = /single/.test(lower) ? "'" : /no quotes|without/.test(lower) ? '' : '"'
@@ -345,7 +362,7 @@ export function interpret(text: string, files: FileContext[], result?: ReconResu
   }
 
   if (/\b(join|combine|concat(enate)?|merge)\b/.test(lower)) {
-    const separatorWord = lower.match(/\bwith an? (space|dash|hyphen|underscore|slash|comma|pipe)\b/)?.[1]
+    const separatorWord = lower.match(SEPARATOR_WORD)?.[1]
     const into = said.match(/\b(?:into|as|called|named)\s+["'“]?([\w ]+?)["'”]?$/i)?.[1]
     return step({
       kind: 'concat',
@@ -373,34 +390,28 @@ export function interpret(text: string, files: FileContext[], result?: ReconResu
     return step({ kind: 'fill', column, text: value })
   }
 
-  if (/\btrim|whitespace|extra spaces|\bspaces\b/.test(lower)) {
-    return step({ kind: 'trim', column: column ?? ALL_COLUMNS })
-  }
-  if (/upper ?case|capitali[sz]e|all caps|\bcaps\b/.test(lower)) {
-    return step({ kind: 'upper', column: column ?? ALL_COLUMNS })
-  }
-  if (/lower ?case/.test(lower)) return step({ kind: 'lower', column: column ?? ALL_COLUMNS })
+  const wholeValue = lookup(WHOLE_VALUE_STEPS, lower)
+  if (wholeValue) return step({ kind: wholeValue, column: column ?? ALL_COLUMNS })
 
-  if (/\bprefix\b|\bin front\b|\bbefore\b|\bstart with\b/.test(lower)) {
-    const value =
-      quoted(said) ??
-      said.match(/\bprefix\s+(?:of\s+)?(\S+)/i)?.[1] ??
-      said.match(/\badd\s+(\S+)\s+(?:before|in front)/i)?.[1]
-    return step({ kind: 'prefix', column, text: value })
-  }
-  if (/\bsuffix\b|\bafter\b|\bend with\b|\bto the end\b/.test(lower)) {
-    const value =
-      quoted(said) ??
-      said.match(/\bsuffix\s+(?:of\s+)?(\S+)/i)?.[1] ??
-      said.match(/\badd\s+(\S+)\s+(?:after|to the end)/i)?.[1]
-    return step({ kind: 'suffix', column, text: value })
-  }
+  // Prefix and suffix read the same way, from either end: the text is quoted, follows the
+  // step's own word, or is what gets added before/after.
+  const affix = (kind: 'prefix' | 'suffix', where: string) =>
+    step({
+      kind,
+      column,
+      text:
+        quoted(said) ??
+        said.match(new RegExp(`\\b${kind}\\s+(?:of\\s+)?(\\S+)`, 'i'))?.[1] ??
+        said.match(new RegExp(`\\badd\\s+(\\S+)\\s+(?:${where})`, 'i'))?.[1],
+    })
+  if (/\bprefix\b|\bin front\b|\bbefore\b|\bstart with\b/.test(lower)) return affix('prefix', 'before|in front')
+  if (/\bsuffix\b|\bafter\b|\bend with\b|\bto the end\b/.test(lower)) return affix('suffix', 'after|to the end')
 
   if (/\bdates?\b|yyyy|dd\s*[/-]\s*mm|mm\s*[/-]\s*dd|\biso\b/.test(lower)) {
     return step({
       kind: 'date',
       column: column ?? guessColumn(files, fileId, DATE_COLUMN),
-      format: dateFormatIn(lower) ?? 'YYYY-MM-DD',
+      format: lookup(DATE_FORMAT_WORDS, lower) ?? 'YYYY-MM-DD',
     })
   }
   if (/\b(numbers?|numeric|amounts?|commas?|currency|rupees?|decimals?)\b|₹/.test(lower)) {
@@ -432,7 +443,7 @@ const hasEdgeSpaces = (file: FileContext) =>
 export function suggestionsFor(files: FileContext[], result: ReconResult | undefined, cleaned: boolean) {
   if (result) return ['Why do some rows differ on amount?', 'What about the missing ones?']
   if (files.length === 0) return ['How does AI Recon match rows?', 'What file formats can I use?']
-  if (cleaned && files.length === 2) return ['Run the recon', 'Show me what else you can do']
+  if (cleaned && files.length === MAX_FILES) return ['Run the recon', 'Show me what else you can do']
 
   const [source, target] = files.map(dateStyle)
   const dates = source && target && source.format !== target.format ? target : undefined
