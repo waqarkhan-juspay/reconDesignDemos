@@ -1058,30 +1058,32 @@ button[aria-label='Close modal'] {
   opacity: 0;
 }
 
-/*
- * The chevron in a column of its own, beside the question rather than over it.
- *
- * blend-gap: AccordionV2 draws a right chevron `position: absolute` across the whole trigger
- * (AccordionV2TriggerContent.tsx, ChevronContainer), with nothing reserving its width — so a
- * question long enough to reach the right edge ran underneath it. Put back in the flow, it is
- * a flex sibling of the question's column in the row Blend already lays out, and takes that
- * row's own `content.gap` (8) from the text. `margin-left: auto` holds it at the right edge when
- * the question is short. And the height of one line of the question, so it centres on the
- * first line rather than floating between two.
- *
- * !important because Block writes both as styled-components rules of its own.
- */
-.faq-list [data-element='chevron-icon'] {
-  position: static !important;
-  height: var(--faq-line) !important;
-  margin-left: auto;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .faq-list [data-element='accordion-item'],
   .faq-list [data-element='accordion-item'] + [data-element='accordion-item']::before {
     transition: none;
   }
+}
+
+/*
+ * An AccordionV2 whose titles wrap — the FAQ list's questions (FaqLauncher.tsx), AI Recon's
+ * recommended steps (ai-recon/cards.tsx) — with the chevron in a column of its own, beside
+ * the title rather than over it. The wrapper sets `--accordion-line`, its title's line height.
+ *
+ * blend-gap: AccordionV2 draws a right chevron `position: absolute` across the whole trigger
+ * (AccordionV2TriggerContent.tsx, ChevronContainer), with nothing reserving its width — so a
+ * title long enough to reach the right edge ran underneath it. Put back in the flow, it is
+ * a flex sibling of the title's column in the row Blend already lays out, and takes that
+ * row's own `content.gap` (8) from the text. `margin-left: auto` holds it at the right edge when
+ * the title is short. And the height of one line of the title, so it centres on the first
+ * line rather than floating between two.
+ *
+ * !important because Block writes both as styled-components rules of its own.
+ */
+.accordion-wrapping [data-element='chevron-icon'] {
+  position: static !important;
+  height: var(--accordion-line) !important;
+  margin-left: auto;
 }
 
 /*

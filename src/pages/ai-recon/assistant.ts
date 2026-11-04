@@ -8,7 +8,9 @@
  * lets anything it got wrong be fixed by hand before it is applied.
  */
 import { ALL_COLUMNS, type Operation, type OperationKind } from './operations'
-import { LIMITS_TEXT, count, type Delimiter, type Encoding, type ParseOptions, type Quote, type Row } from './table'
+import { exceptionCount, type Diagnosis, type ReconOutcome } from './match'
+import type { BaseChoice, Recommendation } from './recommend'
+import { LIMITS_TEXT, count, formatCount, type Delimiter, type Encoding, type ParseOptions, type Quote, type Row } from './table'
 
 type ChatRole = 'assistant' | 'user'
 
@@ -25,11 +27,40 @@ export type Card =
       id: string
       type: 'parse'
       fileId: string
+      /** Kept on the card, so it still names its file after that file is replaced. */
+      name: string
       options: ParseOptions
       state: CardState | 'summary'
       adjusting?: boolean
     }
   | { id: string; type: 'menu'; fileId?: string }
+  /** Which file is the base, with a way to swap it. `superseded` once it has been swapped. */
+  | {
+      id: string
+      type: 'base'
+      name: string
+      rows: number
+      key?: string
+      state: 'open' | 'superseded'
+    }
+  /**
+   * The steps proposed once both files are in, ticked where the evidence is strong. Applied
+   * together, opened one by one as step cards, or superseded by a newer set.
+   */
+  | {
+      id: string
+      type: 'recommend'
+      title: string
+      items: RecommendationItem[]
+      state: 'open' | 'applied' | 'reviewed' | 'superseded'
+      /** How many were applied, for the line the card settles into. */
+      applied?: number
+      /** The items whose reasons are showing. Here rather than in the card, so the walkthrough can open one. */
+      reasons?: string[]
+    }
+
+/** A recommendation, aimed at one of the uploaded files. */
+export type RecommendationItem = Recommendation & { id: string; fileId: string; fileName: string }
 
 export type ChatMessage = {
   id: string
@@ -56,27 +87,16 @@ export type FileContext = {
   sample?: Row[]
 }
 
-export type ReconResult = {
-  matched: number
-  amountMismatch: number
-  missingInTarget: number
-  missingInSource: number
-}
-
-/** A fixed outcome, so a demo run tells the same story every time. */
-export const DEMO_RESULT: ReconResult = {
-  matched: 1184,
-  amountMismatch: 12,
-  missingInTarget: 7,
-  missingInSource: 3,
-}
-
-/** How long a run, and a reply, pretend to take. Long enough to read as work being done. */
-export const RUN_MS = 1400
+/** How long a run, and a reply, take at least. Long enough to read as work being done. */
+export const RUN_MS = 900
 export const REPLY_MS = 700
 
-let nextId = 0
-export const messageId = () => `m${++nextId}`
+/**
+ * Ids for messages, cards and uploads. Random rather than counted: a counter restarts at
+ * zero whenever this module reloads in development while the page keeps its messages, and
+ * a repeated id makes a card update reach a different card.
+ */
+export const messageId = () => crypto.randomUUID()
 
 export const GREETING: ChatMessage = {
   id: 'greeting',
@@ -84,12 +104,27 @@ export const GREETING: ChatMessage = {
   text: 'Add two files and I’ll match them.',
 }
 
-const exceptionCount = ({ amountMismatch, missingInTarget, missingInSource }: ReconResult) =>
-  amountMismatch + missingInTarget + missingInSource
+/**
+ * What the assistant says as a run lands: what it matched on — nothing was configured, so
+ * this is the one place that says — and where to look. The cards beside it carry the numbers.
+ */
+export function announce(outcome: ReconOutcome) {
+  const on = `Matched ${outcome.sourceKey} against ${outcome.targetKey}`
+  const compared = outcome.sourceAmount
+    ? ` and compared ${outcome.sourceAmount} with ${outcome.targetAmount}.`
+    : '. No money column agreed between the files, so I only checked which rows are in both.'
+  const exceptions = exceptionCount(outcome)
+  const next =
+    exceptions === 0
+      ? ' Everything matched.'
+      : ` ${count(exceptions, 'row')} ${exceptions === 1 ? 'needs' : 'need'} a look — click a card to see ${exceptions === 1 ? 'it' : 'them'}.`
+  return on + compared + next
+}
 
-/** What the assistant says as a run lands. The cards beside it carry the numbers. */
-export const announce = (result: ReconResult) =>
-  `Done — ${exceptionCount(result)} rows need a look. Ask me about any of them.`
+/** The message when no column identifies the same rows in both files. */
+export const NO_KEY =
+  'I couldn’t find a column whose values appear in both files, so there’s nothing to pair ' +
+  'rows on. Check that the two files cover the same transactions.'
 
 /** What reading a file left out, said once so it is never a surprise. */
 function skipped(name: string, { skipTop, skipBottom }: ParseOptions) {
@@ -101,18 +136,47 @@ function skipped(name: string, { skipTop, skipBottom }: ParseOptions) {
 }
 
 /** The question asked the moment files are read — the point of the upload step. */
-export function uploadPrompt(
-  read: { name: string; role: FileRole; parse: ParseOptions }[],
-  total: number,
-) {
-  const named = read.map((file) => `${file.name} as the ${file.role}`).join(' and ')
+export function uploadPrompt(read: { name: string; parse: ParseOptions }[], total: number) {
+  const named = read.map((file) => file.name).join(' and ')
   const notes = read.map((file) => skipped(file.name, file.parse)).filter(Boolean)
-  const ask =
-    total < MAX_FILES
-      ? 'Anything to clean up in it while you add the other file?'
-      : 'Anything to clean up before I match them?'
-  return [`Read ${named}.`, ...notes, ask].join(' ')
+  // Which file is the base is decided once both are in (`baseMessage`), not by arrival.
+  const next = total < MAX_FILES ? ['Add the other file and I’ll work out which one is your base.'] : []
+  return [`Read ${named}.`, ...notes, ...next].join(' ')
 }
+
+/**
+ * The base, said with its evidence, then what comes next: the recommendations card, or
+ * nothing to do. The evidence is the strongest the files gave — their own identifiers, one
+ * row per transaction — and the order they came in only when there was nothing else.
+ */
+export function baseMessage(choice: BaseChoice, baseName: string, otherName: string, recommendations: number) {
+  const evidence = [
+    ...(choice.internal.length > 0 ? [`it carries your own identifiers (${choice.internal.join(', ')})`] : []),
+    ...(choice.repeats
+      ? [`it has one row per transaction${choice.key ? ` (${choice.key} is unique)` : ''}, where ${otherName} repeats ${choice.repeats.column} up to ${choice.repeats.most} times`]
+      : []),
+  ]
+  const why = evidence.length > 0 ? `: ${evidence.join(', and ')}` : ', as the first file in — swap it if the other is yours'
+  const next =
+    recommendations > 0
+      ? `${otherName} needs a few changes before it lines up — I’ve ticked the ones I’m sure of.`
+      : LINED_UP
+  return `${baseName} is your base file${why}. I’ll check ${otherName} against it. ${next}`
+}
+
+const LINED_UP = 'The two already line up — run the recon when you’re ready.'
+
+/** The base kept or swapped rather than chosen: its reasons were given when it was. */
+export function reproposeMessage(swapped: boolean, baseName: string, otherName: string, recommendations: number) {
+  const next = recommendations > 0 ? 'Here’s what I’d change before matching.' : LINED_UP
+  return swapped ? `Swapped — ${baseName} is your base now. I’ll check ${otherName} against it. ${next}` : next
+}
+
+/** Why the files can't be paired yet, and the step that fixes it, in words. */
+export const diagnosisNote = ({ role, key, keep }: Diagnosis) =>
+  `The ${role} has several rows per ${key} — fees and authorisations beside each transaction — ` +
+  `so I’d keep only its ${keep.join(' and ')} rows before matching.`
+
 
 export type Intent =
   | { type: 'step'; fileId?: string; op: Operation }
@@ -122,6 +186,8 @@ export type Intent =
   | { type: 'done' }
   | { type: 'run' }
   | { type: 'reply'; text: string }
+  | { type: 'swap' }
+  | { type: 'recommend' }
 
 /** Case, spaces, underscores and dashes don't make a column name different. */
 const squash = (text: string) => text.toLowerCase().replace(/[\s_\-.]+/g, '')
@@ -251,36 +317,40 @@ const WHOLE_VALUE_STEPS: [RegExp, OperationKind][] = [
 
 const lookup = <T>(table: [RegExp, T][], text: string) => table.find(([pattern]) => pattern.test(text))?.[1]
 
+const hasOrHave = (n: number) => (n === 1 ? 'has' : 'have')
+
 /** Questions about the product, answered in words rather than with a card. */
-function answer(lower: string, files: FileContext[], result?: ReconResult) {
+function answer(lower: string, files: FileContext[], result?: ReconOutcome) {
   if (/\b(what|which)\b.*\b(formats?|file types?|files can)\b/.test(lower)) {
     return `Each file: ${LIMITS_TEXT}, with the column names in the first row. If yours has lines above the header, I can skip them.`
   }
   if (/\b(which|what) columns?\b.*\bmatch\b|\bmatch on\b/.test(lower)) {
-    return (
-      'By default I match on transaction ID, then confirm the amount and date agree. If your ' +
-      'files name those columns differently, rename them here and I’ll pick them up.'
-    )
+    return result
+      ? `${result.sourceKey} in the source against ${result.targetKey} in the target — the columns whose values turn up in both.`
+      : 'Whichever column’s values turn up in both files — usually a transaction ID — then I compare the amounts on the rows it pairs.'
   }
   if (/^how (does|do|will)\b/.test(lower) && !result) {
     return (
-      'I line up each row in the source with its partner in the target by transaction ID, ' +
-      'then check the amount and date. Anything without a partner, or with a different ' +
-      'amount, is flagged as an exception.'
+      'I find the column that identifies the same transaction in both files, pair each ' +
+      'source row with its partner in the target, then compare their amounts. Anything ' +
+      'without a partner, or with a different amount, is flagged as an exception.'
     )
   }
   if (result) {
     if (/mismatch|differ|amount/.test(lower)) {
+      const { amountMismatch: rows } = result
+      if (rows.length === 0) return 'None — every paired row agrees on amount.'
+      const widest = rows.reduce((a, b) => (Math.abs(b.difference) > Math.abs(a.difference) ? b : a))
       return (
-        `${result.amountMismatch} rows differ on amount. Most gaps are under ₹1, which usually ` +
-        'means rounding on one side — the rest are worth checking against the settlement report.'
+        `${count(rows.length, 'row')} ${rows.length === 1 ? 'differs' : 'differ'} on amount. The widest gap is ${formatCount(Math.abs(widest.difference))} ` +
+        `on ${widest.key}. Click Amount Mismatch to see them all.`
       )
     }
     if (/missing|absent|not found/.test(lower)) {
       return (
-        `${result.missingInTarget} source rows have no partner in the target, and ` +
-        `${result.missingInSource} target rows have none in the source. Late settlements are ` +
-        'the usual cause — try again after the next settlement cycle.'
+        `${count(result.missingInTarget.length, 'source row')} ${hasOrHave(result.missingInTarget.length)} no partner in the target, and ` +
+        `${count(result.missingInSource.length, 'target row')} ${hasOrHave(result.missingInSource.length)} none in the source. Late ` +
+        'settlements are the usual cause — click either card to see which.'
       )
     }
   }
@@ -294,7 +364,7 @@ function answer(lower: string, files: FileContext[], result?: ReconResult) {
  * Read a sentence into what to do. Order matters: specific shapes ("first 4 characters")
  * are tried before looser ones that would also match ("first 4 … rows").
  */
-export function interpret(text: string, files: FileContext[], result?: ReconResult): Intent {
+export function interpret(text: string, files: FileContext[], result?: ReconOutcome): Intent {
   const said = text.trim().replace(/[.!]+$/, '')
   const lower = said.toLowerCase()
 
@@ -302,6 +372,12 @@ export function interpret(text: string, files: FileContext[], result?: ReconResu
     return { type: 'done' }
   }
   if (/\b(undo|revert|take (that|it) back)\b/.test(lower)) return { type: 'undo' }
+  if (/\bswap\b|\bwrong (base|source)\b|\b(make|set|use)\b.*\bas (the )?(base|source)\b/.test(lower)) {
+    return { type: 'swap' }
+  }
+  if (/\brecommend|\bsuggest(ed|ions?)?\b|\bwhat (should|do) i (clean|fix|change)\b/.test(lower)) {
+    return { type: 'recommend' }
+  }
   if (/^(run|start|go|match)\b|\brun (the )?recon\b/.test(lower)) return { type: 'run' }
 
   const answered = answer(lower, files, result)
@@ -357,6 +433,12 @@ export function interpret(text: string, files: FileContext[], result?: ReconResu
   }
   if (/\brename\b/.test(lower)) return step({ kind: 'rename', column })
 
+  if (/\bempty columns?\b/.test(lower)) return step({ kind: 'dropEmpty' })
+  if (/\bif\b.*\belse\b|\bmatch key\b|\bconditional\b/.test(lower)) return step({ kind: 'matchKey', into: 'Match key' })
+  if (/\bpositive\b|\babsolute\b|\b(minus|negative) signs?\b/.test(lower)) {
+    return step({ kind: 'absolute', column: column ?? guessColumn(files, fileId, AMOUNT_COLUMN) })
+  }
+
   if (/\b(delete|drop|remove|hide)\b.*\bcolumns?\b/.test(lower)) {
     return step({ kind: 'deleteColumn', column })
   }
@@ -372,6 +454,15 @@ export function interpret(text: string, files: FileContext[], result?: ReconResu
       into,
     })
   }
+
+  const keep = said.match(
+    /\bkeep (?:only )?(?:the )?rows? where\s+(.+?)\s+(?:is|are|=)\s+(.+?)(?:\s+in the (?:source|target))?$/i,
+  )
+  if (keep) {
+    const resolved = resolveColumn(keep[1], files, fileId)
+    return step({ kind: 'keepRows', column: resolved?.column ?? column, text: keep[2] }, fileId ?? resolved?.fileId)
+  }
+  if (/\bkeep (?:only )?(?:the )?\w*\s*rows?\b/.test(lower)) return step({ kind: 'keepRows', column })
 
   if (/\b(drop|remove|delete|exclude|filter out|get rid of)\b.*\brows?\b|\brows? where\b/.test(lower)) {
     const empty = /\b(empty|blank|missing|null)\b/.test(lower)
@@ -440,8 +531,14 @@ const hasEdgeSpaces = (file: FileContext) =>
  * format only when the two files write dates differently, phrased to make the target match
  * the source.
  */
-export function suggestionsFor(files: FileContext[], result: ReconResult | undefined, cleaned: boolean) {
-  if (result) return ['Why do some rows differ on amount?', 'What about the missing ones?']
+export function suggestionsFor(files: FileContext[], result: ReconOutcome | undefined, cleaned: boolean) {
+  if (result) {
+    return [
+      ...(result.amountMismatch.length > 0 ? ['Why do some rows differ on amount?'] : []),
+      ...(result.missingInTarget.length + result.missingInSource.length > 0 ? ['What about the missing ones?'] : []),
+      'Which columns did you match on?',
+    ]
+  }
   if (files.length === 0) return ['How does AI Recon match rows?', 'What file formats can I use?']
   if (cleaned && files.length === MAX_FILES) return ['Run the recon', 'Show me what else you can do']
 

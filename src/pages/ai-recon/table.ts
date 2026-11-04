@@ -19,6 +19,9 @@ export type ParseOptions = {
 export type Row = Record<string, string>
 export type Table = { columns: string[]; rows: Row[] }
 
+/** A row's value in a column, spaces at either end ignored — how every check compares a value. */
+export const cell = (row: Row, column: string) => (row[column] ?? '').trim()
+
 /** What a file must be to be read here. CSV only — nothing in the app reads a spreadsheet. */
 export const ACCEPTED_TYPES = ['.csv']
 export const MAX_FILE_BYTES = 25 * 1024 * 1024

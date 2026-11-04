@@ -1204,3 +1204,50 @@ export const paymentAccordionTokens: ComponentTokenType = {
     },
   ) as unknown as ComponentTokenType['ACCORDIONV2'],
 }
+
+/**
+ * AI Recon's recommendation card (src/pages/ai-recon/cards.tsx) — each step's name an
+ * AccordionV2 trigger, its reason inside. Against Blend's borderless defaults:
+ *
+ * - 4px top and bottom, 8 at the sides (Blend: 16 / 12, 20 / 16 below 1024px), so a step is
+ *   a line of a chat card rather than a row of a page.
+ * - The title in body.sm at 500 and its own 18px leading — the size of everything else in a
+ *   chat card (Blend: body.lg or body.md at 600, on a 16px line).
+ * - No border at any width (Blend draws one under the borderless type below 1024px).
+ *
+ * Scoped by a ThemeProvider round the card, so no other accordion moves. RECOMMEND_STEP holds
+ * the padding and line, which the card lays its checkbox, reason and tags out by too.
+ */
+export const RECOMMEND_STEP = {
+  padY: FOUNDATION_THEME.unit[4],
+  padX: FOUNDATION_THEME.unit[8],
+  line: FOUNDATION_THEME.font.size.body.sm.lineHeight,
+}
+
+export const recommendAccordionTokens: ComponentTokenType = {
+  ...componentTokens,
+  ACCORDIONV2: perBreakpoint(
+    ACCORDIONV2_TOKENS as unknown as Record<string, AccordionToken>,
+    (token) => {
+      const { trigger } = token
+      const flat = AccordionV2Type.NO_BORDER
+      return {
+        ...token,
+        trigger: {
+          ...trigger,
+          border: { ...trigger.border, [flat]: everyState(trigger.border[flat], 'none') },
+          padding: { ...trigger.padding, [flat]: `${RECOMMEND_STEP.padY} ${RECOMMEND_STEP.padX}` },
+          text: {
+            ...trigger.text,
+            title: {
+              ...trigger.text.title,
+              fontSize: FOUNDATION_THEME.font.size.body.sm.fontSize,
+              fontWeight: FOUNDATION_THEME.font.weight[500],
+              lineHeight: `${RECOMMEND_STEP.line}px`,
+            },
+          },
+        },
+      }
+    },
+  ) as unknown as ComponentTokenType['ACCORDIONV2'],
+}
