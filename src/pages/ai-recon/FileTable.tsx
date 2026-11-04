@@ -1,25 +1,23 @@
 import {
-  ColumnType,
-  DataTable,
+  ButtonV2,
+  ButtonV2Size,
+  ButtonV2Type,
   FOUNDATION_THEME,
   TagV2,
   TagV2Color,
   TagV2Size,
   TagV2Type,
-  type ColumnDefinition,
 } from '@juspay/blend-design-system'
-import { X } from 'lucide-react'
+import { FileUp, X } from 'lucide-react'
 import { useMemo } from 'react'
 import { MiddleTruncate } from '../../middle-truncate'
 import { PrimitiveText, font } from '../../primitives'
 import { ROLE_LABEL, type FileRole } from './assistant'
 import { describe, type Operation } from './operations'
+import RowsTable from './RowsTable'
 import { shapeOf, type Table } from './table'
 
 const { colors } = FOUNDATION_THEME
-
-/** DataTable's own row type; `__row` is the row's place in the file, for its id. */
-type PreviewRow = Record<string, unknown>
 
 /**
  * Enough rows to see what a column holds and whether a step did what it said — the header
@@ -34,34 +32,17 @@ type FileTableProps = {
   table?: Table
   steps: Operation[]
   onRemoveStep: (index: number) => void
+  /** Swap this file for another — the way to change files once the upload box has gone. */
+  onReplace: () => void
 }
 
 /**
  * One uploaded file as it will be matched — every cleanup step already applied — with the
- * steps themselves in the header, each one a tag that takes it back out.
- *
- * The table is a preview — the first few rows — so it has none of DataTable's chrome: no
- * toolbar, no column manager, no pager, nothing sortable.
+ * steps themselves in the header, each one a tag that takes it back out. The table is the
+ * first few rows.
  */
-function FileTable({ role, name, table, steps, onRemoveStep }: FileTableProps) {
-  const columns = useMemo<ColumnDefinition<PreviewRow>[]>(
-    () =>
-      (table?.columns ?? []).map((column) => ({
-        field: column,
-        header: column,
-        type: ColumnType.TEXT,
-        isSortable: false,
-        minWidth: '120px',
-      })),
-    [table?.columns],
-  )
-  const data = useMemo<PreviewRow[]>(
-    () =>
-      (table?.rows ?? [])
-        .slice(0, PREVIEW_ROWS)
-        .map((row, index) => ({ ...row, __row: String(index) })),
-    [table?.rows],
-  )
+function FileTable({ role, name, table, steps, onRemoveStep, onReplace }: FileTableProps) {
+  const preview = useMemo(() => table?.rows.slice(0, PREVIEW_ROWS) ?? [], [table?.rows])
 
   return (
     // No frame of its own: DataTable draws one, and a second around it reads as a box in a box.
@@ -101,25 +82,20 @@ function FileTable({ role, name, table, steps, onRemoveStep }: FileTableProps) {
             aria-label={`Remove step: ${describe(step)}`}
           />
         ))}
+        {/* At the row's far end, apart from the tags that describe the file. */}
+        <span className="ml-auto flex shrink-0">
+          <ButtonV2
+            buttonType={ButtonV2Type.SECONDARY}
+            size={ButtonV2Size.SMALL}
+            text="Replace"
+            leftSlot={{ slot: <FileUp size={14} aria-hidden /> }}
+            onClick={onReplace}
+            aria-label={`Replace ${name}`}
+          />
+        </span>
       </header>
 
-      {/* Keyed on the columns, so a rename or a joined column draws a fresh header rather
-          than relying on DataTable to notice its column list changed. */}
-      {table && (
-        <DataTable
-          key={table.columns.join('\u0000')}
-          data={data}
-          columns={columns}
-          idField="__row"
-          showHeader={false}
-          showToolbar={false}
-          showSettings={false}
-          showFooter={false}
-          enableColumnManager={false}
-          enableColumnReordering={false}
-          enableFiltering={false}
-        />
-      )}
+      {table && <RowsTable columns={table.columns} rows={preview} />}
     </section>
   )
 }

@@ -6,7 +6,7 @@ import {
   FOUNDATION_THEME,
 } from '@juspay/blend-design-system'
 import { ArrowUp, Sparkles } from 'lucide-react'
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { FEEDBACK_EASING, FEEDBACK_MS } from '../../motion'
 import { PrimitiveText, font } from '../../primitives'
 import type { Card, ChatMessage } from './assistant'
@@ -64,6 +64,7 @@ function ChatPanel({
   renderCard,
 }: ChatPanelProps) {
   const listRef = useRef<HTMLDivElement>(null)
+  const contentRef = useRef<HTMLDivElement>(null)
 
   // Keep the newest message in view. The list is its own scroll container, so this moves it
   // and leaves the page where it is.
@@ -71,6 +72,28 @@ function ChatPanel({
     const list = listRef.current
     if (list) list.scrollTop = list.scrollHeight
   }, [messages.length, isReplying])
+
+  // And keep it there while it settles: a card's fields lay out after it mounts, so the
+  // conversation goes on growing past that first scroll. Only while the reader is at the
+  // bottom — someone scrolled up to an earlier card is left where they are.
+  useEffect(() => {
+    const list = listRef.current
+    const content = contentRef.current
+    if (!list || !content) return
+    let pinned = true
+    const onScroll = () => {
+      pinned = list.scrollHeight - list.scrollTop - list.clientHeight < 48
+    }
+    const observer = new ResizeObserver(() => {
+      if (pinned) list.scrollTop = list.scrollHeight
+    })
+    list.addEventListener('scroll', onScroll, { passive: true })
+    observer.observe(content)
+    return () => {
+      list.removeEventListener('scroll', onScroll)
+      observer.disconnect()
+    }
+  }, [])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" style={PANEL_MOTION}>
@@ -80,56 +103,58 @@ function ChatPanel({
         role="log"
         aria-live="polite"
         aria-label="Conversation"
-        className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4"
+        className="min-h-0 flex-1 overflow-y-auto p-4"
       >
-        {messages.map((message) =>
-          message.role === 'assistant' ? (
-            <div key={message.id} className="chat-message flex gap-2">
-              <AssistantMark />
-              <div className="flex min-w-0 flex-1 flex-col gap-2">
-                {/* pre-wrap keeps any line breaks; overflow-wrap stops a long file name
-                    from pushing the panel sideways. */}
-                <div className="whitespace-pre-wrap break-words pt-0.5">
+        <div ref={contentRef} className="flex flex-col gap-4">
+          {messages.map((message) =>
+            message.role === 'assistant' ? (
+              <div key={message.id} className="chat-message flex gap-2">
+                <AssistantMark />
+                <div className="flex min-w-0 flex-1 flex-col gap-2">
+                  {/* pre-wrap keeps any line breaks; overflow-wrap stops a long file name
+                      from pushing the panel sideways. */}
+                  <div className="whitespace-pre-wrap break-words pt-0.5">
+                    <PrimitiveText {...BODY} color={colors.gray[900]}>
+                      {message.text}
+                    </PrimitiveText>
+                  </div>
+                  {message.cards?.map((card) => (
+                    <div key={card.id}>{renderCard(card)}</div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div key={message.id} className="chat-message flex justify-end">
+                <div
+                  className="max-w-[85%] whitespace-pre-wrap break-words px-3 py-2"
+                  style={{
+                    backgroundColor: colors.gray[100],
+                    borderRadius: FOUNDATION_THEME.border.radius[12],
+                  }}
+                >
                   <PrimitiveText {...BODY} color={colors.gray[900]}>
                     {message.text}
                   </PrimitiveText>
                 </div>
-                {message.cards?.map((card) => (
-                  <div key={card.id}>{renderCard(card)}</div>
-                ))}
               </div>
-            </div>
-          ) : (
-            <div key={message.id} className="chat-message flex justify-end">
-              <div
-                className="max-w-[85%] whitespace-pre-wrap break-words px-3 py-2"
-                style={{
-                  backgroundColor: colors.gray[100],
-                  borderRadius: FOUNDATION_THEME.border.radius[12],
-                }}
-              >
-                <PrimitiveText {...BODY} color={colors.gray[900]}>
-                  {message.text}
-                </PrimitiveText>
-              </div>
-            </div>
-          ),
-        )}
+            ),
+          )}
 
-        {isReplying && (
-          <div className="chat-message flex items-center gap-2">
-            <AssistantMark />
-            <span className="flex gap-1" role="status" aria-label="Assistant is typing">
-              {[0, 1, 2].map((dot) => (
-                <span
-                  key={dot}
-                  className="chat-typing-dot size-1.5 rounded-full"
-                  style={{ backgroundColor: colors.gray[400] }}
-                />
-              ))}
-            </span>
-          </div>
-        )}
+          {isReplying && (
+            <div className="chat-message flex items-center gap-2">
+              <AssistantMark />
+              <span className="flex gap-1" role="status" aria-label="Assistant is typing">
+                {[0, 1, 2].map((dot) => (
+                  <span
+                    key={dot}
+                    className="chat-typing-dot size-1.5 rounded-full"
+                    style={{ backgroundColor: colors.gray[400] }}
+                  />
+                ))}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       <Composer

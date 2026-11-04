@@ -125,7 +125,7 @@ export function FaqLauncher({ step }: { step: StepId }) {
               scrolls. Between questions, a gray[150] hairline on the text's keyline. Both, and
               the chevron's own column, are `.faq-list` in index.css, fed by the variables here. */}
           <div
-            className="faq-list overflow-y-auto"
+            className="faq-list accordion-wrapping overflow-y-auto"
             style={
               {
                 maxHeight: LIST_MAX_HEIGHT,
@@ -139,7 +139,7 @@ export function FaqLauncher({ step }: { step: StepId }) {
                 '--faq-ms': `${FEEDBACK_MS}ms`,
                 '--faq-ease': FEEDBACK_EASING,
                 // The question's line height — theme.ts sets its title to `body.md`.
-                '--faq-line': `${FOUNDATION_THEME.font.size.body.md.lineHeight}px`,
+                '--accordion-line': `${FOUNDATION_THEME.font.size.body.md.lineHeight}px`,
               } as CSSProperties
             }
           >
