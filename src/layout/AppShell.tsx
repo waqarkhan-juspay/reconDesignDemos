@@ -27,6 +27,7 @@ import { PLAYGROUND_ROUTES } from '../pages/playground/routes'
 import {
   ALERTS_PATH,
   CONFIGURATOR_PATH,
+  FEE_PATH,
   HOME_PATH,
   LEDGER_V1_PATH,
   LEDGER_V2_PATH,
@@ -203,6 +204,7 @@ function AppShell({ children }: { children?: ReactNode }) {
   const isHomeActive = pathname === HOME_PATH
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
   const isAlertsActive = pathname === ALERTS_PATH
+  const isFeeActive = pathname === FEE_PATH
   const moduleRoute = [...PACB_ROUTES, ...PLAYGROUND_ROUTES].find(({ path }) => path === pathname)
   const activeModulePath = moduleRoute ? pathname : null
   const pageTitle = isHomeActive
@@ -211,7 +213,9 @@ function AppShell({ children }: { children?: ReactNode }) {
       ? 'Configurator'
       : isAlertsActive
         ? 'Alerts'
-        : moduleRoute?.label
+        : isFeeActive
+          ? 'Fee'
+          : moduleRoute?.label
   const isLedgerV1Active = pathname === LEDGER_V1_PATH
   const isLedgerV2Active = pathname === LEDGER_V2_PATH
   const navigationData = useMemo(
@@ -220,6 +224,7 @@ function AppShell({ children }: { children?: ReactNode }) {
         isHomeActive,
         isConfiguratorActive,
         isAlertsActive,
+        isFeeActive,
         isLedgerV1Active,
         isLedgerV2Active,
         activeModulePath,
@@ -229,6 +234,7 @@ function AppShell({ children }: { children?: ReactNode }) {
       isHomeActive,
       isConfiguratorActive,
       isAlertsActive,
+      isFeeActive,
       isLedgerV1Active,
       isLedgerV2Active,
       activeModulePath,

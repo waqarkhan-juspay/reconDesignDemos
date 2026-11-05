@@ -5,6 +5,7 @@ import About from './pages/About.tsx'
 import Alerts from './pages/alerts'
 import Blend from './pages/Blend.tsx'
 import Configurator from './pages/Configurator.tsx'
+import Fee from './pages/fee'
 import CreateReportConfig from './pages/create-report-config'
 import Home from './pages/Home.tsx'
 import Ledger from './pages/ledger'
@@ -24,6 +25,7 @@ import SettlementCards from './pages/playground/SettlementCards.tsx'
 import {
   ALERTS_PATH,
   CONFIGURATOR_PATH,
+  FEE_PATH,
   HOME_PATH,
   LEDGER_PATH,
   LEDGER_V2_PATH,
@@ -60,6 +62,7 @@ export const router = createBrowserRouter([
       { path: 'blend', element: <Blend /> },
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
       { path: ALERTS_PATH.slice(1), element: <Alerts /> },
+      { path: FEE_PATH.slice(1), element: <Fee /> },
       // A layout route: Ledger holds the entries and the dialogs, and the version renders
       // into its Outlet. Moving between v1 and v2 keeps the ledger as it was left.
       {

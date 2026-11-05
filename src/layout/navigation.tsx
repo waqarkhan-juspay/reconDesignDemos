@@ -16,6 +16,7 @@ import {
   House,
   LayoutTemplate,
   MessageSquareCheck,
+  Receipt,
   User,
   Wrench,
 } from 'lucide-react'
@@ -42,6 +43,8 @@ export const ALERTS_PATH = '/alerts'
 export const LEDGER_PATH = '/ledger'
 export const LEDGER_V1_PATH = `${LEDGER_PATH}/v1`
 export const LEDGER_V2_PATH = `${LEDGER_PATH}/v2`
+/** Fee — the frame is built, the page itself is still to be designed. */
+export const FEE_PATH = '/fee'
 
 /**
  * Ledger v1's sidebar item. Hidden on 2026-10-23, when V2 became the one Ledger; the page
@@ -91,6 +94,7 @@ export type NavigationOptions = {
    */
   activeModulePath: string | null
   isAlertsActive: boolean
+  isFeeActive: boolean
   isLedgerV1Active: boolean
   isLedgerV2Active: boolean
   /** Router push. Blend's NavItem does no routing of its own — see below. */
@@ -112,6 +116,7 @@ export function buildNavigationData({
   isConfiguratorActive,
   activeModulePath,
   isAlertsActive,
+  isFeeActive,
   isLedgerV1Active,
   isLedgerV2Active,
   navigate,
@@ -218,6 +223,14 @@ export function buildNavigationData({
           href: LEDGER_V2_PATH,
           onClick: () => navigate(LEDGER_V2_PATH),
           isSelected: isLedgerV2Active,
+          showOnMobile: true,
+        },
+        {
+          label: 'Fee',
+          leftSlot: <Receipt size={ICON_SIZE} />,
+          href: FEE_PATH,
+          onClick: () => navigate(FEE_PATH),
+          isSelected: isFeeActive,
           showOnMobile: true,
         },
         {
