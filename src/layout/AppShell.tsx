@@ -25,6 +25,7 @@ import {
   AI_RECON_PATH,
   ALERTS_PATH,
   CONFIGURATOR_PATH,
+  FEE_PATH,
   LEDGER_V1_PATH,
   LEDGER_V2_PATH,
   buildNavigationData,
@@ -207,6 +208,7 @@ function AppShell({ children }: { children?: ReactNode }) {
   const isConfiguratorActive = pathname === CONFIGURATOR_PATH
   const isAlertsActive = pathname === ALERTS_PATH
   const isAiReconActive = pathname === AI_RECON_PATH
+  const isFeeActive = pathname === FEE_PATH
   const isLedgerV1Active = pathname === LEDGER_V1_PATH
   const isLedgerV2Active = pathname === LEDGER_V2_PATH
   const activeModulePath = PACB_ROUTES.some(({ path }) => path === pathname) ? pathname : null
@@ -216,6 +218,7 @@ function AppShell({ children }: { children?: ReactNode }) {
         isConfiguratorActive,
         isAlertsActive,
         isAiReconActive,
+        isFeeActive,
         isLedgerV1Active,
         isLedgerV2Active,
         activeModulePath,
@@ -225,6 +228,7 @@ function AppShell({ children }: { children?: ReactNode }) {
       isConfiguratorActive,
       isAlertsActive,
       isAiReconActive,
+      isFeeActive,
       isLedgerV1Active,
       isLedgerV2Active,
       activeModulePath,

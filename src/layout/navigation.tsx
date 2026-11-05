@@ -19,6 +19,7 @@ import {
   House,
   Info,
   MessageSquareCheck,
+  Receipt,
   User,
   Wrench,
   Zap,
@@ -41,6 +42,8 @@ export const AI_RECON_PATH = '/ai-recon'
 export const LEDGER_PATH = '/ledger'
 export const LEDGER_V1_PATH = `${LEDGER_PATH}/v1`
 export const LEDGER_V2_PATH = `${LEDGER_PATH}/v2`
+/** Fee — the frame is built, the page itself is still to be designed. */
+export const FEE_PATH = '/fee'
 
 /**
  * Ledger v1's sidebar item. Hidden on 2026-10-23, when V2 became the one Ledger; the page
@@ -85,6 +88,7 @@ export type NavigationOptions = {
   isConfiguratorActive: boolean
   isAlertsActive: boolean
   isAiReconActive: boolean
+  isFeeActive: boolean
   isLedgerV1Active: boolean
   isLedgerV2Active: boolean
   /**
@@ -111,6 +115,7 @@ export function buildNavigationData({
   isConfiguratorActive,
   isAlertsActive,
   isAiReconActive,
+  isFeeActive,
   isLedgerV1Active,
   isLedgerV2Active,
   activeModulePath,
@@ -233,6 +238,14 @@ export function buildNavigationData({
           href: AI_RECON_PATH,
           onClick: () => navigate(AI_RECON_PATH),
           isSelected: isAiReconActive,
+          showOnMobile: true,
+        },
+        {
+          label: 'Fee',
+          leftSlot: <Receipt size={ICON_SIZE} />,
+          href: FEE_PATH,
+          onClick: () => navigate(FEE_PATH),
+          isSelected: isFeeActive,
           showOnMobile: true,
         },
         {

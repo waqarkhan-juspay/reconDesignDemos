@@ -5,6 +5,7 @@ import AiRecon from './pages/ai-recon'
 import Alerts from './pages/alerts'
 import Configurator from './pages/Configurator.tsx'
 import CreateReportConfig from './pages/create-report-config'
+import Fee from './pages/fee'
 import Ledger from './pages/ledger'
 import LedgerV1 from './pages/ledger/LedgerV1.tsx'
 import LedgerV2 from './pages/ledger/LedgerV2.tsx'
@@ -18,6 +19,7 @@ import {
   AI_RECON_PATH,
   ALERTS_PATH,
   CONFIGURATOR_PATH,
+  FEE_PATH,
   LEDGER_PATH,
   LEDGER_V2_PATH,
 } from './layout/navigation.tsx'
@@ -42,6 +44,7 @@ export const router = createBrowserRouter([
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
       { path: ALERTS_PATH.slice(1), element: <Alerts /> },
       { path: AI_RECON_PATH.slice(1), element: <AiRecon /> },
+      { path: FEE_PATH.slice(1), element: <Fee /> },
       // A layout route: Ledger holds the entries and the dialogs, and the version renders
       // into its Outlet. Moving between v1 and v2 keeps the ledger as it was left.
       {
