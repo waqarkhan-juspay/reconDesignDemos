@@ -809,6 +809,40 @@ export const fieldTagTokens: ComponentTokenType = {
   ) as unknown as ComponentTokenType['TAGV2'],
 }
 
+type TagTextToken = { text: { color: { subtle: { neutral: unknown } } } }
+
+/**
+ * The Ledger's Completed status pill (cells.tsx, StatusTag).
+ *
+ * Completed is the status most rows are in, so it is the one status that should not be
+ * announcing itself: no icon, and the word in gray[700] rather than the gray[950] Blend
+ * gives a SUBTLE/NEUTRAL tag. In Progress and Failed keep their colour and their glyph,
+ * which is the page's rule — colour marks the exception — applied to the status column.
+ *
+ * Only `text.color.subtle.neutral` moves, and it is scoped by a nested ThemeProvider rather
+ * than set globally for the reason fieldTagTokens gives: SUBTLE/NEUTRAL is a slot other tags
+ * use, and a global remap of a colour slot surprises the next component to reach for it.
+ */
+export const quietStatusTagTokens: ComponentTokenType = {
+  ...componentTokens,
+  TAGV2: perBreakpoint(
+    TAGV2_TOKENS as unknown as Record<string, TagTextToken>,
+    (token) => ({
+      ...token,
+      text: {
+        ...token.text,
+        color: {
+          ...token.text.color,
+          subtle: {
+            ...token.text.color.subtle,
+            neutral: FOUNDATION_THEME.colors.gray[700],
+          },
+        },
+      },
+    }),
+  ) as unknown as ComponentTokenType['TAGV2'],
+}
+
 type SelectTriggerToken = { trigger: { selectedValue: { color: unknown } } }
 
 /**

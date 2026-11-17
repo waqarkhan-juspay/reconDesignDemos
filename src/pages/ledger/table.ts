@@ -1,5 +1,4 @@
 import { FOUNDATION_THEME, TagV2Color } from '@juspay/blend-design-system'
-import { CircleCheck, CircleX, LoaderCircle, type LucideIcon } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { font } from '../../primitives'
 import { TAGV2_TOKENS } from '../../tokens/TagV2'
@@ -26,10 +25,19 @@ export const ACTION_ICON_SIZE = 16
  */
 export const tagTextColor = (color: TagV2Color) => TAGV2_TOKENS.lg.text.color.subtle[color]
 
-export const STATUS_TAG: Record<EntryStatus, { color: TagV2Color; Icon: LucideIcon }> = {
-  COMPLETED: { color: TagV2Color.SUCCESS, Icon: CircleCheck },
-  IN_PROGRESS: { color: TagV2Color.WARNING, Icon: LoaderCircle },
-  FAILED: { color: TagV2Color.ERROR, Icon: CircleX },
+/**
+ * A status is a word and, where it matters, a colour — no glyph.
+ *
+ * The word already says it, and at 12px a tick, a spinner and a cross are three small rings
+ * that read as one texture down the column rather than as three meanings. Completed goes
+ * further and drops the colour too: it is the status most rows are in, so it is the one that
+ * should not be announcing itself. Colour marks the exception, which is the page's rule
+ * everywhere else, reaching the status column.
+ */
+export const STATUS_TAG: Record<EntryStatus, TagV2Color> = {
+  COMPLETED: TagV2Color.NEUTRAL,
+  IN_PROGRESS: TagV2Color.WARNING,
+  FAILED: TagV2Color.ERROR,
 }
 
 /** Let content decide each column's width, as on the Configurator and Alerts tables. */
@@ -44,12 +52,11 @@ export const CELL_TEXT = font(FOUNDATION_THEME.font.size.body.md)
 export const CELL_META = font(FOUNDATION_THEME.font.size.body.sm)
 
 /**
- * The page's vertical rhythm — one gap between each pair of its main blocks: heading, intro
- * line, stat cards, toolbar, table. The Alerts page's values, on the 4px grid (DESIGN.md §7).
+ * The page's vertical rhythm — one gap between each pair of its main blocks: heading, ledger
+ * switch, stat cards, toolbar, table. The Alerts page's values, on the 4px grid (DESIGN.md §7).
  */
 export const SPACING = {
   aboveTitle: 24,
-  titleToIntro: 4,
   introToCards: 24,
   cardsToToolbar: 24,
   // 8, not 24: the toolbar chooses what the table shows, so the two read as one block.
@@ -74,8 +81,11 @@ export const merchantItemsFor = (merchants: string[]) => [
  *
  * `toFirstPage` is for the filters: a narrower set sends you back to page one, because page 2
  * of a set of three is an empty table.
+ *
+ * Generic over the row, because the page now pages three different ones — ledger entries,
+ * bank lines and comparison pairs — and the paging is the same arithmetic for all three.
  */
-export function usePagedRows(rows: TableRow[]) {
+export function usePagedRows<T extends Record<string, unknown>>(rows: T[]) {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 

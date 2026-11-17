@@ -298,7 +298,7 @@ function LedgerV1() {
       style={{ paddingTop: spacing.aboveTitle, paddingBottom: spacing.belowTable }}
     >
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <LedgerTitle gap={spacing.titleToIntro} />
+        <LedgerTitle />
         <div className="flex shrink-0 items-center gap-3">
           <HeaderActions rows={matchingRows} onNewEntry={actions.openNewEntry} />
         </div>
