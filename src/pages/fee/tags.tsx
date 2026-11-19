@@ -27,9 +27,10 @@ import {
   TagV2Type,
   TextInputV2,
 } from '@juspay/blend-design-system'
-import { EllipsisVertical, Search } from 'lucide-react'
+import { ChevronDown, EllipsisVertical, Search } from 'lucide-react'
 import type { CSSProperties, ReactElement } from 'react'
 import { font, PrimitiveText } from '../../primitives'
+import { HAIRLINE } from '../pacb/helpers'
 import {
   METHOD_OVERFLOW,
   METHODS,
@@ -40,7 +41,14 @@ import {
   type MethodId,
   type PspId,
 } from './brands'
-import { lastTouched, type FeeRule, type FeeStatus } from './data'
+import {
+  MODE_HINT,
+  lastTouched,
+  type FeeMode,
+  type FeeRule,
+  type FeeStatus,
+  type Slab,
+} from './data'
 
 const { colors } = FOUNDATION_THEME
 
@@ -106,6 +114,38 @@ export function NeutralTag({ text, icon }: { text: string; icon?: ReactElement }
       color={TagV2Color.NEUTRAL}
       subType={TagV2SubType.ROUNDED}
       leftSlot={icon ? { slot: icon } : undefined}
+    />
+  )
+}
+
+/**
+ * How a charge is taken — `Net`, `Gross` or `Surcharge`.
+ *
+ * Coloured rather than neutral, and the colour is the whole reason this is not a `NeutralTag`:
+ * these three appear hundreds at a time in the views that list every charge (FeeViews.tsx),
+ * where "is any of this a surcharge?" should be answerable without reading a word. A neutral
+ * tag would make it a reading task.
+ *
+ * Purple for `Surcharge` on the same reasoning as `Draft` above — it is the one mode that is
+ * neither taken out of what settles nor charged on what was paid, but added on top, and
+ * purple is the palette's spare.
+ */
+const MODE_COLOR: Record<FeeMode, TagV2Color> = {
+  Net: TagV2Color.SUCCESS,
+  Gross: TagV2Color.PRIMARY,
+  Surcharge: TagV2Color.PURPLE,
+}
+
+export function ModeTag({ mode }: { mode: FeeMode }) {
+  return (
+    <TagV2
+      text={mode}
+      type={TagV2Type.SUBTLE}
+      size={TagV2Size.XS}
+      color={MODE_COLOR[mode]}
+      subType={TagV2SubType.ROUNDED}
+      // The three words are jargon; the hint is the sentence that explains them (data.ts).
+      title={MODE_HINT[mode]}
     />
   )
 }
@@ -418,6 +458,90 @@ export function RuleFoot({
         {lastTouched(rule)}
       </PrimitiveText>
     </div>
+  )
+}
+
+// ─── Slabs ───────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A slab's bands, as they read once open — the amounts on the left, the rate on the right.
+ *
+ * `slab-reveal` is a keyframe in index.css on FEEDBACK_MS: the table is revealed by mounting
+ * it, and a freshly mounted element starts at `from` whenever the frame lands, rather than
+ * racing React's commit the way a transition between two states would (rule 14). The page
+ * rendering it supplies the duration as a custom property, so there is one source of truth.
+ */
+export function SlabTable({ slabs }: { slabs: Slab[] }) {
+  return (
+    <div className="slab-reveal flex w-full flex-col">
+      {slabs.map((slab, index) => (
+        <div
+          key={slab.band}
+          className="flex w-full items-baseline justify-between gap-3 py-1.5"
+          style={index > 0 ? { borderTop: HAIRLINE } : undefined}
+        >
+          <PrimitiveText
+            {...font(FOUNDATION_THEME.font.size.body.sm)}
+            color={colors.gray[500]}
+            truncate
+          >
+            {slab.band}
+          </PrimitiveText>
+          <PrimitiveText
+            {...font(FOUNDATION_THEME.font.size.body.md)}
+            color={colors.gray[700]}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {slab.rate}
+          </PrimitiveText>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * What says a card has bands behind it, and the card's only keyboard path into them.
+ *
+ * A real `button`, not the whole card: the card already contains the kebab's button, and a
+ * button inside a button is markup the browser repairs by splitting, so the kebab's clicks
+ * would reach both. The card handles the mouse (FeeTicket.tsx ignores clicks that came from
+ * a control); this handles the keyboard and carries the `aria-expanded` a screen reader needs.
+ */
+export function SlabToggle({
+  count,
+  open,
+  onToggle,
+  name,
+}: {
+  count: number
+  open: boolean
+  onToggle: () => void
+  name: string
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      aria-label={`${count} slabs for ${name}`}
+      className="flex shrink-0 cursor-pointer items-center gap-1 border-none bg-transparent p-0"
+    >
+      <PrimitiveText
+        as="span"
+        {...font(FOUNDATION_THEME.font.size.body.sm)}
+        color={colors.gray[500]}
+        style={{ whiteSpace: 'nowrap' }}
+      >
+        {count} slabs
+      </PrimitiveText>
+      <ChevronDown
+        size={14}
+        color={colors.gray[500]}
+        style={{ transform: open ? 'rotate(180deg)' : undefined }}
+        aria-hidden
+      />
+    </button>
   )
 }
 

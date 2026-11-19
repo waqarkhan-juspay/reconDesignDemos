@@ -1156,3 +1156,50 @@ button[aria-label='Close modal'] {
   opacity: 0.5;
   cursor: default;
 }
+
+/*
+ * Playground → Fee Card: a slab table opening inside a fee card
+ * (src/pages/playground/FeeCards.tsx).
+ *
+ * Feedback inside a page (rule 14: FEEDBACK_MS, FEEDBACK_EASING, arriving as custom
+ * properties from src/motion.ts on the story root) — a result appearing where you clicked,
+ * not an overlay covering your work.
+ *
+ * A keyframe on a freshly mounted element, not a transition between two states set a frame
+ * apart: the table is revealed by mounting it, so it starts at `from` whenever the frame
+ * lands rather than racing React's commit.
+ */
+@keyframes slab-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+.slab-reveal {
+  animation: slab-reveal var(--slab-reveal) var(--slab-reveal-ease) both;
+}
+
+/* Reveal-only — nothing waits on an animationend to unmount, so plain `none` is safe. */
+@media (prefers-reduced-motion: reduce) {
+  .slab-reveal {
+    animation: none;
+  }
+}
+
+/*
+ * The Fee Locator's rail rows (src/pages/playground/FeeLocator.tsx).
+ *
+ * The whole tree is already open, so a row's only job is to move where you are standing, and
+ * a 32px strip of text with no fill and no chevron says nothing about being a target. Hover
+ * and focus share the pill, since a keyboard walk down the rail is the same journey. Values
+ * come from the page; this file keeps none of its own (rule 1).
+ */
+.locator-row {
+  transition: background-color var(--locator-micro) var(--locator-ease);
+}
+
+.locator-row:hover,
+.locator-row:focus-visible {
+  background-color: var(--locator-hover);
+}

@@ -15,7 +15,10 @@
 import { FOUNDATION_THEME } from '@juspay/blend-design-system'
 import type { CSSProperties } from 'react'
 import { font, PrimitiveText } from '../../primitives'
+import type { MouseEvent } from 'react'
+import { useNavigate } from 'react-router'
 import { PANEL_STYLE } from '../pacb/helpers'
+import { ruleHref } from './fee-tree'
 import type { FeeRule } from './data'
 import { RuleFoot, RuleHeader, TagRow } from './tags'
 
@@ -32,10 +35,20 @@ const FOOT_STYLE: CSSProperties = {
 }
 
 export function FeeCard({ rule }: { rule: FeeRule }) {
+  const navigate = useNavigate()
+  /** The kebab is a real button; let it answer for its own clicks. */
+  const open = (event: MouseEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement).closest('button')) return
+    navigate(ruleHref(rule))
+  }
   return (
     // `h-full` so every card in a row is as tall as the tallest: the grid stretches them, and
     // a card that did not fill its cell would leave its footer floating mid-air.
-    <article className="flex h-full flex-col gap-3 overflow-hidden p-4" style={PANEL_STYLE}>
+    <article
+      className="flex h-full cursor-pointer flex-col gap-3 overflow-hidden p-4"
+      style={PANEL_STYLE}
+      onClick={open}
+    >
       <RuleHeader rule={rule} />
 
       {/* Baseline-aligned, so the 10px bounds sit on the same line the 20px rate stands on
@@ -53,6 +66,17 @@ export function FeeCard({ rule }: { rule: FeeRule }) {
             color={colors.gray[500]}
           >
             {rule.rateCaption}
+          </PrimitiveText>
+        )}
+        {/* Without this the span reads as one rate. This card does not open — it is a third
+            of the ticket's width — so it says the rule is banded and leaves opening to the
+            ticket and the split view. */}
+        {rule.slabs && (
+          <PrimitiveText
+            {...font(FOUNDATION_THEME.font.size.body.xs)}
+            color={colors.gray[500]}
+          >
+            · {rule.slabs.length} slabs
           </PrimitiveText>
         )}
       </div>

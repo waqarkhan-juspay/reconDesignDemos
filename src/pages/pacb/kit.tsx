@@ -110,16 +110,22 @@ export function PageTitle({ title, description }: { title: string; description?:
  * The subtitle defaults to the route row's `description` for the page's title, so a page
  * needs to pass one only to say something else. A page with no content yet (LRS Files) is
  * the frame with nothing under it.
+ *
+ * `lead` is the row above the title, for a page you arrived at from another one: its back
+ * control and its breadcrumb (FeeTree.tsx). Above the title rather than beside it, because
+ * where you are is read before what you are looking at.
  */
 export function PacbPage({
   title,
   description = pageDescription(title),
+  lead,
   actions,
   children,
   spacing = PAGE_SPACING,
 }: {
   title: string
   description?: string
+  lead?: ReactNode
   actions?: ReactNode
   children?: ReactNode
   spacing?: PacbPageSpacing
@@ -129,6 +135,7 @@ export function PacbPage({
       className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
       style={{ paddingTop: spacing.top, paddingBottom: spacing.bottom, gap: spacing.gap }}
     >
+      {lead}
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
         <PageTitle title={title} description={description} />
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}

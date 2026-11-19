@@ -22,6 +22,21 @@ export const PLAYGROUND_ROUTES: PlaygroundRoute[] = [
     description: 'The merchant payment row in every state, before it goes into the workflow.',
   },
   {
+    label: 'Fee Card',
+    path: `${PLAYGROUND_BASE_PATH}/fee-card`,
+    description: 'The fee ticket when one rule is a slab — five ways to make the bands reachable.',
+  },
+  {
+    label: 'Fee Card Explained',
+    path: `${PLAYGROUND_BASE_PATH}/fee-card-explained`,
+    description: 'Every part of a fee ticket, named and defined, with the payments vocabulary.',
+  },
+  {
+    label: 'Fee Locator',
+    path: `${PLAYGROUND_BASE_PATH}/fee-locator`,
+    description: 'Where a charge sits in the configuration, with the branches you did not take.',
+  },
+  {
     label: 'Form 145/146',
     path: `${PLAYGROUND_BASE_PATH}/form-145-146`,
     description: 'The Form 145/146 upload card, from empty to both forms in.',

@@ -28,7 +28,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { font, PrimitiveText } from '../../primitives'
 import { PANEL_STYLE } from '../pacb/helpers'
 import { MODE_HINT, ruleSummary, type FeeRule } from './data'
-import { Empty, Kebab, MethodTags, PspNameTags, RuleSearch, StatusTag } from './tags'
+import { Empty, Kebab, MethodTags, PspNameTags, RuleSearch, SlabTable, StatusTag } from './tags'
 
 const { colors } = FOUNDATION_THEME
 
@@ -195,6 +195,13 @@ function Detail({ rule }: { rule: FeeRule }) {
         <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.md)} color={colors.gray[500]}>
           {rule.description}
         </PrimitiveText>
+        {/* No toggle here: this pane exists to show one rule in full, so hiding part of it
+            behind a click would be the wrong trade. */}
+        {rule.slabs && (
+          <div className="w-full max-w-[420px]">
+            <SlabTable slabs={rule.slabs} />
+          </div>
+        )}
       </div>
 
       <div className="h-px w-full shrink-0" style={DIVIDER_STYLE} />

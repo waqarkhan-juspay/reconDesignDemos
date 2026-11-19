@@ -6,6 +6,7 @@ import Alerts from './pages/alerts'
 import Blend from './pages/Blend.tsx'
 import Configurator from './pages/Configurator.tsx'
 import Fee from './pages/fee'
+import FeeTree from './pages/fee/FeeTree.tsx'
 import CreateReportConfig from './pages/create-report-config'
 import Home from './pages/Home.tsx'
 import Ledger from './pages/ledger'
@@ -19,6 +20,9 @@ import PacbWorkflowSandbox from './pages/pacb/PacbWorkflowSandbox.tsx'
 import ReconSummary from './pages/pacb/ReconSummary.tsx'
 import { PACB_ROUTES } from './pages/pacb/routes.ts'
 import { PLAYGROUND_ROUTES } from './pages/playground/routes.ts'
+import FeeCardExplained from './pages/playground/FeeCardExplained.tsx'
+import FeeCards from './pages/playground/FeeCards.tsx'
+import FeeLocator from './pages/playground/FeeLocator.tsx'
 import FormUploads from './pages/playground/FormUploads.tsx'
 import PaymentCards from './pages/playground/PaymentCards.tsx'
 import SettlementCards from './pages/playground/SettlementCards.tsx'
@@ -44,6 +48,9 @@ const PLAYGROUND_PAGES: Record<string, ReactNode> = {
   'Settlement Cards': <SettlementCards />,
   'Payment Card': <PaymentCards />,
   'Form 145/146': <FormUploads />,
+  'Fee Card': <FeeCards />,
+  'Fee Card Explained': <FeeCardExplained />,
+  'Fee Locator': <FeeLocator />,
 }
 
 export const router = createBrowserRouter([
@@ -63,6 +70,8 @@ export const router = createBrowserRouter([
       { path: CONFIGURATOR_PATH.slice(1), element: <Configurator /> },
       { path: ALERTS_PATH.slice(1), element: <Alerts /> },
       { path: FEE_PATH.slice(1), element: <Fee /> },
+      // A rule, opened: the configuration tree it resolves to (src/pages/fee/FeeTree.tsx).
+      { path: `${FEE_PATH.slice(1)}/:ruleId`, element: <FeeTree /> },
       // A layout route: Ledger holds the entries and the dialogs, and the version renders
       // into its Outlet. Moving between v1 and v2 keeps the ledger as it was left.
       {

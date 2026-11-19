@@ -370,7 +370,7 @@ does not filter is yours.
 `[Blend] … is a v1 component`. That one is signal — it tells you a V1 component is rendering —
 so muting it would cost more than it saves.
 
-**Six of those V1 warnings are permanent, and none of them are yours.** The warning fires from
+**Seven of those V1 warnings are permanent, and none of them are yours.** The warning fires from
 `useResponsiveTokens.ts:57`, which runs only when a real V1 *component* claims its token slot —
 a V1 utility import never triggers it. Traced against 0.0.37:
 
@@ -381,6 +381,7 @@ a V1 utility import never triggers it. Traced against 0.0.37:
 | `ProgressBar` | `StatCardV2` renders V1 `ProgressBar` (`StatCardV2.tsx:16-19`, used at :293) | any `StatCardV2` with `variant={PROGRESS_BAR}` |
 | `MultiSelect` | `DataTable` renders V1 `MultiSelect` | any page with a table |
 | `Popover` | `DataTable` renders V1 `Popover` | same |
+| `TextInput` | `DataTable` renders V1 `TextInput` (`DataTableHeader/index.tsx:5`) | any table given `enableSearch` |
 | `Checkbox` | `SelectItemV2` renders V1 `Checkbox` (`SelectV2/SelectItemV2.tsx:6`) | any open `MultiSelectV2` menu — the checked rows are what draw it |
 
 `SearchInput` joins them wherever a V2 select is given `search={{ show: true }}`:

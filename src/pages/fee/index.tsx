@@ -1,7 +1,9 @@
 /**
- * Fee → Pricing Rules — three layouts of one screen, drawn in Figma as frames 2268:7289,
- * 2268:8499 and 2268:9641. Which one the page shows is a dial and a bar on the page, not a
- * decision baked in here (fee-layout.ts, VersionBar.tsx).
+ * Fee → Pricing Rules — the ticket rows of Figma frame 2268:7289.
+ *
+ * Two alternative layouts are built beside it (2268:8499 and 2268:9641) and reachable from
+ * the Fee Layout dial, which is where comparing them belongs; the page itself opens on the
+ * tickets and offers no switch (fee-layout.ts).
  *
  * Search filters on everything a rule says it covers — its name, what it charges for, the
  * acquirers and the methods — rather than on the name alone, because "UPI" or "Razorpay" is
@@ -16,28 +18,34 @@ import {
   ButtonV2Type,
 } from '@juspay/blend-design-system'
 import { Plus } from 'lucide-react'
-import { useMemo, useState, type ReactElement } from 'react'
+import { useMemo, useState, type CSSProperties, type ReactElement } from 'react'
+import { FEEDBACK_EASING, FEEDBACK_MS } from '../../motion'
 import { PacbPage } from '../pacb/kit'
 import { FEE_RULES, matchesQuery, type FeeRule } from './data'
 import { FeeCard } from './FeeCard'
 import { useFeeDials, type FeeLayout } from './fee-layout'
+import { FeeGroup, FeePaged } from './FeeGroup'
 import { FeeSplit } from './FeeSplit'
 import { FeeTicket } from './FeeTicket'
 import { Empty, RuleSearch } from './tags'
-import { VersionBar } from './VersionBar'
 
-/**
- * 16px between the title row, the search row and the rules — the design's rhythm. The bottom
- * is the exception: the floating bar sits 24px off the viewport and stands about 40px, so the
- * page keeps enough room under its last row that the bar never covers content at full scroll.
- */
-const PAGE_SPACING = { top: 24, gap: 16, bottom: 88 }
+/** 16px between the title row, the search row and the rules — the design's rhythm. */
+const PAGE_SPACING = { top: 24, gap: 16, bottom: 24 }
 
 /** The search field's width in the design. */
 const SEARCH_WIDTH = 350
 
 /** The + on the page's one primary action. */
 const CTA_ICON_SIZE = 16
+
+/**
+ * The slab table's reveal, handed to the stylesheet as custom properties so rule 14 keeps one
+ * source of truth and index.css holds no second copy of the numbers.
+ */
+const MOTION = {
+  '--slab-reveal': `${FEEDBACK_MS}ms`,
+  '--slab-reveal-ease': FEEDBACK_EASING,
+} as CSSProperties
 
 /** The layouts that are a grid of cards — every one but the split view, which owns its page. */
 type GridLayout = Exclude<FeeLayout, 'v3'>
@@ -60,6 +68,12 @@ const GRIDS: Record<
   // floating in a 1320px frame: the cards grow to fill the row instead of leaving a column of
   // empty page beside them.
   v2: { columns: 'grid-cols-1 sm:grid-cols-2 xl:grid-cols-3', gap: 'cardGap', Card: FeeCard },
+  // Two columns like layout 1, which this frame is a variation of — 640px against its 653,
+  // and the same reason for collapsing to one below `lg`.
+  v4: { columns: 'grid-cols-1 lg:grid-cols-2', gap: 'ticketGap', Card: FeeGroup },
+  // Layout 4's grid: same frame, same width, and the pager changes only what is in the
+  // body's corner.
+  v5: { columns: 'grid-cols-1 lg:grid-cols-2', gap: 'ticketGap', Card: FeePaged },
 }
 
 function Rules({
@@ -82,7 +96,7 @@ function Rules({
 }
 
 export default function Fee() {
-  const { layout, ticketGap, cardGap, setLayout } = useFeeDials()
+  const { layout, ticketGap, cardGap } = useFeeDials()
   const [query, setQuery] = useState('')
 
   const rules = useMemo(() => {
@@ -104,8 +118,7 @@ export default function Fee() {
         />
       }
     >
-      <VersionBar layout={layout} onChange={setLayout} />
-
+      <div style={MOTION} className="contents">
       {layout === 'v3' ? (
         <FeeSplit rules={rules} query={query} onQueryChange={setQuery} />
       ) : (
@@ -120,6 +133,7 @@ export default function Fee() {
           )}
         </>
       )}
+      </div>
     </PacbPage>
   )
 }
