@@ -1058,30 +1058,32 @@ button[aria-label='Close modal'] {
   opacity: 0;
 }
 
-/*
- * The chevron in a column of its own, beside the question rather than over it.
- *
- * blend-gap: AccordionV2 draws a right chevron `position: absolute` across the whole trigger
- * (AccordionV2TriggerContent.tsx, ChevronContainer), with nothing reserving its width — so a
- * question long enough to reach the right edge ran underneath it. Put back in the flow, it is
- * a flex sibling of the question's column in the row Blend already lays out, and takes that
- * row's own `content.gap` (8) from the text. `margin-left: auto` holds it at the right edge when
- * the question is short. And the height of one line of the question, so it centres on the
- * first line rather than floating between two.
- *
- * !important because Block writes both as styled-components rules of its own.
- */
-.faq-list [data-element='chevron-icon'] {
-  position: static !important;
-  height: var(--faq-line) !important;
-  margin-left: auto;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .faq-list [data-element='accordion-item'],
   .faq-list [data-element='accordion-item'] + [data-element='accordion-item']::before {
     transition: none;
   }
+}
+
+/*
+ * An AccordionV2 whose titles wrap — the FAQ list's questions (FaqLauncher.tsx), AI Recon's
+ * recommended steps (ai-recon/cards.tsx) — with the chevron in a column of its own, beside
+ * the title rather than over it. The wrapper sets `--accordion-line`, its title's line height.
+ *
+ * blend-gap: AccordionV2 draws a right chevron `position: absolute` across the whole trigger
+ * (AccordionV2TriggerContent.tsx, ChevronContainer), with nothing reserving its width — so a
+ * title long enough to reach the right edge ran underneath it. Put back in the flow, it is
+ * a flex sibling of the title's column in the row Blend already lays out, and takes that
+ * row's own `content.gap` (8) from the text. `margin-left: auto` holds it at the right edge when
+ * the title is short. And the height of one line of the title, so it centres on the first
+ * line rather than floating between two.
+ *
+ * !important because Block writes both as styled-components rules of its own.
+ */
+.accordion-wrapping [data-element='chevron-icon'] {
+  position: static !important;
+  height: var(--accordion-line) !important;
+  margin-left: auto;
 }
 
 /*
@@ -1202,4 +1204,106 @@ button[aria-label='Close modal'] {
 .locator-row:hover,
 .locator-row:focus-visible {
   background-color: var(--locator-hover);
+}
+
+/*
+ * The label darkens on the same beat the path line arrives at it, so the two read as one move.
+ * A root heading (PA Fee, Feature Fee) fades and returns on that beat too.
+ */
+.locator-row > *,
+.locator-root > * {
+  transition: color var(--locator-feedback) var(--locator-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .locator-row > *,
+  .locator-root > * {
+    transition: none;
+  }
+}
+
+/*
+ * Fee Locator v2's charge card under the pointer: the edge darkens and the card lifts, so the
+ * card the rail is singling out is marked on the stream's side too. The edge colour travels as
+ * --card-edge because the card's border is an inline style; values come from the page (rule 1).
+ */
+.locator-card {
+  --card-edge: var(--locator-card-edge);
+  transition:
+    border-color var(--locator-micro) var(--locator-ease),
+    box-shadow var(--locator-micro) var(--locator-ease);
+}
+
+.locator-card:hover {
+  --card-edge: var(--locator-card-edge-hover);
+  box-shadow: var(--locator-card-shadow);
+}
+
+/* A ticket punch's arc is part of the outline, so it darkens on the card's own beat. */
+.locator-card .locator-punch {
+  transition: border-color var(--locator-micro) var(--locator-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .locator-card,
+  .locator-card .locator-punch {
+    transition: none;
+  }
+}
+
+/*
+ * AI Recon's chat panel (src/pages/ai-recon/ChatPanel.tsx).
+ *
+ * Durations and curves arrive as custom properties set on the panel from src/motion.ts. A
+ * message arrives by mounting, so it is a keyframe: a freshly mounted element starts at
+ * `from` whenever the frame lands.
+ */
+@keyframes chat-message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.chat-message {
+  animation: chat-message-enter var(--chat-feedback) var(--chat-feedback-ease) both;
+}
+
+/*
+ * The "thinking" dots, each brightening in turn. 1.2s is a loop's cadence rather than one of
+ * motion.ts's gestures — nothing here enters or leaves, it only says work is under way.
+ */
+@keyframes chat-typing {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+
+.chat-typing-dot {
+  animation: chat-typing 1.2s ease-in-out infinite;
+}
+
+.chat-typing-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.chat-typing-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+/* Reveal-only, so plain `none` is safe here — nothing waits on an animationend to unmount. */
+@media (prefers-reduced-motion: reduce) {
+  .chat-message {
+    animation: none;
+  }
+
+  .chat-typing-dot {
+    animation: none;
+    opacity: 0.6;
+  }
 }

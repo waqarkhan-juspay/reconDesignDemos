@@ -1,0 +1,554 @@
+/**
+ * The AI Recon assistant's script. There is no model behind it — every reply is picked
+ * from what the workspace holds and a few patterns in what was typed, so the conversation
+ * demos the flow without a backend.
+ *
+ * What it understands, it answers with a card already filled in (cards.tsx) rather than a
+ * paragraph: the sentence chooses the step, the card shows exactly what will happen and
+ * lets anything it got wrong be fixed by hand before it is applied.
+ */
+import { ALL_COLUMNS, type Operation, type OperationKind } from './operations'
+import { exceptionCount, type Diagnosis, type ReconOutcome } from './match'
+import type { BaseChoice, Recommendation } from './recommend'
+import { LIMITS_TEXT, count, formatCount, type Delimiter, type Encoding, type ParseOptions, type Quote, type Row } from './table'
+
+type ChatRole = 'assistant' | 'user'
+
+type CardState = 'open' | 'applied' | 'cancelled'
+
+/** Interactive pieces the assistant puts in the conversation. `fileId` is the upload's id. */
+export type Card =
+  | { id: string; type: 'step'; fileId?: string; op: Operation; state: CardState }
+  /**
+   * `summary` is the one-line "how I read it" shown on upload, which opens into the form;
+   * `adjusting` marks a form opened from one, so cancelling it goes back to the summary.
+   */
+  | {
+      id: string
+      type: 'parse'
+      fileId: string
+      /** Kept on the card, so it still names its file after that file is replaced. */
+      name: string
+      options: ParseOptions
+      state: CardState | 'summary'
+      adjusting?: boolean
+    }
+  | { id: string; type: 'menu'; fileId?: string }
+  /** Which file is the base, with a way to swap it. `superseded` once it has been swapped. */
+  | {
+      id: string
+      type: 'base'
+      name: string
+      rows: number
+      key?: string
+      state: 'open' | 'superseded'
+    }
+  /**
+   * The steps proposed once both files are in, ticked where the evidence is strong. Applied
+   * together, opened one by one as step cards, or superseded by a newer set.
+   */
+  | {
+      id: string
+      type: 'recommend'
+      title: string
+      items: RecommendationItem[]
+      state: 'open' | 'applied' | 'reviewed' | 'superseded'
+      /** How many were applied, for the line the card settles into. */
+      applied?: number
+      /** The items whose reasons are showing. Here rather than in the card, so the walkthrough can open one. */
+      reasons?: string[]
+    }
+
+/** A recommendation, aimed at one of the uploaded files. */
+export type RecommendationItem = Recommendation & { id: string; fileId: string; fileName: string }
+
+export type ChatMessage = {
+  id: string
+  role: ChatRole
+  text: string
+  cards?: Card[]
+}
+
+/** A recon takes two files, and which is which is the order they arrive in. */
+export const ROLES = ['source', 'target'] as const
+export const MAX_FILES = ROLES.length
+
+export type FileRole = (typeof ROLES)[number]
+
+export const ROLE_LABEL: Record<FileRole, string> = { source: 'Source', target: 'Target' }
+
+/** One uploaded file as the assistant sees it, cleanup steps applied. */
+export type FileContext = {
+  id: string
+  role: FileRole
+  name: string
+  columns: string[]
+  /** The first rows, for suggestions that depend on what the values look like. */
+  sample?: Row[]
+}
+
+/** How long a run, and a reply, take at least. Long enough to read as work being done. */
+export const RUN_MS = 900
+export const REPLY_MS = 700
+
+/**
+ * Ids for messages, cards and uploads. Random rather than counted: a counter restarts at
+ * zero whenever this module reloads in development while the page keeps its messages, and
+ * a repeated id makes a card update reach a different card.
+ */
+export const messageId = () => crypto.randomUUID()
+
+export const GREETING: ChatMessage = {
+  id: 'greeting',
+  role: 'assistant',
+  text: 'Add two files and I’ll match them.',
+}
+
+/**
+ * What the assistant says as a run lands: what it matched on — nothing was configured, so
+ * this is the one place that says — and where to look. The cards beside it carry the numbers.
+ */
+export function announce(outcome: ReconOutcome) {
+  const on = `Matched ${outcome.sourceKey} against ${outcome.targetKey}`
+  const compared = outcome.sourceAmount
+    ? ` and compared ${outcome.sourceAmount} with ${outcome.targetAmount}.`
+    : '. No money column agreed between the files, so I only checked which rows are in both.'
+  const exceptions = exceptionCount(outcome)
+  const next =
+    exceptions === 0
+      ? ' Everything matched.'
+      : ` ${count(exceptions, 'row')} ${exceptions === 1 ? 'needs' : 'need'} a look — click a card to see ${exceptions === 1 ? 'it' : 'them'}.`
+  return on + compared + next
+}
+
+/** The message when no column identifies the same rows in both files. */
+export const NO_KEY =
+  'I couldn’t find a column whose values appear in both files, so there’s nothing to pair ' +
+  'rows on. Check that the two files cover the same transactions.'
+
+/** What reading a file left out, said once so it is never a surprise. */
+function skipped(name: string, { skipTop, skipBottom }: ParseOptions) {
+  const parts = [
+    ...(skipTop ? [`${count(skipTop, 'line')} above the header`] : []),
+    ...(skipBottom ? [`${count(skipBottom, 'summary line')} at the end`] : []),
+  ]
+  return parts.length > 0 ? `In ${name} I skipped ${parts.join(' and ')}.` : undefined
+}
+
+/** The question asked the moment files are read — the point of the upload step. */
+export function uploadPrompt(read: { name: string; parse: ParseOptions }[], total: number) {
+  const named = read.map((file) => file.name).join(' and ')
+  const notes = read.map((file) => skipped(file.name, file.parse)).filter(Boolean)
+  // Which file is the base is decided once both are in (`baseMessage`), not by arrival.
+  const next = total < MAX_FILES ? ['Add the other file and I’ll work out which one is your base.'] : []
+  return [`Read ${named}.`, ...notes, ...next].join(' ')
+}
+
+/**
+ * The base, said with its evidence, then what comes next: the recommendations card, or
+ * nothing to do. The evidence is the strongest the files gave — their own identifiers, one
+ * row per transaction — and the order they came in only when there was nothing else.
+ */
+export function baseMessage(choice: BaseChoice, baseName: string, otherName: string, recommendations: number) {
+  const evidence = [
+    ...(choice.internal.length > 0 ? [`it carries your own identifiers (${choice.internal.join(', ')})`] : []),
+    ...(choice.repeats
+      ? [`it has one row per transaction${choice.key ? ` (${choice.key} is unique)` : ''}, where ${otherName} repeats ${choice.repeats.column} up to ${choice.repeats.most} times`]
+      : []),
+  ]
+  const why = evidence.length > 0 ? `: ${evidence.join(', and ')}` : ', as the first file in — swap it if the other is yours'
+  const next =
+    recommendations > 0
+      ? `${otherName} needs a few changes before it lines up — I’ve ticked the ones I’m sure of.`
+      : LINED_UP
+  return `${baseName} is your base file${why}. I’ll check ${otherName} against it. ${next}`
+}
+
+const LINED_UP = 'The two already line up — run the recon when you’re ready.'
+
+/** The base kept or swapped rather than chosen: its reasons were given when it was. */
+export function reproposeMessage(swapped: boolean, baseName: string, otherName: string, recommendations: number) {
+  const next = recommendations > 0 ? 'Here’s what I’d change before matching.' : LINED_UP
+  return swapped ? `Swapped — ${baseName} is your base now. I’ll check ${otherName} against it. ${next}` : next
+}
+
+/** Why the files can't be paired yet, and the step that fixes it, in words. */
+export const diagnosisNote = ({ role, key, keep }: Diagnosis) =>
+  `The ${role} has several rows per ${key} — fees and authorisations beside each transaction — ` +
+  `so I’d keep only its ${keep.join(' and ')} rows before matching.`
+
+
+export type Intent =
+  | { type: 'step'; fileId?: string; op: Operation }
+  | { type: 'parse'; fileId?: string; patch: Partial<ParseOptions> }
+  | { type: 'menu'; fileId?: string }
+  | { type: 'undo' }
+  | { type: 'done' }
+  | { type: 'run' }
+  | { type: 'reply'; text: string }
+  | { type: 'swap' }
+  | { type: 'recommend' }
+
+/** Case, spaces, underscores and dashes don't make a column name different. */
+const squash = (text: string) => text.toLowerCase().replace(/[\s_\-.]+/g, '')
+
+type Mention = { fileId: string; column: string; at: number }
+
+/**
+ * The columns a sentence names, in the order it names them. Longer names win where two
+ * overlap, so "settled amount" is not also read as "amount".
+ */
+function mentions(text: string, files: FileContext[]) {
+  const said = squash(text)
+  type Hit = Mention & { length: number }
+  const hits: Hit[] = []
+  for (const file of files) {
+    for (const column of file.columns) {
+      const name = squash(column)
+      if (name.length < 2) continue
+      for (let at = said.indexOf(name); at !== -1; at = said.indexOf(name, at + 1)) {
+        hits.push({ fileId: file.id, column, at, length: name.length })
+      }
+    }
+  }
+  const taken: Hit[] = []
+  for (const hit of hits.sort((a, b) => b.length - a.length)) {
+    const overlaps = taken.some((kept) => hit.at < kept.at + kept.length && hit.at + hit.length > kept.at)
+    if (!overlaps) taken.push(hit)
+  }
+  return taken.sort((a, b) => a.at - b.at)
+}
+
+/** A phrase to the column it most likely means, in the given file or any. */
+function resolveColumn(phrase: string, files: FileContext[], fileId?: string) {
+  const wanted = squash(phrase)
+  const pool = files.filter((file) => !fileId || file.id === fileId)
+  for (const file of pool) {
+    const exact = file.columns.find((column) => squash(column) === wanted)
+    if (exact) return { fileId: file.id, column: exact }
+  }
+  for (const file of pool) {
+    const partial = file.columns.find(
+      (column) => squash(column).includes(wanted) || wanted.includes(squash(column)),
+    )
+    if (partial) return { fileId: file.id, column: partial }
+  }
+  return undefined
+}
+
+/** Which file a sentence is about: named outright, implied by its columns, or the only one. */
+function pickFile(lower: string, files: FileContext[], found: Mention[]) {
+  const byRole = (role: FileRole) => files.find((file) => file.role === role)
+  if (/\bsource\b/.test(lower)) return byRole('source')
+  if (/\btarget\b/.test(lower)) return byRole('target')
+  // A name short enough to turn up inside ordinary words says nothing.
+  const named = files.find((file) => {
+    const stem = squash(file.name.replace(/\.\w+$/, ''))
+    return stem.length >= 4 && squash(lower).includes(stem)
+  })
+  if (named) return named
+  const owners = new Set(found.map((mention) => mention.fileId))
+  if (owners.size === 1) {
+    const [only] = owners
+    const column = found[0].column
+    // A column both files have says nothing about which one is meant.
+    if (files.filter((file) => file.columns.includes(column)).length === 1) {
+      return files.find((file) => file.id === only)
+    }
+  }
+  return files.length === 1 ? files[0] : undefined
+}
+
+/** The first column in a file whose name looks like what a step usually wants. */
+const guessColumn = (files: FileContext[], fileId: string | undefined, pattern: RegExp) =>
+  files
+    .filter((file) => !fileId || file.id === fileId)
+    .flatMap((file) => file.columns)
+    .find((column) => pattern.test(column))
+
+const DATE_COLUMN = /date|time|_on\b|\son\b|day/i
+const AMOUNT_COLUMN = /amount|amt|value|total|price|fee|settled/i
+
+/** Something quoted in the sentence, if anything was. */
+const quoted = (text: string) => text.match(/["'“‘]([^"'”’]+)["'”’]/)?.[1]
+
+const SEPARATORS: Record<string, string> = {
+  space: ' ',
+  dash: '-',
+  hyphen: '-',
+  underscore: '_',
+  slash: '/',
+  comma: ',',
+  pipe: '|',
+}
+
+const DELIMITER_WORDS: Record<string, Delimiter> = {
+  comma: ',',
+  semicolon: ';',
+  pipe: '|',
+  tab: '\t',
+}
+
+/** A regex for any key of a word map, so the words are written once. */
+const wordsOf = (map: Record<string, string>) => Object.keys(map).join('|')
+const SEPARATOR_WORD = new RegExp(`\\bwith an? (${wordsOf(SEPARATORS)})\\b`)
+const DELIMITER_WORD = new RegExp(`\\b(${wordsOf(DELIMITER_WORDS)})\\b`)
+
+/** First match wins; anything else falls to the default after `.find`. */
+const ENCODING_WORDS: [RegExp, Encoding][] = [
+  [/utf-?16/, 'utf-16le'],
+  [/latin|iso/, 'iso-8859-1'],
+  [/windows|1252|ansi/, 'windows-1252'],
+]
+
+const DATE_FORMAT_WORDS: [RegExp, string][] = [
+  [/dd\s*\/\s*mm\s*\/\s*yyyy|day first/, 'DD/MM/YYYY'],
+  [/mm\s*\/\s*dd\s*\/\s*yyyy|month first|us format/, 'MM/DD/YYYY'],
+  [/dd\s*mmm|\d{1,2}\s+[a-z]{3}\s+\d{4}|month name/, 'DD MMM YYYY'],
+  [/yyyy-mm-dd|iso/, 'YYYY-MM-DD'],
+]
+
+/** Steps that change every value the same way, and default to every column. */
+const WHOLE_VALUE_STEPS: [RegExp, OperationKind][] = [
+  [/\btrim|whitespace|extra spaces|\bspaces\b/, 'trim'],
+  [/upper ?case|capitali[sz]e|all caps|\bcaps\b/, 'upper'],
+  [/lower ?case/, 'lower'],
+]
+
+const lookup = <T>(table: [RegExp, T][], text: string) => table.find(([pattern]) => pattern.test(text))?.[1]
+
+const hasOrHave = (n: number) => (n === 1 ? 'has' : 'have')
+
+/** Questions about the product, answered in words rather than with a card. */
+function answer(lower: string, files: FileContext[], result?: ReconOutcome) {
+  if (/\b(what|which)\b.*\b(formats?|file types?|files can)\b/.test(lower)) {
+    return `Each file: ${LIMITS_TEXT}, with the column names in the first row. If yours has lines above the header, I can skip them.`
+  }
+  if (/\b(which|what) columns?\b.*\bmatch\b|\bmatch on\b/.test(lower)) {
+    return result
+      ? `${result.sourceKey} in the source against ${result.targetKey} in the target — the columns whose values turn up in both.`
+      : 'Whichever column’s values turn up in both files — usually a transaction ID — then I compare the amounts on the rows it pairs.'
+  }
+  if (/^how (does|do|will)\b/.test(lower) && !result) {
+    return (
+      'I find the column that identifies the same transaction in both files, pair each ' +
+      'source row with its partner in the target, then compare their amounts. Anything ' +
+      'without a partner, or with a different amount, is flagged as an exception.'
+    )
+  }
+  if (result) {
+    if (/mismatch|differ|amount/.test(lower)) {
+      const { amountMismatch: rows } = result
+      if (rows.length === 0) return 'None — every paired row agrees on amount.'
+      const widest = rows.reduce((a, b) => (Math.abs(b.difference) > Math.abs(a.difference) ? b : a))
+      return (
+        `${count(rows.length, 'row')} ${rows.length === 1 ? 'differs' : 'differ'} on amount. The widest gap is ${formatCount(Math.abs(widest.difference))} ` +
+        `on ${widest.key}. Click Amount Mismatch to see them all.`
+      )
+    }
+    if (/missing|absent|not found/.test(lower)) {
+      return (
+        `${count(result.missingInTarget.length, 'source row')} ${hasOrHave(result.missingInTarget.length)} no partner in the target, and ` +
+        `${count(result.missingInSource.length, 'target row')} ${hasOrHave(result.missingInSource.length)} none in the source. Late ` +
+        'settlements are the usual cause — click either card to see which.'
+      )
+    }
+  }
+  if (/\?$/.test(lower) && files.length === 0) {
+    return 'Start by adding both files — drop them in the box on the left, or use the paperclip here.'
+  }
+  return undefined
+}
+
+/**
+ * Read a sentence into what to do. Order matters: specific shapes ("first 4 characters")
+ * are tried before looser ones that would also match ("first 4 … rows").
+ */
+export function interpret(text: string, files: FileContext[], result?: ReconOutcome): Intent {
+  const said = text.trim().replace(/[.!]+$/, '')
+  const lower = said.toLowerCase()
+
+  if (/^(no|nope|nothing|none|looks good|all good|good to go|all set|that'?s (it|all)|done|fine)\b/.test(lower)) {
+    return { type: 'done' }
+  }
+  if (/\b(undo|revert|take (that|it) back)\b/.test(lower)) return { type: 'undo' }
+  if (/\bswap\b|\bwrong (base|source)\b|\b(make|set|use)\b.*\bas (the )?(base|source)\b/.test(lower)) {
+    return { type: 'swap' }
+  }
+  if (/\brecommend|\bsuggest(ed|ions?)?\b|\bwhat (should|do) i (clean|fix|change)\b/.test(lower)) {
+    return { type: 'recommend' }
+  }
+  if (/^(run|start|go|match)\b|\brun (the )?recon\b/.test(lower)) return { type: 'run' }
+
+  const answered = answer(lower, files, result)
+  if (answered) return { type: 'reply', text: answered }
+
+  if (files.length === 0) {
+    return { type: 'reply', text: 'Add your files first — then tell me what to clean up.' }
+  }
+
+  const found = mentions(said, files)
+  const file = pickFile(lower, files, found)
+  const fileId = file?.id
+  const columnsHere = found.filter((mention) => !fileId || mention.fileId === fileId)
+  const column = columnsHere[0]?.column
+  const step = (op: Operation, id = fileId): Intent => ({ type: 'step', fileId: id, op })
+
+  // How the file is read.
+  const delimiter = lower.replace('semi-colon', 'semicolon').match(DELIMITER_WORD)?.[1]
+  if (delimiter && /separat|delimit|split|\bcsv\b|columns are/.test(lower)) {
+    return { type: 'parse', fileId, patch: { delimiter: DELIMITER_WORDS[delimiter] } }
+  }
+  if (/encod|utf|latin|iso-?8859|windows|ansi|garbled|weird characters/.test(lower)) {
+    return { type: 'parse', fileId, patch: { encoding: lookup(ENCODING_WORDS, lower) ?? 'utf-8' } }
+  }
+  if (/single quotes?|no quotes|without quotes|quote char/.test(lower)) {
+    const quote: Quote = /single/.test(lower) ? "'" : /no quotes|without/.test(lower) ? '' : '"'
+    return { type: 'parse', fileId, patch: { quote } }
+  }
+
+  const characters = lower.match(/\b(first|last)\s+(\d+)\s+(characters?|chars?|letters?|digits?)\b/)
+  if (characters) {
+    return step({ kind: characters[1] === 'first' ? 'left' : 'right', column, count: characters[2] })
+  }
+
+  const lines =
+    lower.match(/\b(first|top|last|bottom)\s+(\d+)\s+(rows?|lines?)\b/) ??
+    lower.match(/\b(\d+)\s+(rows?|lines?)\s+(?:from|at)\s+the\s+(top|bottom)\b/)
+  if (lines && /skip|ignore|remove|drop|delete|cut|banner|summary/.test(lower)) {
+    const [count, where] = /^\d+$/.test(lines[1]) ? [lines[1], lines[3]] : [lines[2], lines[1]]
+    const fromTop = where === 'first' || where === 'top'
+    return { type: 'parse', fileId, patch: fromTop ? { skipTop: Number(count) } : { skipBottom: Number(count) } }
+  }
+  if (/\b(banner|summary|header) (rows?|lines?)\b|\bskip\b/.test(lower)) {
+    return { type: 'parse', fileId, patch: {} }
+  }
+
+  const rename = said.match(
+    /\brename\s+(?:the\s+)?(?:column\s+)?["'“]?(.+?)["'”]?\s+(?:to|as|into)\s+["'“]?(.+?)["'”]?$/i,
+  )
+  if (rename) {
+    const resolved = resolveColumn(rename[1], files, fileId)
+    return step({ kind: 'rename', column: resolved?.column, text: rename[2] }, fileId ?? resolved?.fileId)
+  }
+  if (/\brename\b/.test(lower)) return step({ kind: 'rename', column })
+
+  if (/\bempty columns?\b/.test(lower)) return step({ kind: 'dropEmpty' })
+  if (/\bif\b.*\belse\b|\bmatch key\b|\bconditional\b/.test(lower)) return step({ kind: 'matchKey', into: 'Match key' })
+  if (/\bpositive\b|\babsolute\b|\b(minus|negative) signs?\b/.test(lower)) {
+    return step({ kind: 'absolute', column: column ?? guessColumn(files, fileId, AMOUNT_COLUMN) })
+  }
+
+  if (/\b(delete|drop|remove|hide)\b.*\bcolumns?\b/.test(lower)) {
+    return step({ kind: 'deleteColumn', column })
+  }
+
+  if (/\b(join|combine|concat(enate)?|merge)\b/.test(lower)) {
+    const separatorWord = lower.match(SEPARATOR_WORD)?.[1]
+    const into = said.match(/\b(?:into|as|called|named)\s+["'“]?([\w ]+?)["'”]?$/i)?.[1]
+    return step({
+      kind: 'concat',
+      column: columnsHere[0]?.column,
+      second: columnsHere[1]?.column,
+      with: separatorWord ? SEPARATORS[separatorWord] : quoted(said),
+      into,
+    })
+  }
+
+  const keep = said.match(
+    /\bkeep (?:only )?(?:the )?rows? where\s+(.+?)\s+(?:is|are|=)\s+(.+?)(?:\s+in the (?:source|target))?$/i,
+  )
+  if (keep) {
+    const resolved = resolveColumn(keep[1], files, fileId)
+    return step({ kind: 'keepRows', column: resolved?.column ?? column, text: keep[2] }, fileId ?? resolved?.fileId)
+  }
+  if (/\bkeep (?:only )?(?:the )?\w*\s*rows?\b/.test(lower)) return step({ kind: 'keepRows', column })
+
+  if (/\b(drop|remove|delete|exclude|filter out|get rid of)\b.*\brows?\b|\brows? where\b/.test(lower)) {
+    const empty = /\b(empty|blank|missing|null)\b/.test(lower)
+    const value = empty
+      ? ''
+      : (quoted(said) ?? said.match(/\b(?:is|equals|=)\s+(\S+)$/i)?.[1] ?? '')
+    return step({ kind: 'dropRows', column, text: value })
+  }
+
+  const replace = said.match(/\breplace\s+["'“]?(.+?)["'”]?\s+with\s+["'“]?(.*?)["'”]?(?:\s+in\s+.+)?$/i)
+  if (replace) return step({ kind: 'replace', column, text: replace[1], with: replace[2] })
+  if (/\breplace\b/.test(lower)) return step({ kind: 'replace', column })
+
+  if (/\bfill\b|\bdefault\b|\bblanks?\b|\bempty (cells|values)\b/.test(lower)) {
+    const value = said.match(/\bwith\s+["'“]?(.+?)["'”]?$/i)?.[1]
+    return step({ kind: 'fill', column, text: value })
+  }
+
+  const wholeValue = lookup(WHOLE_VALUE_STEPS, lower)
+  if (wholeValue) return step({ kind: wholeValue, column: column ?? ALL_COLUMNS })
+
+  // Prefix and suffix read the same way, from either end: the text is quoted, follows the
+  // step's own word, or is what gets added before/after.
+  const affix = (kind: 'prefix' | 'suffix', where: string) =>
+    step({
+      kind,
+      column,
+      text:
+        quoted(said) ??
+        said.match(new RegExp(`\\b${kind}\\s+(?:of\\s+)?(\\S+)`, 'i'))?.[1] ??
+        said.match(new RegExp(`\\badd\\s+(\\S+)\\s+(?:${where})`, 'i'))?.[1],
+    })
+  if (/\bprefix\b|\bin front\b|\bbefore\b|\bstart with\b/.test(lower)) return affix('prefix', 'before|in front')
+  if (/\bsuffix\b|\bafter\b|\bend with\b|\bto the end\b/.test(lower)) return affix('suffix', 'after|to the end')
+
+  if (/\bdates?\b|yyyy|dd\s*[/-]\s*mm|mm\s*[/-]\s*dd|\biso\b/.test(lower)) {
+    return step({
+      kind: 'date',
+      column: column ?? guessColumn(files, fileId, DATE_COLUMN),
+      format: lookup(DATE_FORMAT_WORDS, lower) ?? 'YYYY-MM-DD',
+    })
+  }
+  if (/\b(numbers?|numeric|amounts?|commas?|currency|rupees?|decimals?)\b|₹/.test(lower)) {
+    return step({ kind: 'number', column: column ?? guessColumn(files, fileId, AMOUNT_COLUMN) })
+  }
+
+  return { type: 'menu', fileId }
+}
+
+/** How a file writes its dates, read off its first date column. */
+function dateStyle(file: FileContext) {
+  const column = file.columns.find((name) => DATE_COLUMN.test(name))
+  const value = column && file.sample?.find((row) => row[column]?.trim())?.[column]?.trim()
+  if (!column || !value) return undefined
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return { column, format: 'YYYY-MM-DD' }
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(value)) return { column, format: 'DD/MM/YYYY' }
+  return undefined
+}
+
+const hasEdgeSpaces = (file: FileContext) =>
+  file.sample?.some((row) => Object.values(row).some((value) => value !== value.trim())) ?? false
+
+/**
+ * The chips over the input — what is worth saying next, given where things are. Built from
+ * what the files really hold: trimming only when a value carries stray spaces, and a date
+ * format only when the two files write dates differently, phrased to make the target match
+ * the source.
+ */
+export function suggestionsFor(files: FileContext[], result: ReconOutcome | undefined, cleaned: boolean) {
+  if (result) {
+    return [
+      ...(result.amountMismatch.length > 0 ? ['Why do some rows differ on amount?'] : []),
+      ...(result.missingInTarget.length + result.missingInSource.length > 0 ? ['What about the missing ones?'] : []),
+      'Which columns did you match on?',
+    ]
+  }
+  if (files.length === 0) return ['How does AI Recon match rows?', 'What file formats can I use?']
+  if (cleaned && files.length === MAX_FILES) return ['Run the recon', 'Show me what else you can do']
+
+  const [source, target] = files.map(dateStyle)
+  const dates = source && target && source.format !== target.format ? target : undefined
+  const spaced = files.find(hasEdgeSpaces)
+  return [
+    ...(spaced ? [files.length > 1 ? `Trim spaces in the ${spaced.role}` : 'Trim spaces in every column'] : []),
+    ...(dates ? [`Format ${dates.column} as ${source!.format}`] : []),
+    'Show me what else you can do',
+    'Looks good',
+  ]
+}

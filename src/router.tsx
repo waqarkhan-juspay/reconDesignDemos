@@ -2,6 +2,7 @@ import type { ReactNode } from 'react'
 import { Navigate, createBrowserRouter } from 'react-router'
 import App from './App.tsx'
 import About from './pages/About.tsx'
+import AiRecon from './pages/ai-recon'
 import Alerts from './pages/alerts'
 import Blend from './pages/Blend.tsx'
 import Configurator from './pages/Configurator.tsx'
@@ -27,6 +28,7 @@ import FormUploads from './pages/playground/FormUploads.tsx'
 import PaymentCards from './pages/playground/PaymentCards.tsx'
 import SettlementCards from './pages/playground/SettlementCards.tsx'
 import {
+  AI_RECON_PATH,
   ALERTS_PATH,
   CONFIGURATOR_PATH,
   FEE_PATH,
@@ -72,6 +74,7 @@ export const router = createBrowserRouter([
       { path: FEE_PATH.slice(1), element: <Fee /> },
       // A rule, opened: the configuration tree it resolves to (src/pages/fee/FeeTree.tsx).
       { path: `${FEE_PATH.slice(1)}/:ruleId`, element: <FeeTree /> },
+      { path: AI_RECON_PATH.slice(1), element: <AiRecon /> },
       // A layout route: Ledger holds the entries and the dialogs, and the version renders
       // into its Outlet. Moving between v1 and v2 keeps the ledger as it was left.
       {
