@@ -9,7 +9,6 @@ import {
   SingleSelectV2,
   SingleSelectV2Size,
   SingleSelectV2Variant,
-  SnackbarV2Variant,
   StatCardV2,
   StatCardV2Variant,
   TabsV2,
@@ -24,7 +23,6 @@ import {
   TagV2Type,
   TextInputV2,
   ThemeProvider,
-  addSnackbarV2,
   type ColumnDefinition,
 } from '@juspay/blend-design-system'
 import {
@@ -42,10 +40,10 @@ import {
   Wallet,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
 import { PrimitiveText } from '../../primitives'
 import { countTabsTokens } from '../../theme'
 import {
-  BANK_LINES,
   buildComparison,
   type ComparisonRow,
   type MatchState,
@@ -64,6 +62,7 @@ import {
   TagWithNote,
 } from './cells'
 import { ENTRY_KINDS } from './data'
+import { ManualReconcile } from './ManualReconcile'
 import {
   ALL,
   formatCurrency,
@@ -77,6 +76,7 @@ import {
   CELL_META,
   CELL_TEXT,
   HUG,
+  LEDGER_TOASTER,
   SLOT_ICON_SIZE,
   STAT_ICON_SIZE,
   entryOf,
@@ -136,13 +136,19 @@ const BANK_VIEWS = [
   },
 ] as const
 
-/** The comparison's views: all four outcomes a reconciliation has, exceptions first. */
+/**
+ * The comparison's views. Everything that is not matched — an amount that differs, or a line
+ * only one side has — needs a person, so it all sits under Manual Reconciliation; the Match
+ * column still says which kind each row is.
+ */
+const needsAPerson = (row: ComparisonRow) => row.match !== 'MATCHED'
+
+const MANUAL_VIEW = 'Manual Reconciliation'
+
 const COMPARE_VIEWS = [
   { label: 'All', matches: () => true },
-  { label: 'Amount differs', matches: (row: ComparisonRow) => row.match === 'AMOUNT_DIFFERS' },
-  { label: 'Bank only', matches: (row: ComparisonRow) => row.match === 'BANK_ONLY' },
-  { label: 'Ledger only', matches: (row: ComparisonRow) => row.match === 'LEDGER_ONLY' },
   { label: 'Matched', matches: (row: ComparisonRow) => row.match === 'MATCHED' },
+  { label: MANUAL_VIEW, matches: needsAPerson },
 ] as const
 
 const KIND_LABEL = Object.fromEntries(ENTRY_KINDS.map(({ value, label }) => [value, label]))
@@ -180,7 +186,7 @@ const plural = (count: number, one: string, many: string) =>
  *    balance after them, nothing to reconcile.
  */
 function LedgerV2() {
-  const { entries, actions, spacing } = useLedgerOutlet()
+  const { entries, bankLines, actions, spacing } = useLedgerOutlet()
   const [query, setQuery] = useState('')
   // A string rather than one union: the three ledgers do not offer the same views, and the
   // switch resets this to 'All' — which every one of them has — whenever the ledger changes.
@@ -192,7 +198,7 @@ function LedgerV2() {
    * initialiser runs on the first render only, so the range does not move under the user
    * when an entry is added mid-session.
    */
-  const [period, setPeriod] = useState(() => openingRange(entries, BANK_LINES))
+  const [period, setPeriod] = useState(() => openingRange(entries, bankLines))
 
   const merchantItems = useMemo(
     () => merchantItemsFor(Array.from(new Set(entries.map((entry) => entry.merchantId))).sort()),
@@ -210,12 +216,12 @@ function LedgerV2() {
    * comparison's delta in the same breath — three views of one ledger, never three copies.
    */
   const bank = useMemo(
-    () => summariseBank(BANK_LINES, entries, merchantFilter),
-    [entries, merchantFilter],
+    () => summariseBank(bankLines, entries, merchantFilter),
+    [bankLines, entries, merchantFilter],
   )
   const comparison = useMemo(
-    () => buildComparison(entries, BANK_LINES, merchantFilter),
-    [entries, merchantFilter],
+    () => buildComparison(entries, bankLines, merchantFilter),
+    [entries, bankLines, merchantFilter],
   )
 
   /**
@@ -298,13 +304,40 @@ function LedgerV2() {
 
   const reconcileSelected = (reconciled: boolean) => {
     actions.setReconciled(selectedIds, reconciled)
-    addSnackbarV2({
-      header: `${plural(selectedIds.length, 'entry', 'entries')} marked ${
+    toast.success(
+      `${plural(selectedIds.length, 'entry', 'entries')} marked ${
         reconciled ? 'reconciled' : 'unreconciled'
       }`,
-      variant: SnackbarV2Variant.SUCCESS,
-    })
+      { toasterId: LEDGER_TOASTER },
+    )
     setCleared((count) => count + 1)
+  }
+
+  /**
+   * Manual Reconciliation is the one view that is not a table: the comparison's exceptions,
+   * split back into the statement and the ledger so a person can pair them by hand.
+   */
+  const isManual = source === 'COMPARE' && view === MANUAL_VIEW
+
+  const reconcilePair = (bankLineId: string, entryId: string) => {
+    // Taken before the change, for Undo. Restoring the whole statement rather than one line
+    // is safe because pairing can also free the line that claimed the entry before.
+    const previousLines = bankLines
+    const wasReconciled = entries.find((entry) => entry.id === entryId)?.reconciled ?? false
+    actions.reconcilePair(bankLineId, entryId)
+    toast.success(`${bankLineId} reconciled with ${entryId}`, {
+      toasterId: LEDGER_TOASTER,
+      description: 'It has moved to Matched.',
+      // Twice sonner's 4s default: long enough to read the pair and reach Undo.
+      duration: 8000,
+      action: {
+        label: 'Undo',
+        onClick: () => {
+          actions.restoreBankLines(previousLines)
+          actions.setReconciled([entryId], wasReconciled)
+        },
+      },
+    })
   }
 
   const reconciledColumns = useMemo<ColumnDefinition<Record<string, unknown>>[]>(
@@ -770,7 +803,10 @@ function LedgerV2() {
 
       <div
         className="flex flex-col"
-        style={{ marginTop: spacing.cardsToToolbar, gap: spacing.toolbarToTable }}
+        style={{
+          marginTop: spacing.cardsToToolbar,
+          gap: isManual ? spacing.toolbarToSplit : spacing.toolbarToTable,
+        }}
       >
         <div className="flex flex-wrap items-center justify-between gap-3">
           {/* Hugs its tabs, as on Alerts; scrolls inside itself rather than pushing the page
@@ -839,52 +875,61 @@ function LedgerV2() {
         </div>
 
         {/* `ledger-table-v2` is the hook for the money and status columns' titles (index.css). */}
-        <div className="ledger-table-v2">
-          <DataTable
-            key={tableKey}
-            data={data}
-            columns={columns}
-            idField="id"
-            showHeader={false}
-            enableColumnManager={false}
-            enableRowSelection={canReconcileInBulk}
-            rowSelectionConfig={
-              canReconcileInBulk
-                ? {
-                    isDisabled: (row) => !isPosted(entryOf(row)),
-                    disabledText: () => 'Only completed entries can be reconciled',
-                  }
-                : undefined
-            }
-            onRowSelectionChange={(ids) => setSelection({ key: tableKey, ids })}
-            bulkActions={
-              canReconcileInBulk
-                ? {
-                    // Off: the selection is for reconciling, and the page's own exports
-                    // already write what the table shows.
-                    showExport: false,
-                    customActions: (
-                      <>
-                        <ButtonV2
-                          buttonType={ButtonV2Type.SECONDARY}
-                          size={ButtonV2Size.SMALL}
-                          text="Mark unreconciled"
-                          onClick={() => reconcileSelected(false)}
-                        />
-                        <ButtonV2
-                          buttonType={ButtonV2Type.PRIMARY}
-                          size={ButtonV2Size.SMALL}
-                          text="Mark reconciled"
-                          onClick={() => reconcileSelected(true)}
-                        />
-                      </>
-                    ),
-                  }
-                : undefined
-            }
-            {...tableProps}
+        {isManual ? (
+          <ManualReconcile
+            rows={searchedComparisonRows.filter(needsAPerson)}
+            bankLines={bankLines}
+            entries={entries}
+            onReconcile={reconcilePair}
           />
-        </div>
+        ) : (
+          <div className="ledger-table-v2">
+            <DataTable
+              key={tableKey}
+              data={data}
+              columns={columns}
+              idField="id"
+              showHeader={false}
+              enableColumnManager={false}
+              enableRowSelection={canReconcileInBulk}
+              rowSelectionConfig={
+                canReconcileInBulk
+                  ? {
+                      isDisabled: (row) => !isPosted(entryOf(row)),
+                      disabledText: () => 'Only completed entries can be reconciled',
+                    }
+                  : undefined
+              }
+              onRowSelectionChange={(ids) => setSelection({ key: tableKey, ids })}
+              bulkActions={
+                canReconcileInBulk
+                  ? {
+                      // Off: the selection is for reconciling, and the page's own exports
+                      // already write what the table shows.
+                      showExport: false,
+                      customActions: (
+                        <>
+                          <ButtonV2
+                            buttonType={ButtonV2Type.SECONDARY}
+                            size={ButtonV2Size.SMALL}
+                            text="Mark unreconciled"
+                            onClick={() => reconcileSelected(false)}
+                          />
+                          <ButtonV2
+                            buttonType={ButtonV2Type.PRIMARY}
+                            size={ButtonV2Size.SMALL}
+                            text="Mark reconciled"
+                            onClick={() => reconcileSelected(true)}
+                          />
+                        </>
+                      ),
+                    }
+                  : undefined
+              }
+              {...tableProps}
+            />
+          </div>
+        )}
       </div>
     </div>
   )

@@ -4,7 +4,6 @@ import {
   ButtonV2SubType,
   ButtonV2Type,
   FOUNDATION_THEME,
-  SnackbarV2Variant,
   TagV2,
   TagV2Size,
   TagV2SubType,
@@ -13,7 +12,6 @@ import {
   TooltipV2,
   TooltipV2Side,
   TagV2Color,
-  addSnackbarV2,
 } from '@juspay/blend-design-system'
 import {
   Check,
@@ -27,13 +25,14 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { ReactElement, ReactNode } from 'react'
+import { toast } from 'sonner'
 import { SLOT_ICON } from '../../icons'
 import { PrimitiveText, font } from '../../primitives'
 import { iconGhostButtonTokens, quietStatusTagTokens } from '../../theme'
 import { STATUS_LABEL, type EntryStatus } from './data'
 import { exportCsv, exportXlsx } from './export'
 import type { LedgerRow } from './ledger'
-import { ACTION_ICON_SIZE, STATUS_TAG, tagTextColor } from './table'
+import { ACTION_ICON_SIZE, LEDGER_TOASTER, STATUS_TAG, tagTextColor } from './table'
 import type { LedgerActions } from './use-ledger'
 
 const { colors } = FOUNDATION_THEME
@@ -76,10 +75,9 @@ export function HeaderActions({
 }) {
   const handleExcel = () => {
     exportXlsx(rows).catch(() =>
-      addSnackbarV2({
-        header: 'The Excel export did not finish',
+      toast.error('The Excel export did not finish', {
+        toasterId: LEDGER_TOASTER,
         description: 'Try again, or export as CSV instead.',
-        variant: SnackbarV2Variant.ERROR,
       }),
     )
   }

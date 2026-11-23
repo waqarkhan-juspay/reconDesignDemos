@@ -82,11 +82,11 @@ const NUMERIC = { fontVariantNumeric: 'tabular-nums' } as const
  * Matched is quiet and everything else carries the colour — the Recon Status column's rule,
  * applied to the same question asked of two ledgers instead of one, in the same tag.
  */
-function MatchCell({ match }: { match: MatchState }) {
+function MatchCell({ match, manual = false }: { match: MatchState; manual?: boolean }) {
   return (
     <div className="flex whitespace-nowrap">
       <StateTag
-        text={MATCH_LABEL[match]}
+        text={manual ? 'Matched manually' : MATCH_LABEL[match]}
         color={match === 'MATCHED' ? TagV2Color.NEUTRAL : TagV2Color.WARNING}
       />
     </div>
@@ -132,24 +132,23 @@ export const BANK_COLUMNS: ColumnDefinition<Row>[] = [
             {row.narration}
           </PrimitiveText>
           {/* Where our entry is, when there is one. The bank's wording is rarely ours, so
-              the reference is the only reliable way across. */}
+              the reference is the only reliable way across. A line with no entry leaves
+              the space empty — the Match column already says it is bank-only. */}
           <div className="flex min-h-5 items-center gap-1.5">
-            {row.matchedEntryId ? (
+            {row.matchedEntryId && (
               <>
                 <ArrowRight size={12} color={colors.gray[400]} aria-hidden />
                 <PrimitiveText
                   {...CELL_META}
                   color={row.match === 'MATCHED' ? colors.gray[500] : colors.orange[700]}
                 >
-                  {row.match === 'MATCHED'
-                    ? row.matchedEntryId
-                    : `${row.matchedEntryId} — posted for a different figure`}
+                  {row.match !== 'MATCHED'
+                    ? `${row.matchedEntryId} — posted for a different figure`
+                    : row.manual
+                      ? `${row.matchedEntryId} — paired by hand`
+                      : row.matchedEntryId}
                 </PrimitiveText>
               </>
-            ) : (
-              <PrimitiveText {...CELL_META} color={colors.orange[700]}>
-                Not in the ledger
-              </PrimitiveText>
             )}
           </div>
         </div>
@@ -183,7 +182,10 @@ export const BANK_COLUMNS: ColumnDefinition<Row>[] = [
   },
   {
     ...base('match', 'Match'),
-    renderCell: (_value: unknown, raw: Row) => <MatchCell match={bankRow(raw).match} />,
+    renderCell: (_value: unknown, raw: Row) => {
+      const row = bankRow(raw)
+      return <MatchCell match={row.match} manual={row.manual} />
+    },
   },
 ]
 
@@ -232,7 +234,9 @@ export const COMPARISON_COLUMNS: ColumnDefinition<Row>[] = [
                 ? 'Our wording — the bank has no record'
                 : row.ledgerRef === null
                   ? 'The bank’s wording — nothing posted'
-                  : 'Matched by reference'}
+                  : row.manual
+                    ? 'Paired by hand in Manual Reconciliation'
+                    : 'Matched by reference'}
             </PrimitiveText>
           </div>
         </div>
@@ -292,6 +296,9 @@ export const COMPARISON_COLUMNS: ColumnDefinition<Row>[] = [
   },
   {
     ...base('match', 'Match'),
-    renderCell: (_value: unknown, raw: Row) => <MatchCell match={comparisonRow(raw).match} />,
+    renderCell: (_value: unknown, raw: Row) => {
+      const row = comparisonRow(raw)
+      return <MatchCell match={row.match} manual={row.manual} />
+    },
   },
 ]

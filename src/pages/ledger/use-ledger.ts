@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router'
+import { BANK_LINES, pairLines, type BankLine } from './bank'
 import {
   EMPTY_DRAFT,
   INITIAL_ENTRIES,
@@ -19,6 +20,14 @@ export type LedgerActions = {
   /** The reversing entry: same merchant and amount, the other direction, linked back. */
   startReversal: (entry: LedgerEntry) => void
   openHold: (entry: LedgerEntry) => void
+  /**
+   * Manual Reconciliation: the bank line becomes the record of the entry, and the entry is
+   * marked reconciled — the same flag the Reconciled Ledger's bulk action sets, so both views
+   * agree that it is done.
+   */
+  reconcilePair: (bankLineId: string, entryId: string) => void
+  /** Puts the statement's links back as they were — the undo for `reconcilePair`. */
+  restoreBankLines: (lines: BankLine[]) => void
 }
 
 /**
@@ -34,6 +43,12 @@ export type LedgerActions = {
  */
 export function useLedger() {
   const [entries, setEntries] = useState<LedgerEntry[]>(INITIAL_ENTRIES)
+  /**
+   * The statement itself never changes, but which entry each line is the record of does, once
+   * someone pairs lines by hand — so the lines are state, held here beside the entries they
+   * point at.
+   */
+  const [bankLines, setBankLines] = useState<BankLine[]>(BANK_LINES)
   /** The New Entry form's starting values while it is open; `null` when it is closed. */
   const [entryDraft, setEntryDraft] = useState<EntryDraft | null>(null)
   /** The row whose hold is being managed; `null` when the hold dialog is closed. */
@@ -62,6 +77,11 @@ export function useLedger() {
           originalEntryId: entry.id,
         }),
       openHold: setHoldTarget,
+      reconcilePair: (bankLineId, entryId) => {
+        setBankLines((previous) => pairLines(previous, bankLineId, entryId))
+        update([entryId], () => ({ reconciled: true }))
+      },
+      restoreBankLines: setBankLines,
     }
   }, [])
 
@@ -111,6 +131,7 @@ export function useLedger() {
 
   return {
     entries,
+    bankLines,
     actions,
     entryDraft,
     holdTarget,
@@ -125,6 +146,7 @@ export function useLedger() {
 /** What the Ledger layout hands each version through its Outlet. */
 export type LedgerOutletContext = {
   entries: LedgerEntry[]
+  bankLines: BankLine[]
   actions: LedgerActions
   spacing: Spacing
 }

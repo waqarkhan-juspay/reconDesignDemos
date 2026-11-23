@@ -22,6 +22,12 @@ export type BankLine = {
   type: EntryDirection
   /** The ledger entry this line is the bank's record of. Absent when the bank has it alone. */
   matchedEntryId?: string
+  /**
+   * Set when a person paired this line by hand, in Manual Reconciliation. Their pairing
+   * stands even where the figures disagree — accepting a difference is the decision they made
+   * — so a manual pair is MATCHED and its delta is still shown beside it.
+   */
+  manual?: boolean
 }
 
 /**
@@ -32,13 +38,16 @@ export type BankLine = {
  * - TXN-110293 has no bank line at all — the wire is still in flight, which is why it is the
  *   ledger's one IN_PROGRESS entry;
  * - two lines are the bank's alone: a maintenance charge and a presented cheque, neither of
- *   which anyone posted.
+ *   which anyone posted;
+ * - BNK-5515 is TXN-992012, but nothing links them: the bank's "IMPS DR VENDOR 88213" names
+ *   neither our reference nor our particulars, so the pair is left for a person to make in
+ *   Manual Reconciliation — same merchant, same figure, two days apart.
  */
 export const BANK_LINES: BankLine[] = [
   { id: 'BNK-5501', merchantId: 'MERCH-003', date: '2026-08-22T13:10:00Z', narration: 'RTGS CR PARTNER SETTLE Q3', amount: 22000, type: 'CREDIT', matchedEntryId: 'TXN-773821' },
   { id: 'BNK-5509', merchantId: 'MERCH-001', date: '2026-09-15T08:00:00Z', narration: 'REFUND CUST A UPI', amount: 450, type: 'DEBIT', matchedEntryId: 'TXN-449302' },
   { id: 'BNK-5517', merchantId: 'MERCH-001', date: '2026-09-28T10:30:00Z', narration: 'CHQ 004412 PRESENTED', amount: 1350, type: 'DEBIT' },
-  { id: 'BNK-5515', merchantId: 'MERCH-003', date: '2026-10-04T11:20:00Z', narration: 'IMPS DR VENDOR 88213', amount: 3500, type: 'DEBIT', matchedEntryId: 'TXN-992012' },
+  { id: 'BNK-5515', merchantId: 'MERCH-003', date: '2026-10-04T11:20:00Z', narration: 'IMPS DR VENDOR 88213', amount: 3500, type: 'DEBIT' },
   { id: 'BNK-5514', merchantId: 'MERCH-001', date: '2026-10-05T16:45:00Z', narration: 'STRIPE PAYOUTS PREFUND', amount: 5000, type: 'CREDIT', matchedEntryId: 'TXN-556102' },
   { id: 'BNK-5513', merchantId: 'MERCH-002', date: '2026-10-06T09:15:00Z', narration: 'AWS EMEA SARL CARD 4421', amount: 1218.5, type: 'DEBIT', matchedEntryId: 'TXN-293847' },
   { id: 'BNK-5516', merchantId: 'MERCH-002', date: '2026-10-06T10:00:00Z', narration: 'ACCOUNT MAINTENANCE CHARGE', amount: 85, type: 'DEBIT' },
@@ -125,7 +134,12 @@ export function summariseBank(
       const agrees =
         entry !== undefined &&
         Math.round((signed(line.amount, line.type) - signed(entry.amount, entry.type)) * 100) === 0
-      const match = entry === undefined ? 'BANK_ONLY' : agrees ? 'MATCHED' : 'AMOUNT_DIFFERS'
+      const match =
+        entry === undefined
+          ? 'BANK_ONLY'
+          : agrees || line.manual
+            ? 'MATCHED'
+            : 'AMOUNT_DIFFERS'
       if (match !== 'MATCHED') unmatchedCount += 1
       return { ...line, runningBalance: closingBalance, match } as BankRow
     })
@@ -148,6 +162,8 @@ export type ComparisonRow = {
   /** Bank less ledger, signed, and 0 unless both sides are present and disagree. */
   delta: number
   match: MatchState
+  /** A pair a person made by hand — see BankLine.manual. */
+  manual: boolean
 }
 
 export type ComparisonSummary = {
@@ -195,6 +211,7 @@ export function buildComparison(
         ledgerAmount: null,
         delta: 0,
         match: 'BANK_ONLY',
+        manual: false,
       })
       return
     }
@@ -214,7 +231,8 @@ export function buildComparison(
       bankAmount,
       ledgerAmount,
       delta,
-      match: delta === 0 ? 'MATCHED' : 'AMOUNT_DIFFERS',
+      match: delta === 0 || line.manual ? 'MATCHED' : 'AMOUNT_DIFFERS',
+      manual: line.manual === true,
     })
   })
 
@@ -232,6 +250,7 @@ export function buildComparison(
         ledgerAmount: signed(entry.amount, entry.type),
         delta: 0,
         match: 'LEDGER_ONLY',
+        manual: false,
       })
     })
 
@@ -245,6 +264,26 @@ export function buildComparison(
     rows,
   }
 }
+
+/**
+ * A person's pairing: `bankLineId` becomes the bank's record of `entryId`, by hand.
+ *
+ * An entry is the record of one line at most, so any other line that claimed it lets go and
+ * goes back to being the bank's alone — otherwise the comparison would show the entry twice,
+ * once against each line.
+ */
+export const pairLines = (lines: BankLine[], bankLineId: string, entryId: string) =>
+  lines.map((line) => {
+    if (line.id === bankLineId) return { ...line, matchedEntryId: entryId, manual: true }
+    if (line.matchedEntryId === entryId) {
+      return { ...line, matchedEntryId: undefined, manual: undefined }
+    }
+    return line
+  })
+
+/** The signed figure a bank line or a ledger entry moves — money out is negative. */
+export const signedAmount = (item: { amount: number; type: EntryDirection }) =>
+  signed(item.amount, item.type)
 
 /** The search box, over whichever side of a row carries words. */
 export const matchesBankQuery = (line: BankLine, needle: string) =>

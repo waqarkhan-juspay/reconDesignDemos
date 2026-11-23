@@ -1,7 +1,8 @@
 import { Outlet } from 'react-router'
+import { Toaster } from 'sonner'
 import { EntryModal } from './EntryModal'
 import { HoldModal } from './HoldModal'
-import { SPACING } from './table'
+import { LEDGER_TOASTER, SPACING } from './table'
 import { useLedger, type LedgerOutletContext } from './use-ledger'
 
 /**
@@ -17,6 +18,7 @@ function Ledger() {
 
   const context: LedgerOutletContext = {
     entries: ledger.entries,
+    bankLines: ledger.bankLines,
     actions: ledger.actions,
     spacing: SPACING,
   }
@@ -34,6 +36,19 @@ function Ledger() {
         onClose={ledger.closeHold}
         onApply={ledger.applyHold}
         onRelease={ledger.releaseHold}
+      />
+      {/*
+        Plain sonner, bottom-right, for this page only. The app's Blend host stays
+        bottom-left because the config detail sheet fills the right-hand column elsewhere;
+        nothing on the Ledger page covers this corner, and the reconcile action it confirms
+        is made on the right of the page too. `id` keeps the two hosts apart — each shows
+        only the toasts addressed to it.
+      */}
+      <Toaster
+        id={LEDGER_TOASTER}
+        position="bottom-right"
+        // Inter, like the page, rather than sonner's system stack.
+        toastOptions={{ style: { fontFamily: 'inherit' } }}
       />
     </>
   )

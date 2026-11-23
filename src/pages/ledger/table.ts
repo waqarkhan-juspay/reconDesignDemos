@@ -40,6 +40,13 @@ export const STATUS_TAG: Record<EntryStatus, TagV2Color> = {
   FAILED: TagV2Color.ERROR,
 }
 
+/**
+ * The Ledger page's own toaster (index.tsx). Every toast the page raises names it, so they
+ * land there and not in the app's Blend snackbar host — sonner shows a toast only in the
+ * toaster whose id it carries.
+ */
+export const LEDGER_TOASTER = 'ledger'
+
 /** Let content decide each column's width, as on the Configurator and Alerts tables. */
 export const HUG = { minWidth: '0px', maxWidth: 'none' } as const
 
@@ -61,6 +68,12 @@ export const SPACING = {
   cardsToToolbar: 24,
   // 8, not 24: the toolbar chooses what the table shows, so the two read as one block.
   toolbarToTable: 8,
+  /**
+   * Manual Reconciliation's split view, toolbar → pair bar → the two lists. 16, between the
+   * table's 8 and the page's 24: still one block under the toolbar, but three stacked parts
+   * — a bar and two bordered panes — need more air than a table's header line does.
+   */
+  toolbarToSplit: 16,
   belowTable: 24,
 } as const
 
