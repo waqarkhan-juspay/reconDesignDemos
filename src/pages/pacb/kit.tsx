@@ -114,12 +114,19 @@ export function PageTitle({ title, description }: { title: string; description?:
  * `lead` is the row above the title, for a page you arrived at from another one: its back
  * control and its breadcrumb (FeeTree.tsx). Above the title rather than beside it, because
  * where you are is read before what you are looking at.
+ *
+ * `pinned` keeps the head — lead, title row and `subhead` — at the top of the scroll area
+ * while the content scrolls under it, for a page whose content is one long stream (Fee
+ * Locator). The head carries `data-page-head` so such a page can measure it and pin its own
+ * sticky parts just below.
  */
 export function PacbPage({
   title,
   description = pageDescription(title),
   lead,
   actions,
+  subhead,
+  pinned = false,
   children,
   spacing = PAGE_SPACING,
 }: {
@@ -127,23 +134,61 @@ export function PacbPage({
   description?: string
   lead?: ReactNode
   actions?: ReactNode
+  /** Under the title row, inside the head — and pinned with it when `pinned`. */
+  subhead?: ReactNode
+  pinned?: boolean
   children?: ReactNode
   spacing?: PacbPageSpacing
 }) {
-  return (
-    <div
-      className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
-      style={{ paddingTop: spacing.top, paddingBottom: spacing.bottom, gap: spacing.gap }}
-    >
+  const head = (
+    <>
       {lead}
       <div className="flex min-h-10 flex-wrap items-center justify-between gap-3">
         <PageTitle title={title} description={description} />
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
+      {subhead}
+    </>
+  )
+  return (
+    <div
+      className="mx-auto flex w-full max-w-[1440px] flex-col px-6"
+      style={{
+        // Pinned, the top padding moves inside the head, so content scrolling up meets an
+        // opaque edge at the very top instead of showing through a 24px gap above it.
+        paddingTop: pinned ? 0 : spacing.top,
+        paddingBottom: spacing.bottom,
+        gap: spacing.gap,
+      }}
+    >
+      {pinned ? (
+        <header
+          data-page-head
+          className="sticky top-0 z-30 flex flex-col"
+          style={{
+            gap: spacing.gap,
+            paddingTop: spacing.top,
+            paddingBottom: PINNED_HEAD_FOOT,
+            marginBottom: -PINNED_HEAD_FOOT,
+            backgroundColor: colors.gray[0],
+          }}
+        >
+          {head}
+        </header>
+      ) : (
+        head
+      )}
       {children}
     </div>
   )
 }
+
+/**
+ * Air inside a pinned head below its last line, so what scrolls under it disappears a little
+ * short of the type rather than against it. Taken back out of the gap below, so the head
+ * unpinned sits exactly where an unpinned one would.
+ */
+const PINNED_HEAD_FOOT = 12
 
 /** A section heading inside a page — the MPR tab's "Merchant Payment Report (MPR)". */
 export function SectionTitle({ children }: { children: ReactNode }) {
