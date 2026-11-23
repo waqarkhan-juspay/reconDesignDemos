@@ -1203,3 +1203,48 @@ button[aria-label='Close modal'] {
 .locator-row:focus-visible {
   background-color: var(--locator-hover);
 }
+
+/*
+ * The label darkens on the same beat the path line arrives at it, so the two read as one move.
+ * A root heading (PA Fee, Feature Fee) fades and returns on that beat too.
+ */
+.locator-row > *,
+.locator-root > * {
+  transition: color var(--locator-feedback) var(--locator-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .locator-row > *,
+  .locator-root > * {
+    transition: none;
+  }
+}
+
+/*
+ * Fee Locator v2's charge card under the pointer: the edge darkens and the card lifts, so the
+ * card the rail is singling out is marked on the stream's side too. The edge colour travels as
+ * --card-edge because the card's border is an inline style; values come from the page (rule 1).
+ */
+.locator-card {
+  --card-edge: var(--locator-card-edge);
+  transition:
+    border-color var(--locator-micro) var(--locator-ease),
+    box-shadow var(--locator-micro) var(--locator-ease);
+}
+
+.locator-card:hover {
+  --card-edge: var(--locator-card-edge-hover);
+  box-shadow: var(--locator-card-shadow);
+}
+
+/* A ticket punch's arc is part of the outline, so it darkens on the card's own beat. */
+.locator-card .locator-punch {
+  transition: border-color var(--locator-micro) var(--locator-ease);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .locator-card,
+  .locator-card .locator-punch {
+    transition: none;
+  }
+}

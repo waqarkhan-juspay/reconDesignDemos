@@ -104,15 +104,26 @@ export function StatusTag({
  * SUBTLE rather than NO_FILL, which is what the Figma frames specify. NO_FILL's border token
  * is gray[950] — a hard black edge, and at this size the loudest line on the page. SUBTLE
  * resolves to gray[200] on gray[50], so every tag in a row shares one edge.
+ *
+ * Rounded unless asked otherwise; `subType` exists for Fee Locator v2, whose cards take the
+ * frame's squarical tags.
  */
-export function NeutralTag({ text, icon }: { text: string; icon?: ReactElement }) {
+export function NeutralTag({
+  text,
+  icon,
+  subType = TagV2SubType.ROUNDED,
+}: {
+  text: string
+  icon?: ReactElement
+  subType?: TagV2SubType
+}) {
   return (
     <TagV2
       text={text}
       type={TagV2Type.SUBTLE}
       size={TagV2Size.XS}
       color={TagV2Color.NEUTRAL}
-      subType={TagV2SubType.ROUNDED}
+      subType={subType}
       leftSlot={icon ? { slot: icon } : undefined}
     />
   )
@@ -136,13 +147,23 @@ const MODE_COLOR: Record<FeeMode, TagV2Color> = {
   Surcharge: TagV2Color.PURPLE,
 }
 
-export function ModeTag({ mode }: { mode: FeeMode }) {
+/**
+ * `palette` overrides a mode's colour for one page — Fee Locator v2, which follows its frame
+ * and draws `Gross` in purple, having no `Surcharge` to confuse it with.
+ */
+export function ModeTag({
+  mode,
+  palette,
+}: {
+  mode: FeeMode
+  palette?: Partial<Record<FeeMode, TagV2Color>>
+}) {
   return (
     <TagV2
       text={mode}
       type={TagV2Type.SUBTLE}
       size={TagV2Size.XS}
-      color={MODE_COLOR[mode]}
+      color={palette?.[mode] ?? MODE_COLOR[mode]}
       subType={TagV2SubType.ROUNDED}
       // The three words are jargon; the hint is the sentence that explains them (data.ts).
       title={MODE_HINT[mode]}

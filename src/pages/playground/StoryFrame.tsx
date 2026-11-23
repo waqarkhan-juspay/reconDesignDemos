@@ -13,6 +13,25 @@ import { ghostIconTokens } from '../../theme'
 
 const { colors } = FOUNDATION_THEME
 
+/** A story's name and what state it shows — above its canvas, or wherever a page pins it. */
+export function StoryHeading({ name, note }: { name: string; note: string }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <PrimitiveText
+        as="h3"
+        {...font(FOUNDATION_THEME.font.size.body.md)}
+        color={colors.gray[800]}
+        fontWeight={FOUNDATION_THEME.font.weight[600]}
+      >
+        {name}
+      </PrimitiveText>
+      <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.sm)} color={colors.gray[500]}>
+        {note}
+      </PrimitiveText>
+    </div>
+  )
+}
+
 /**
  * One Playground story: a name, what state it shows, and the component on a canvas at the
  * width the design draws it.
@@ -30,10 +49,16 @@ export function StoryFrame({
   width,
   fullscreen = false,
   surface = colors.gray[25],
+  heading = true,
   children,
 }: {
   name: string
   note: string
+  /**
+   * Draw the name and note above the canvas. Off for a page that shows them elsewhere — Fee
+   * Locator pins them with its title — while `name` still labels the section.
+   */
+  heading?: boolean
   /** The component's width in the design, in px. */
   width: number
   /** Offer the full-screen toggle. */
@@ -52,19 +77,7 @@ export function StoryFrame({
 
   return (
     <section aria-label={name} className="flex flex-col gap-3">
-      <div className="flex flex-col gap-1">
-        <PrimitiveText
-          as="h3"
-          {...font(FOUNDATION_THEME.font.size.body.md)}
-          color={colors.gray[800]}
-          fontWeight={FOUNDATION_THEME.font.weight[600]}
-        >
-          {name}
-        </PrimitiveText>
-        <PrimitiveText {...font(FOUNDATION_THEME.font.size.body.sm)} color={colors.gray[500]}>
-          {note}
-        </PrimitiveText>
-      </div>
+      {heading && <StoryHeading name={name} note={note} />}
       <div
         // Full screen it covers the window — above the sidebar and topbar — scrolls on its
         // own, and centres the cards down the screen as well.
